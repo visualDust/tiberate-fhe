@@ -20,7 +20,7 @@ from tiberate.fhe.encdec import (
 )
 from tiberate.ntt import NTTContext
 from tiberate.ntt import ntt_cuda
-from tiberate.csprng import Csprng
+from tiberate.csprng.csprng import Csprng
 
 
 class CkksEngine:
