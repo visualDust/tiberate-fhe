@@ -138,7 +138,7 @@ torch::Tensor mont_mult_cuda(
     torch::Tensor c = torch::empty_like(a);
     
     // Dispatch to the correct data type.
-    AT_DISPATCH_INTEGRAL_TYPES(a.type(), "typed_mont_mult_cuda", ([&] {
+    AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_mont_mult_cuda", ([&] {
     mont_mult_cuda_typed<scalar_t>(a, b, c, ql, qh, kl, kh);
     }));
     
@@ -220,7 +220,7 @@ void mont_enter_cuda(
     const torch::Tensor kh) {
     
     // Dispatch to the correct data type.
-    AT_DISPATCH_INTEGRAL_TYPES(a.type(), "typed_mont_enter_cuda", ([&] {
+    AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_mont_enter_cuda", ([&] {
     mont_enter_cuda_typed<scalar_t>(a, Rs, ql, qh, kl, kh);
     }));
 }
@@ -336,7 +336,7 @@ void ntt_cuda(
     const torch::Tensor kh) {
     
     // Dispatch to the correct data type.
-    AT_DISPATCH_INTEGRAL_TYPES(a.type(), "typed_ntt_cuda", ([&] {
+    AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_ntt_cuda", ([&] {
     ntt_cuda_typed<scalar_t>(a, even, odd, psi, _2q, ql, qh, kl, kh);
     }));
 }
@@ -417,7 +417,7 @@ void enter_ntt_cuda(
     const torch::Tensor kh) {
     
     // Dispatch to the correct data type.
-    AT_DISPATCH_INTEGRAL_TYPES(a.type(), "typed_enter_ntt_cuda", ([&] {
+    AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_enter_ntt_cuda", ([&] {
     enter_ntt_cuda_typed<scalar_t>(a, Rs, even, odd, psi, _2q, ql, qh, kl, kh);
     }));
 }
@@ -542,7 +542,7 @@ void intt_cuda(
     const torch::Tensor kh) {
     
     // Dispatch to the correct data type.
-    AT_DISPATCH_INTEGRAL_TYPES(a.type(), "typed_intt_cuda", ([&] {
+    AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_intt_cuda", ([&] {
     intt_cuda_typed<scalar_t>(a, even, odd, psi, Ninv, _2q, ql, qh, kl, kh);
     }));
 }
@@ -647,7 +647,7 @@ void mont_redc_cuda(
     const torch::Tensor kh) {
     
     // Dispatch to the correct data type.
-    AT_DISPATCH_INTEGRAL_TYPES(a.type(), "typed_mont_redc_cuda", ([&] {
+    AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_mont_redc_cuda", ([&] {
     mont_redc_cuda_typed<scalar_t>(a, ql, qh, kl, kh);
     }));
 }
@@ -925,7 +925,7 @@ void intt_exit_cuda(
     const torch::Tensor kh) {
     
     // Dispatch to the correct data type.
-    AT_DISPATCH_INTEGRAL_TYPES(a.type(), "typed_intt_exit_cuda", ([&] {
+    AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_intt_exit_cuda", ([&] {
     intt_exit_cuda_typed<scalar_t>(a, even, odd, psi, Ninv, _2q, ql, qh, kl, kh);
     }));
 }
@@ -946,7 +946,7 @@ void intt_exit_reduce_cuda(
     const torch::Tensor kh) {
     
     // Dispatch to the correct data type.
-    AT_DISPATCH_INTEGRAL_TYPES(a.type(), "typed_intt_exit_reduce_cuda", ([&] {
+    AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_intt_exit_reduce_cuda", ([&] {
     intt_exit_reduce_cuda_typed<scalar_t>(a, even, odd, psi, Ninv, _2q, ql, qh, kl, kh);
     }));
 }
@@ -967,7 +967,7 @@ void intt_exit_reduce_signed_cuda(
     const torch::Tensor kh) {
     
     // Dispatch to the correct data type.
-    AT_DISPATCH_INTEGRAL_TYPES(a.type(), "typed_intt_exit_reduce_signed_cuda", ([&] {
+    AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_intt_exit_reduce_signed_cuda", ([&] {
     intt_exit_reduce_signed_cuda_typed<scalar_t>(a, even, odd, psi, Ninv, _2q, ql, qh, kl, kh);
     }));
 }
@@ -1185,19 +1185,19 @@ void mont_sub_cuda_typed(
 }
 
 void reduce_2q_cuda(torch::Tensor a, const torch::Tensor _2q) {
-    AT_DISPATCH_INTEGRAL_TYPES(a.type(), "typed_reduce_2q_cuda", ([&] {
+    AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_reduce_2q_cuda", ([&] {
     reduce_2q_cuda_typed<scalar_t>(a, _2q);
     }));
 }
 
 void make_signed_cuda(torch::Tensor a, const torch::Tensor _2q) {
-    AT_DISPATCH_INTEGRAL_TYPES(a.type(), "typed_make_signed_cuda", ([&] {
+    AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_make_signed_cuda", ([&] {
     make_signed_cuda_typed<scalar_t>(a, _2q);
     }));
 }
 
 void make_unsigned_cuda(torch::Tensor a, const torch::Tensor _2q) {
-    AT_DISPATCH_INTEGRAL_TYPES(a.type(), "typed_make_unsigned_cuda", ([&] {
+    AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_make_unsigned_cuda", ([&] {
     make_unsigned_cuda_typed<scalar_t>(a, _2q);
     }));
 }
@@ -1207,7 +1207,7 @@ torch::Tensor tile_unsigned_cuda(const torch::Tensor a, const torch::Tensor _2q)
     const auto C = _2q.size(0);
     const auto N = a.size(0);
     auto c = a.new_empty({C, N});
-    AT_DISPATCH_INTEGRAL_TYPES(a.type(), "typed_tile_unsigned_cuda", ([&] {
+    AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_tile_unsigned_cuda", ([&] {
     tile_unsigned_cuda_typed<scalar_t>(a, c, _2q);
     }));
     return c;
@@ -1215,7 +1215,7 @@ torch::Tensor tile_unsigned_cuda(const torch::Tensor a, const torch::Tensor _2q)
 
 torch::Tensor mont_add_cuda(const torch::Tensor a, const torch::Tensor b, const torch::Tensor _2q) {
     torch::Tensor c = torch::empty_like(a);
-    AT_DISPATCH_INTEGRAL_TYPES(a.type(), "typed_mont_add_cuda", ([&] {
+    AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_mont_add_cuda", ([&] {
     mont_add_cuda_typed<scalar_t>(a, b, c, _2q);
     }));
     return c;
@@ -1223,7 +1223,7 @@ torch::Tensor mont_add_cuda(const torch::Tensor a, const torch::Tensor b, const 
 
 torch::Tensor mont_sub_cuda(const torch::Tensor a, const torch::Tensor b, const torch::Tensor _2q) {
     torch::Tensor c = torch::empty_like(a);
-    AT_DISPATCH_INTEGRAL_TYPES(a.type(), "typed_mont_sub_cuda", ([&] {
+    AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_mont_sub_cuda", ([&] {
     mont_sub_cuda_typed<scalar_t>(a, b, c, _2q);
     }));
     return c;
