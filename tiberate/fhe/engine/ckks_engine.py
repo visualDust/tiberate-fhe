@@ -9,18 +9,18 @@ from . import errors
 import numpy as np
 import torch
 from loguru import logger
-from liberate.utils.mvc import initonly, strictype
-from liberate.fhe.context.ckks_context import CkksContext
-from liberate.fhe.typing import *
-from liberate.fhe.encdec import (
+from tiberate.utils.mvc import initonly, strictype
+from tiberate.fhe.context.ckks_context import CkksContext
+from tiberate.fhe.typing import *
+from tiberate.fhe.encdec import (
     decode as codec_decode,
     encode as codec_encode,
     rotate as codec_rotate,
     conjugate as codec_conjugate,
 )
-from liberate.ntt import NTTContext
-from liberate.ntt import ntt_cuda
-from liberate.csprng import Csprng
+from tiberate.ntt import NTTContext
+from tiberate.ntt import ntt_cuda
+from tiberate.csprng.csprng import Csprng
 
 
 class CkksEngine:
@@ -1115,7 +1115,7 @@ class CkksEngine:
         self,
         a: Ciphertext,
         b: Ciphertext,
-        evk: EvaluationKey,
+        evk: EvaluationKey = None,
         pre_rescale=True,
         post_relin=True,
     ) -> Union[Ciphertext, CiphertextTriplet]:
@@ -1156,6 +1156,7 @@ class CkksEngine:
             level=level,
         )
         if post_relin:
+            assert evk, "evk is required for post_relin=True"
             ct_mult = self.relinearize(ct_triplet=ct_mult, evk=evk)
 
         return ct_mult
@@ -1367,7 +1368,6 @@ class CkksEngine:
             level=level,
         )
 
-    @strictype
     def cc_add(
         self,
         a: Union[Ciphertext, CiphertextTriplet],
@@ -2035,7 +2035,7 @@ class CkksEngine:
         inplace=False,
     ):
         # process cache
-        
+
         if not isinstance(pt, Plaintext):  # legacy pt
             # deprecated warning
             warnings.warn(
@@ -2056,7 +2056,7 @@ class CkksEngine:
             ]  # todo does rewrite to auto trace impact performance?
 
         # process ct
-        
+
         new_ct = ct.clone() if not inplace else ct
 
         self.ntt.mont_enter(new_ct.data[0], ct.level)
@@ -2075,7 +2075,7 @@ class CkksEngine:
         post_rescale=True,
     ):
         # process cache
-        
+
         if not isinstance(pt, Plaintext):  # legacy pt
             # deprecated warning
             warnings.warn(
@@ -2096,7 +2096,7 @@ class CkksEngine:
             ]  # todo does rewrite to auto trace impact performance?
 
         # process ct
-        
+
         new_ct = ct.clone() if not inplace else ct
 
         self.ntt.enter_ntt(new_ct.data[0], ct.level)

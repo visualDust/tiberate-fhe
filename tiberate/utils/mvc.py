@@ -105,7 +105,7 @@ def strictype(func):
 
         # Iterate over all arguments and check their types
         for name, value in bound.arguments.items():
-            if name in hints:
+            if name in hints and value is not None:
                 expected_type = hints[name]
                 # print(expected_type)
                 try:

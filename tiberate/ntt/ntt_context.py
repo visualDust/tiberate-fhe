@@ -4,7 +4,7 @@ import time
 import numpy as np
 import torch
 
-from liberate.fhe.context.ckks_context import CkksContext
+from tiberate.fhe.context.ckks_context import CkksContext
 
 from . import ntt_cuda
 from .rns_partition import rns_partition

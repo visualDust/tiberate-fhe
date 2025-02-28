@@ -1,10 +1,10 @@
-from liberate.fhe.typing import *
-from liberate.fhe.encdec import rotate
+from tiberate.fhe.typing import *
+from tiberate.fhe.encdec import rotate
 from .. import errors
-from liberate.ntt import ntt_cuda
+from tiberate.ntt import ntt_cuda
 from ..ckks_engine import CkksEngine
-from liberate.fhe.typing import *
-from liberate.utils.mvc import strictype
+from tiberate.fhe.typing import *
+from tiberate.utils.mvc import strictype
 
 
 class CkksEngineMPCExtension(CkksEngine):

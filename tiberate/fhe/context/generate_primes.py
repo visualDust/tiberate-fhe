@@ -9,7 +9,7 @@ from joblib import Parallel, delayed
 
 from .prim_test import MillerRabinPrimalityTest
 from .security_parameters import maximum_qbits
-from liberate.fhe.cache import cache
+from tiberate.fhe.cache import cache
 
 # Default cache folder.
 CACHE_FOLDER = cache.path_cache
