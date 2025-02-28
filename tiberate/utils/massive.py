@@ -6,7 +6,7 @@
 import math
 import torch
 from typing import Any, Callable, Union
-from liberate.fhe.typing import *
+from tiberate.fhe.typing import *
 from loguru import logger
 
 from .framing import get_caller_info_traceback

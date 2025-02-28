@@ -8,7 +8,7 @@ import torch
 
 from .generate_primes import generate_message_primes, generate_scale_primes
 from .security_parameters import maximum_qbits
-from liberate.fhe.cache import cache
+from tiberate.fhe.cache import cache
 from . import errors 
 
 # ------------------------------------------------------------------------------------------

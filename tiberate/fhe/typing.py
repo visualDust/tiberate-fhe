@@ -126,11 +126,15 @@ class DataStruct:
         if isinstance(data, Tensor):
             return data.device
         elif isinstance(data, list):
-            return cls.get_device_of_tensor(data[0])
+            return cls.get_device_of_tensor(data[0]) if data else "cpu"
         elif isinstance(data, tuple):  # legacy datastruct uses tuple
-            return cls.get_device_of_tensor(data[0])
+            return cls.get_device_of_tensor(data[0]) if data else "cpu"
         elif isinstance(data, dict):  # plaintext cache
-            return cls.get_device_of_tensor(list(data.values())[0])
+            return (
+                cls.get_device_of_tensor(list(data.values())[0])
+                if data
+                else "cpu" # if data is empty, return cpu
+            )
         elif isinstance(data, DataStruct):
             return cls.get_device_of_tensor(data.data)
         else:

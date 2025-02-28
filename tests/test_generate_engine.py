@@ -1,6 +1,6 @@
 import pytest
 
-from liberate import fhe
+from tiberate import fhe
 
 
 @pytest.fixture()
