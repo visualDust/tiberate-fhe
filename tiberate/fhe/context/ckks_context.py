@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from loguru import logger
 
-from tiberate.fhe.cache import cache
+from tiberate.fhe.context.cache import cache
 
 from . import errors
 from .generate_primes import generate_message_primes, generate_scale_primes

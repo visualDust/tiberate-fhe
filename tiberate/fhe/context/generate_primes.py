@@ -7,9 +7,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from joblib import Parallel, delayed
 
+from tiberate.fhe.context.cache import cache
+
 from .prim_test import MillerRabinPrimalityTest
 from .security_parameters import maximum_qbits
-from tiberate.fhe.cache import cache
 
 # Default cache folder.
 CACHE_FOLDER = cache.path_cache
@@ -18,26 +19,22 @@ CACHE_FOLDER = cache.path_cache
 def generate_N_M(logN=None, cache_folder=CACHE_FOLDER, **kw):
     if logN is None:
         logN = list(range(12, 18))
-    savefile = Path(cache_folder) / 'logN_N_M.pkl'
+    savefile = Path(cache_folder) / "logN_N_M.pkl"
 
     if savefile.exists():
-        with savefile.open('rb') as f:
+        with savefile.open("rb") as f:
             logN_N_M = pickle.load(f)
-            logN = logN_N_M['logN']
-            N = logN_N_M['N']
-            M = logN_N_M['M']
+            logN = logN_N_M["logN"]
+            N = logN_N_M["N"]
+            M = logN_N_M["M"]
             return logN, N, M
 
-    N = [2 ** lN for lN in logN]
+    N = [2**lN for lN in logN]
     M = [2 * n for n in N]
 
-    logN_N_M = {
-        'logN': logN,
-        'N': N,
-        'M': M
-    }
+    logN_N_M = {"logN": logN, "N": N, "M": M}
 
-    with savefile.open('wb') as f:
+    with savefile.open("wb") as f:
         pickle.dump(logN_N_M, f)
 
     return logN, N, M
@@ -55,13 +52,15 @@ def check_ntt_primality(q: int, M: int):
     return False
 
 
-def generate_message_primes(mbits=None, cache_folder=CACHE_FOLDER, how_many=11, **kw):
+def generate_message_primes(
+    mbits=None, cache_folder=CACHE_FOLDER, how_many=11, **kw
+):
     if mbits is None:
         mbits = [28, 60]
-    savefile = Path(cache_folder) / 'message_special_primes.pkl'
+    savefile = Path(cache_folder) / "message_special_primes.pkl"
 
     if savefile.exists():
-        with savefile.open('rb') as f:
+        with savefile.open("rb") as f:
             mprimes = pickle.load(f)
             # return mprimes
     else:
@@ -74,7 +73,7 @@ def generate_message_primes(mbits=None, cache_folder=CACHE_FOLDER, how_many=11, 
                 # We want to deal with N, and hide M implicitly.
                 N = m // 2
                 mprimes[mb][N] = []
-                current_query = 2 ** mb - 1
+                current_query = 2**mb - 1
                 q_count = 0
 
                 while True:
@@ -90,13 +89,15 @@ def generate_message_primes(mbits=None, cache_folder=CACHE_FOLDER, how_many=11, 
                     # Move onto the next query.
                     current_query -= 2
 
-        with savefile.open('wb') as f:
+        with savefile.open("wb") as f:
             pickle.dump(mprimes, f)
 
     return mprimes
 
 
-def maximum_levels(N: int, qbits: int = 40, mbits: int = 60, nksk: int = 2) -> int:
+def maximum_levels(
+    N: int, qbits: int = 40, mbits: int = 60, nksk: int = 2
+) -> int:
     extra_bits = mbits * (1 + nksk)
     f_levels = (maximum_qbits(N) - extra_bits) / qbits
     return math.floor(f_levels)
@@ -114,15 +115,15 @@ def find_the_next_prime(start: int, m: int, up=True) -> int:
 
 
 def generate_alternating_prime_sequence(
-        sb: int = 40,
-        N: int = 2 ** 15,
-        how_many: int = 60,
-        optimize: bool = True,
-        alternate_directions: bool = True,
-        fixed_direction: bool = False,
+    sb: int = 40,
+    N: int = 2**15,
+    how_many: int = 60,
+    optimize: bool = True,
+    alternate_directions: bool = True,
+    fixed_direction: bool = False,
 ) -> list:
     m: int = N * 2
-    scale: int = 2 ** sb
+    scale: int = 2**sb
 
     s_primes: list = []
 
@@ -152,25 +153,31 @@ def generate_alternating_prime_sequence(
         while True:
             # Search in the given direction.
             current_query: int = up if current_direction else down
-            next_prime: int = find_the_next_prime(start=current_query, m=m, up=current_direction)
+            next_prime: int = find_the_next_prime(
+                start=current_query, m=m, up=current_direction
+            )
             # cumulative scale progresses as (beta_{i-1} * beta_i)**2
 
             # cumulative_scale *= scale / next_prime
 
             # Use Pre-rescale quadratic deviation rule.
             current_dev = scale / next_prime
-            cumulative_scale = cumulative_scale ** 2 * current_dev ** 2
+            cumulative_scale = cumulative_scale**2 * current_dev**2
 
             # Set the next variable.
             if current_direction:
                 up: int = next_prime + 2
                 if optimize:
-                    searched: int = int((cumulative_scale * scale) // 2 * 2 - 1)
+                    searched: int = int(
+                        (cumulative_scale * scale) // 2 * 2 - 1
+                    )
                     down: int = searched if searched < down else down
             else:
                 down: int = next_prime - 2
                 if optimize:
-                    searched: int = int((cumulative_scale * scale) // 2 * 2 + 1)
+                    searched: int = int(
+                        (cumulative_scale * scale) // 2 * 2 + 1
+                    )
                     up: int = searched if searched > up else up
 
             # Switch the direction.
@@ -210,9 +217,13 @@ def cum_prod(x: list) -> list:
     return ret[1:]
 
 
-def plot_cumulative_relative_error(sb: int = 40, N: int = 2 ** 15, label: str = "Optimized", **kw):
+def plot_cumulative_relative_error(
+    sb: int = 40, N: int = 2**15, label: str = "Optimized", **kw
+):
     how_many: int = maximum_levels(N=N, qbits=sb)
-    p: list = generate_alternating_prime_sequence(sb=sb, N=N, how_many=how_many, **kw)
+    p: list = generate_alternating_prime_sequence(
+        sb=sb, N=N, how_many=how_many, **kw
+    )
 
     # Check every prime in the sequence is unique.
     unique_p: list = sorted(set(p))
@@ -220,7 +231,7 @@ def plot_cumulative_relative_error(sb: int = 40, N: int = 2 ** 15, label: str = 
     err_msg = "There are repeating primes in the generate primes set!!!"
     assert len(unique_p) == len(p), err_msg
 
-    scale: int = 2 ** sb
+    scale: int = 2**sb
     e: list = [scale / pi for pi in p]
 
     y: list = cum_prod(e)
@@ -248,10 +259,12 @@ def pgen_pseq(sb, N, how_many: int) -> list | str:
     return res
 
 
-def generate_scale_primes(cache_folder=CACHE_FOLDER, how_many=64, ncpu_cutdown=32, verbose=0):
-    savefile = Path(cache_folder) / 'scale_primes.pkl'
+def generate_scale_primes(
+    cache_folder=CACHE_FOLDER, how_many=64, ncpu_cutdown=32, verbose=0
+):
+    savefile = Path(cache_folder) / "scale_primes.pkl"
     if savefile.exists():
-        with open(savefile, 'rb') as f:
+        with open(savefile, "rb") as f:
             result_dict = pickle.load(f)
             return result_dict
 
@@ -272,18 +285,21 @@ def generate_scale_primes(cache_folder=CACHE_FOLDER, how_many=64, ncpu_cutdown=3
         for sb in logS:
             inputs.append((sb, n, how_many))
 
-    result = Parallel(n_jobs=ncpu,
-                      verbose=verbose)(delayed(pgen_pseq)(*inp) for inp in inputs)
+    result = Parallel(n_jobs=ncpu, verbose=verbose)(
+        delayed(pgen_pseq)(*inp) for inp in inputs
+    )
 
-    result_dict = {(sb, N): pr for (sb, N, how_many), pr in zip(inputs, result)}
+    result_dict = {
+        (sb, N): pr for (sb, N, how_many), pr in zip(inputs, result)
+    }
 
-    with savefile.open('wb') as f:
+    with savefile.open("wb") as f:
         pickle.dump(result_dict, f)
 
     return result_dict
 
 
-def measure_scale_primes_quality(sb: int = 40, N: int = 2 ** 15):
+def measure_scale_primes_quality(sb: int = 40, N: int = 2**15):
     scale_primes: dict = generate_scale_primes()
 
     p: list = scale_primes[(sb, N)]
@@ -294,7 +310,7 @@ def measure_scale_primes_quality(sb: int = 40, N: int = 2 ** 15):
         p
     ), "There are repeating primes in the generate primes set!!!"
 
-    scale = 2 ** sb
+    scale = 2**sb
     e = [scale / pi for pi in p]
 
     y = cum_prod(e)

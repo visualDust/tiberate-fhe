@@ -932,8 +932,8 @@ class CkksEngine:
             ]
 
             # mont enter only the ordinary part.
-            Q0 = [d[: -self.ntt.num_special_primes] for d in P0]
-            Q1 = [d[: -self.ntt.num_special_primes] for d in P1]
+            Q0 = [d[: -self.nttCtx.num_special_primes] for d in P0]
+            Q1 = [d[: -self.nttCtx.num_special_primes] for d in P1]
 
             self.nttCtx.mont_enter(Q0, level, -1)
             self.nttCtx.mont_enter(Q1, level, -1)

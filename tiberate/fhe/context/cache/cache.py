@@ -1,6 +1,5 @@
 import glob
 import os
-from ..context import generate_primes
 
 path_cache = os.path.abspath(__file__).replace("cache.py", "resources")
 
@@ -27,6 +26,8 @@ def generate_cache(path=None):
     if path is None:
         path = path_cache
     # Read in pre-calculated high-quality primes.
+    from tiberate.fhe.context import generate_primes
+
     _ = generate_primes.generate_message_primes(cache_folder=path)
     _ = generate_primes.generate_scale_primes(cache_folder=path)
     return
