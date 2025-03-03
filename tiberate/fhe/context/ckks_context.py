@@ -1,20 +1,22 @@
 import math
 import pickle
-from pathlib import Path
 import warnings
+from pathlib import Path
 
 import numpy as np
 import torch
+from loguru import logger
 
+from tiberate.fhe.cache import cache
+
+from . import errors
 from .generate_primes import generate_message_primes, generate_scale_primes
 from .security_parameters import maximum_qbits
-from tiberate.fhe.cache import cache
-from . import errors 
 
 # ------------------------------------------------------------------------------------------
 # NTT parameter pre-calculation.
 # ------------------------------------------------------------------------------------------
-CACHE_FOLDER = cache.path_cache
+CACHE_FOLDER = cache.path_cache  # todo make this configurable
 
 
 def primitive_root_2N(q, N):
@@ -36,7 +38,7 @@ def psi_power_series(psi, N, q):
 
 
 def bit_rev_psi(q, logN):
-    N = 2 ** logN
+    N = 2**logN
     psi = [primitive_root_2N(qi, N) for qi in q]
     # Bit-reverse index.
     ind = range(N)
@@ -46,7 +48,7 @@ def bit_rev_psi(q, logN):
 
 
 def psi_bank(q, logN):
-    N = 2 ** logN
+    N = 2**logN
     psi = [primitive_root_2N(qi, N) for qi in q]
     ipsi = [pow(psii, -1, qi) for psii, qi in zip(psi, q)]
     psi_series = [psi_power_series(psii, N, qi) for psii, qi in zip(psi, q)]
@@ -64,7 +66,7 @@ def bit_reverse(a, nbits):
 
 
 def bit_reverse_order_index(logN):
-    N = 2 ** logN
+    N = 2**logN
     # Note that for a bit reversing, forward and backward permutations are the same.
     # i.e., don't worry about which direction.
     revi = np.array([bit_reverse(i, logN) for i in range(N)], dtype=np.int32)
@@ -87,13 +89,13 @@ def get_psi(q, logN, my_dtype):
 
 
 def paint_butterfly_forward(logN):
-    N = 2 ** logN
+    N = 2**logN
     t = N
     painted_even = np.zeros((logN, N), dtype=np.bool_)
     painted_odd = np.zeros((logN, N), dtype=np.bool_)
     painted_psi = np.zeros((logN, N // 2), dtype=np.int32)
     for logm in range(logN):
-        m = 2 ** logm
+        m = 2**logm
         t //= 2
         psi_ind = 0
         for i in range(m):
@@ -113,14 +115,14 @@ def paint_butterfly_forward(logN):
 
 
 def paint_butterfly_backward(logN):
-    N = 2 ** logN
+    N = 2**logN
     t = 1
     painted_even = np.zeros((logN, N), dtype=np.bool_)
     painted_odd = np.zeros((logN, N), dtype=np.bool_)
     painted_psi = np.zeros((logN, N // 2), dtype=np.int32)
     for logm in range(logN, 0, -1):
         level = logN - logm
-        m = 2 ** logm
+        m = 2**logm
         j1 = 0
         h = m // 2
         psi_ind = 0
@@ -149,30 +151,30 @@ def paint_butterfly_backward(logN):
 
 class CkksContext:
     def __init__(
-            self,
-            buffer_bit_length=62,
-            scale_bits=40,
-            logN=15,
-            num_scales=None,
-            num_special_primes=2,
-            sigma=3.2,
-            uniform_ternary_secret=True,
-            cache_folder=CACHE_FOLDER,
-            security_bits=128,
-            quantum="post_quantum",
-            distribution="uniform",
-            read_cache=True,
-            save_cache=True,
-            verbose=False,
-            is_secured=True
-
+        self,
+        buffer_bit_length=62,
+        scale_bits=40,
+        logN=15,
+        num_scales=None,
+        num_special_primes=2,
+        sigma=3.2,
+        uniform_ternary_secret=True,
+        cache_folder=CACHE_FOLDER,
+        security_bits=128,
+        quantum="post_quantum",
+        distribution="uniform",
+        read_cache=True,
+        save_cache=True,
+        is_secured=True,
     ):
         if not Path(cache_folder).exists():
             Path(cache_folder).mkdir(parents=True, exist_ok=True)
 
-        self.generation_string = f"{buffer_bit_length}_{scale_bits}_{logN}_{num_scales}_" \
-                                 f"{num_special_primes}_{security_bits}_{quantum}_" \
-                                 f"{distribution}"
+        self.generation_string = (
+            f"{buffer_bit_length}_{scale_bits}_{logN}_{num_scales}_"
+            f"{num_special_primes}_{security_bits}_{quantum}_"
+            f"{distribution}"
+        )
 
         self.is_secured = is_secured
         # Compose cache savefile name.
@@ -182,13 +184,7 @@ class CkksContext:
             with savepath.open("rb") as f:
                 __dict__ = pickle.load(f)
                 self.__dict__.update(__dict__)
-
-            if verbose:
-                print(
-                    f"I have read in from the cached save file {savepath}!!!\n"
-                )
-                self.init_print()
-
+                logger.info(f"Loaded cache from {savepath}.")
             return
 
         # Transfer input parameters.
@@ -215,23 +211,31 @@ class CkksContext:
         self.numpy_dtype = {30: np.int32, 62: np.int64}[self.buffer_bit_length]
 
         # Polynomial length.
-        self.N = 2 ** self.logN
+        self.N = 2**self.logN
 
         # We set the message prime to of bit-length W-2.
         self.message_bits = self.buffer_bit_length - 2
 
         # Read in pre-calculated high-quality primes.
         try:
-            message_special_primes = generate_message_primes(cache_folder=cache_folder)[self.message_bits][self.N]
+            message_special_primes = generate_message_primes(
+                cache_folder=cache_folder
+            )[self.message_bits][self.N]
         except KeyError as e:
-            raise errors.NotFoundMessageSpecialPrimes(message_bit=self.message_bits, N=self.N)
+            raise errors.NotFoundMessageSpecialPrimes(
+                message_bit=self.message_bits, N=self.N
+            )
 
         # For logN > 16, we need significantly more primes.
         how_many = 64 if self.logN < 16 else 128
         try:
-            scale_primes = generate_scale_primes(cache_folder=cache_folder, how_many=how_many)[self.scale_bits, self.N]
+            scale_primes = generate_scale_primes(
+                cache_folder=cache_folder, how_many=how_many
+            )[self.scale_bits, self.N]
         except KeyError as e:
-            raise errors.NotFoundScalePrimes(scale_bits=self.scale_bits, N=self.N)
+            raise errors.NotFoundScalePrimes(
+                scale_bits=self.scale_bits, N=self.N
+            )
 
         # Compose the primes pack.
         # Rescaling drops off primes in --> direction.
@@ -240,7 +244,9 @@ class CkksContext:
         self.max_qbits = int(
             maximum_qbits(self.N, security_bits, quantum, distribution)
         )
-        base_special_primes = message_special_primes[: 1 + self.num_special_primes]
+        base_special_primes = message_special_primes[
+            : 1 + self.num_special_primes
+        ]
 
         # If num_scales is None, generate the maximal number of levels.
         try:
@@ -266,8 +272,12 @@ class CkksContext:
         if self.total_qbits > self.max_qbits:
             if self.is_secured:
                 raise errors.ViolatedAllowedQbits(
-                    scale_bits=self.scale_bits, N=self.N, num_scales=self.num_scales,
-                    max_qbits=self.max_qbits, total_qbits=self.total_qbits)
+                    scale_bits=self.scale_bits,
+                    N=self.N,
+                    num_scales=self.num_scales,
+                    max_qbits=self.max_qbits,
+                    total_qbits=self.total_qbits,
+                )
             else:
                 warnings.warn(
                     f"Maximum allowed qbits are violated: "
@@ -279,20 +289,15 @@ class CkksContext:
         self.generate_montgomery_parameters()
         self.generate_paints()
 
-        if verbose:
-            self.init_print()
-
         # Save cache.
         if save_cache:
             with savepath.open("wb") as f:
                 pickle.dump(self.__dict__, f)
-
-            if verbose:
-                print(f"I have saved to the cached save file {savepath}!!!\n")
+                logger.info("Saved cache to {savepath}.")
 
     def generate_montgomery_parameters(self):
-        self.R = 2 ** self.buffer_bit_length
-        self.R_square = [self.R ** 2 % qi for qi in self.q]
+        self.R = 2**self.buffer_bit_length
+        self.R_square = [self.R**2 % qi for qi in self.q]
         self.half_buffer_bit_length = self.buffer_bit_length // 2
         self.lower_bits_mask = (1 << self.half_buffer_bit_length) - 1
         self.full_bits_mask = (1 << self.buffer_bit_length) - 1
@@ -339,21 +344,21 @@ class CkksContext:
             ..., backward_psi_paint.ravel()
         ].reshape(-1, *backward_psi_paint.shape)
 
-    def init_print(self):
-        print(f"""
-I have received inputs:
-        buffer_bit_length\t\t= {self.buffer_bit_length:,d}
-        scale_bits\t\t\t= {self.scale_bits:,d}
-        logN\t\t\t\t= {self.logN:,d}
-        N\t\t\t\t= {self.N:,d}
-        Number of special primes\t= {self.num_special_primes:,d}
-        Number of scales\t\t= {self.num_scales:,d}
-        Cache folder\t\t\t= '{self.cache_folder:s}'
-        Security bits\t\t\t= {self.security_bits:,d}
-        Quantum security model\t\t= {self.quantum:s}
-        Security sampling distribution\t= {self.distribution:s}
-        Number of message bits\t\t= {self.message_bits:,d}
-        In total I will be using '{self.total_qbits:,d}' bits out of available maximum '{self.max_qbits:,d}' bits.
-        And is it secured?\t\t= {self.is_secured}
-My RNS primes are {self.q}."""
-              )
+    def __str__(self):
+        what_is_this = f"{self.__class__}"
+        what_is_this += f"""
+        buffer_bit_length = {self.buffer_bit_length:,d}
+        scale_bits = {self.scale_bits:,d}
+        logN = {self.logN:,d}
+        N = {self.N:,d}
+        Number of special primes = {self.num_special_primes:,d}
+        Number of scales = {self.num_scales:,d}
+        Cache folder = '{self.cache_folder:s}'
+        Security bits = {self.security_bits:,d}
+        Quantum security model = {self.quantum:s}
+        Security sampling distribution = {self.distribution:s}
+        Number of message bits = {self.message_bits:,d}
+        Using '{self.total_qbits:,d}' bits out of available maximum '{self.max_qbits:,d}' bits.
+        Is Secured = {self.is_secured}
+        RNS primes = {self.q}."""
+        return what_is_this

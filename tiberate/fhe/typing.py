@@ -1,15 +1,16 @@
-from collections import defaultdict
-import typing
-from typing import Any, Dict, List, Union
 import inspect
+import typing
+from collections import defaultdict
 from functools import wraps
+from typing import Any, Dict, List, Union
+
 import numpy as np
+import torch
 from loguru import logger
 from torch import Tensor
 
 
 class DataStruct:
-
     # data: Union[list, tuple]
     # include_special: bool
     # ntt_state: bool
@@ -71,10 +72,9 @@ class DataStruct:
         elif isinstance(data, DataStruct):
             return data.clone()
         else:
-            # raise TypeError(f"Unsupported data type to clone: {type(data)}")
-            logger.warning(
-                f"Unsupported data type to clone: {type(data)}, returning the original data."
-            )
+            # logger.warning(
+            #     f"Unsupported data type to clone: {type(data)}, returning the original data."
+            # )
             return data
 
     def clone(self):
@@ -133,14 +133,14 @@ class DataStruct:
             return (
                 cls.get_device_of_tensor(list(data.values())[0])
                 if data
-                else "cpu" # if data is empty, return cpu
+                else "cpu"  # if data is empty, return cpu
             )
         elif isinstance(data, DataStruct):
             return cls.get_device_of_tensor(data.data)
         else:
-            logger.warning(
-                f"Unsupported data type to get device: {type(data)}, will return 'cpu'."
-            )
+            # logger.warning(
+            #     f"Unsupported data type to get device: {type(data)}, will return 'cpu'."
+            # )
             return "cpu"
 
     @property
@@ -183,9 +183,9 @@ class DataStruct:
         elif isinstance(data, DataStruct):
             return data.copy_to(device)
         else:
-            logger.warning(
-                f"Unsupported data type to move to device: {type(data)}, returning the original data."
-            )
+            # logger.warning(
+            #     f"Unsupported data type to move to device: {type(data)}, returning the original data."
+            # )
             return data
 
     def copy_to(self, device: str, non_blocking=True):
@@ -280,10 +280,18 @@ class Plaintext(DataStruct):
             int, Dict[str, Any]
         ] = None,  # level: {what_cache: cache_data}
         padding=True,  # todo remove padding flag in legacy code
+        use_cache=True,
     ):
+        src = torch.tensor(src)
+        if src.dim() == 2 and src.size(0) == 1:
+            src = src.squeeze(0)
+        assert src.dim() == 1, RuntimeError(
+            f"Plaintext source data must be 1D tensor, got {src.dim()}D tensor."
+        )
         self.src = src
         self.data = cache or defaultdict(dict)  # cache is alias of data
         self.padding = padding
+        self.use_cache = use_cache  # todo allow to disable cache
 
     @property
     def cache(self):
@@ -295,9 +303,8 @@ class Plaintext(DataStruct):
 
     def clone(self):
         cls = self.__class__
-        src = cls.clone_tensor_recursive(self.src)
         cache = cls.clone_tensor_recursive(self.cache)
-        return cls(src, cache=cache)
+        return cls(self.src, cache=cache)
 
     @property
     def device(self):
@@ -308,13 +315,10 @@ class Plaintext(DataStruct):
 
     def copy_to(self, device, non_blocking=True):
         cls = self.__class__
-        src = cls.copy_tensor_to_device_recursive(
-            data=self.src, device=device, non_blocking=non_blocking
-        )
         cache = cls.copy_tensor_to_device_recursive(
             data=self.cache, device=device, non_blocking=non_blocking
         )
-        return cls(src, cache=cache)
+        return cls(self.src, cache=cache)
 
     def __repr__(self):
         return f"{self.__class__.__name__}(data={self.src}, cached levels={list(self.cache.keys())})"

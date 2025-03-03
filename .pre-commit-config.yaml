@@ -4,19 +4,6 @@ exclude: |
       doc/.+|
   )$
 repos:
-  - repo: local
-    hooks:
-      - id: pylint
-        name: pylint
-        entry: poetry run pylint
-        language: system
-        types: [python]
-        require_serial: true
-        args: [
-            "-rn", # Only display messages
-            "-sn", # Don't display the score
-            "--disable=missing-docstring",
-          ]
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v3.2.0
     hooks:
@@ -43,12 +30,3 @@ repos:
     hooks:
       - id: prettier
         files: .*\.(js|jsx|ts|tsx|json|yml|yaml|md)$
-  - repo: https://github.com/PyCQA/bandit
-    rev: "1.8.2"
-    hooks:
-      - id: bandit
-        args: ["-ll", "-ii"]
-  - repo: https://github.com/pycqa/flake8
-    rev: "7.1.1"
-    hooks:
-      - id: flake8

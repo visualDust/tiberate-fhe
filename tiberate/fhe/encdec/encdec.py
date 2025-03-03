@@ -1,6 +1,11 @@
+from typing import Tuple
+
 import numpy as np
 import torch
 
+from tiberate.csprng.csprng import Csprng
+from tiberate.fhe.typing import DataStruct
+from tiberate.utils.massive import CachedDict
 
 # ---------------------------------------------------------------
 # Permutation.
@@ -45,6 +50,9 @@ def canon_permutation_torch(N, k=1, device="cuda:0", verbose=False):
     if verbose:
         print(f"Canonical permutation for p={p} is\n{pn}")
     return pn
+
+
+canon_permutation_torch_cache = CachedDict(canon_permutation_torch)
 
 
 def fold_permutation(N, p, verbose=False):
@@ -147,12 +155,18 @@ def generate_twister(N, device="cuda:0"):
     return torch.exp(expr)
 
 
+twister_cache = CachedDict(generate_twister)
+
+
 def generate_skewer(N, device="cuda:0"):
     expr = (
         1j * torch.pi * torch.arange(N, device=device, dtype=torch.float64) / N
     )
     skew = torch.exp(expr)
     return skew
+
+
+skewer_cache = CachedDict(generate_skewer)
 
 
 def m2poly(m, twister, norm="backward"):
@@ -192,10 +206,6 @@ def poly2m(poly, skewer, norm="backward"):
 # Utilities.
 # ---------------------------------------------------------------
 
-perm_cache = {}
-twister_cache = {}
-skewer_cache = {}
-
 
 def prepost_perms(N, device="cuda:0"):
     circ_shift = circular_shift_permutation(N)
@@ -207,6 +217,9 @@ def prepost_perms(N, device="cuda:0"):
     post_perm = torch.from_numpy(post_perm).to(device)
     pre_perm = torch.from_numpy(pre_perm).to(device)
     return pre_perm, post_perm
+
+
+prepost_perms_cache = CachedDict(prepost_perms)
 
 
 def pre_permute(m, pre_perm):
@@ -236,11 +249,7 @@ def rotate(m, delta):
     shift = delta % N
     leap = (3**shift - 1) // 2 % (N * 2)
 
-    if (N, leap, m.device) in perm_cache.keys():
-        perm = perm_cache[(N, leap, m.device)]
-    else:
-        perm = canon_permutation_torch(N, leap, device=m.device)
-        perm_cache[(N, leap, m.device)] = perm
+    perm = canon_permutation_torch_cache[N, leap, m.device]
 
     perm_folded = perm % N
     perm_sign = (-1) ** (perm // N)
@@ -260,11 +269,7 @@ def conjugate(m):
 
     leap = N - 1
 
-    if (N, leap, m.device) in perm_cache.keys():
-        perm = perm_cache[(N, leap, m.device)]
-    else:
-        perm = canon_permutation_torch(N, leap, device=m.device)
-        perm_cache[(N, leap, m.device)] = perm
+    perm = canon_permutation_torch_cache[N, leap, m.device]
 
     perm_folded = perm % N
     perm_sign = (-1) ** (perm // N)
@@ -280,7 +285,7 @@ def conjugate(m):
 
 def encode(
     m,
-    rng=None,
+    rng: Csprng = None,
     scale=2**40,
     deviation=1.0,
     device="cuda:0",
@@ -288,21 +293,14 @@ def encode(
     return_without_scaling=False,
 ):
     N = len(m) * 2
-    if (N, device) in perm_cache.keys():
-        pre_perm, post_perm = perm_cache[(N, device)]
-    else:
-        pre_perm, post_perm = prepost_perms(N, device=device)
-        perm_cache[(N, device)] = (pre_perm, post_perm)
 
-    mm = torch.tensor(m * deviation).to(device)  # check dtype m * deviation
+    pre_perm, post_perm = prepost_perms_cache[N, device]
+
+    mm = m * deviation  # todo check dtype m * deviation
+    if isinstance(mm, torch.Tensor):
+        mm = mm.clone().to(device)
     mm = pre_permute(mm, pre_perm)
-
-    if (N, device) in twister_cache.keys():
-        twister = twister_cache[N, device]
-    else:
-        twister = generate_twister(N, device)
-        twister_cache[N, device] = twister
-
+    twister = twister_cache[(N, device)]
     if return_without_scaling:
         return m2poly(mm, twister, norm)
     else:
@@ -319,17 +317,10 @@ def decode(
 ):
     N = len(m)
     device = m.device.type + ":" + str(m.device.index)
-    if (N, device) in perm_cache.keys():
-        pre_perm, post_perm = perm_cache[(N, device)]
-    else:
-        pre_perm, post_perm = prepost_perms(N, device=device)
-        perm_cache[(N, device)] = (pre_perm, post_perm)
 
-    if (N, device) in skewer_cache.keys():
-        skewer = skewer_cache[N, device]
-    else:
-        skewer = generate_skewer(N, device)
-        skewer_cache[N, device] = skewer
+    pre_perm, post_perm = prepost_perms_cache[N, device]
+
+    skewer = skewer_cache[N, device]
 
     if return_without_scaling:
         mm = poly2m(m, skewer, norm=norm)

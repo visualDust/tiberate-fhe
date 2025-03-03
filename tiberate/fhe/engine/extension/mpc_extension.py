@@ -1,14 +1,13 @@
-from tiberate.fhe.typing import *
 from tiberate.fhe.encdec import rotate
-from .. import errors
-from tiberate.ntt import ntt_cuda
-from ..ckks_engine import CkksEngine
 from tiberate.fhe.typing import *
+from tiberate.ntt import ntt_cuda
 from tiberate.utils.mvc import strictype
+
+from .. import errors
+from ..ckks_engine import CkksEngine
 
 
 class CkksEngineMPCExtension(CkksEngine):
-
     # -------------------------------------------------------------------------------------------
     # Multiparty.
     # -------------------------------------------------------------------------------------------
@@ -29,18 +28,18 @@ class CkksEngineMPCExtension(CkksEngine):
 
         level = 0
         e = self.rng.discrete_gaussian(repeats=1)
-        e = self.ntt.tile_unsigned(e, level, mult_type)
+        e = self.nttCtx.tile_unsigned(e, level, mult_type)
 
-        self.ntt.enter_ntt(e, level, mult_type)
+        self.nttCtx.enter_ntt(e, level, mult_type)
         repeats = self.ctx.num_special_primes if sk.include_special else 0
 
         if a is None:
             a = self.rng.randint(
-                self.ntt.q_prepack[mult_type][level][0], repeats=repeats
+                self.nttCtx.q_prepack[mult_type][level][0], repeats=repeats
             )
 
-        sa = self.ntt.mont_mult(a, sk.data, 0, mult_type)
-        pk0 = self.ntt.mont_sub(e, sa, 0, mult_type)
+        sa = self.nttCtx.mont_mult(a, sk.data, 0, mult_type)
+        pk0 = self.nttCtx.mont_sub(e, sa, 0, mult_type)
         pk = PublicKey(
             data=[pk0, a],
             include_special=include_special,
@@ -71,7 +70,7 @@ class CkksEngineMPCExtension(CkksEngine):
         a = [a.clone() for a in data[1]]
 
         for pk in pks[1:]:
-            b = self.ntt.mont_add(b, pk.data[0], lvl=0, mult_type=mult_type)
+            b = self.nttCtx.mont_add(b, pk.data[0], lvl=0, mult_type=mult_type)
 
         cpk = PublicKey(
             (b, a),
@@ -91,12 +90,12 @@ class CkksEngineMPCExtension(CkksEngine):
         #     raise errors.NotMatchType(origin=ct.origin, to=origin_names["ct"])
         # if sk.origin != origin_names["sk"]:
         #     raise errors.NotMatchType(origin=sk.origin, to=origin_names["sk"])
-        
+
         # if ct.ntt_state or ct.montgomery_state:
         #     raise errors.NotMatchDataStructState(origin=ct.origin)
         # if not sk.ntt_state or not sk.montgomery_state:
         #     raise errors.NotMatchDataStructState(origin=sk.origin)
-        
+
         if ct.ntt_state:
             raise errors.NTTStateError(expected=False)
         if ct.montgomery_state:
@@ -105,20 +104,20 @@ class CkksEngineMPCExtension(CkksEngine):
             raise errors.NTTStateError(expected=True)
         if not sk.montgomery_state:
             raise errors.MontgomeryStateError(expected=True)
-        
+
         level = ct.level
 
         ct0 = ct.data[0][0]
         a = ct.data[1][0].clone()
 
-        self.ntt.enter_ntt([a], level)
+        self.nttCtx.enter_ntt([a], level)
 
-        sk_data = sk.data[0][self.ntt.starts[level][0] :]
+        sk_data = sk.data[0][self.nttCtx.starts[level][0] :]
 
-        sa = self.ntt.mont_mult([a], [sk_data], level)
-        self.ntt.intt_exit(sa, level)
+        sa = self.nttCtx.mont_mult([a], [sk_data], level)
+        self.nttCtx.intt_exit(sa, level)
 
-        pt = self.ntt.mont_add([ct0], sa, level)
+        pt = self.nttCtx.mont_add([ct0], sa, level)
 
         return pt
 
@@ -130,12 +129,12 @@ class CkksEngineMPCExtension(CkksEngine):
         #     raise errors.NotMatchType(origin=ct.origin, to=origin_names["ct"])
         # if sk.origin != origin_names["sk"]:
         #     raise errors.NotMatchType(origin=sk.origin, to=origin_names["sk"])
-        
+
         # if ct.ntt_state or ct.montgomery_state:
         #     raise errors.NotMatchDataStructState(origin=ct.origin)
         # if not sk.ntt_state or not sk.montgomery_state:
         #     raise errors.NotMatchDataStructState(origin=sk.origin)
-        
+
         if ct.ntt_state:
             raise errors.NTTStateError(expected=False)
         if ct.montgomery_state:
@@ -147,12 +146,12 @@ class CkksEngineMPCExtension(CkksEngine):
 
         a = ct.data[1][0].clone()
 
-        self.ntt.enter_ntt([a], ct.level)
+        self.nttCtx.enter_ntt([a], ct.level)
 
-        sk_data = sk.data[0][self.ntt.starts[ct.level][0] :]
+        sk_data = sk.data[0][self.nttCtx.starts[ct.level][0] :]
 
-        sa = self.ntt.mont_mult([a], [sk_data], ct.level)
-        self.ntt.intt_exit(sa, ct.level)
+        sa = self.nttCtx.mont_mult([a], [sk_data], ct.level)
+        self.nttCtx.intt_exit(sa, ct.level)
 
         return sa
 
@@ -161,9 +160,9 @@ class CkksEngineMPCExtension(CkksEngine):
     ):
         pt = [x.clone() for x in pcts[0]]
         for pct in pcts[1:]:
-            pt = self.ntt.mont_add(pt, pct, level)
+            pt = self.nttCtx.mont_add(pt, pct, level)
 
-        self.ntt.reduce_2q(pt, level)
+        self.nttCtx.reduce_2q(pt, level)
 
         base_at = -self.ctx.num_special_primes - 1 if include_special else -1
 
@@ -171,10 +170,10 @@ class CkksEngineMPCExtension(CkksEngine):
         scaler = pt[0][0][None, :]
 
         final_scalar = self.final_scalar[level]
-        scaled = self.ntt.mont_sub([base], [scaler], -1)
-        self.ntt.mont_enter_scalar(scaled, [final_scalar], -1)
-        self.ntt.reduce_2q(scaled, -1)
-        self.ntt.make_signed(scaled, -1)
+        scaled = self.nttCtx.mont_sub([base], [scaler], -1)
+        self.nttCtx.mont_enter_scalar(scaled, [final_scalar], -1)
+        self.nttCtx.reduce_2q(scaled, -1)
+        self.nttCtx.make_signed(scaled, -1)
 
         m = self.decode(m=scaled, level=level)
 
@@ -195,12 +194,12 @@ class CkksEngineMPCExtension(CkksEngine):
         #     raise errors.NotMatchType(
         #         origin="not a secret key", to=origin_names["sk"]
         #     )
-        
+
         # if (not sk_src.ntt_state) or (not sk_src.montgomery_state):
         #     raise errors.NotMatchDataStructState(origin=sk_src.origin)
         # if (not sk_dst.ntt_state) or (not sk_dst.montgomery_state):
         #     raise errors.NotMatchDataStructState(origin=sk_dst.origin)
-        
+
         if not sk_src.ntt_state:
             raise errors.NTTStateError(expected=True)
         if not sk_src.montgomery_state:
@@ -212,18 +211,18 @@ class CkksEngineMPCExtension(CkksEngine):
 
         level = 0
 
-        stops = self.ntt.stops[-1]
+        stops = self.nttCtx.stops[-1]
         Psk_src = [
             sk_src.data[di][: stops[di]].clone()
-            for di in range(self.ntt.num_devices)
+            for di in range(self.nttCtx.num_devices)
         ]
 
-        self.ntt.mont_enter_scalar(Psk_src, self.mont_PR, level)
+        self.nttCtx.mont_enter_scalar(Psk_src, self.mont_PR, level)
 
-        ksk = [[] for _ in range(self.ntt.p.num_partitions + 1)]
-        for device_id in range(self.ntt.num_devices):
-            for part_id, part in enumerate(self.ntt.p.p[level][device_id]):
-                global_part_id = self.ntt.p.part_allocations[device_id][
+        ksk = [[] for _ in range(self.nttCtx.p.num_partitions + 1)]
+        for device_id in range(self.nttCtx.num_devices):
+            for part_id, part in enumerate(self.nttCtx.p.p[level][device_id]):
+                global_part_id = self.nttCtx.p.part_allocations[device_id][
                     part_id
                 ]
 
@@ -237,7 +236,7 @@ class CkksEngineMPCExtension(CkksEngine):
                 shard = Psk_src[device_id][astart:astop]
                 pk_data = pk.data[0][device_id][astart:astop]
 
-                _2q = self.ntt.parts_pack[device_id][key]["_2q"]
+                _2q = self.nttCtx.parts_pack[device_id][key]["_2q"]
                 update_part = ntt_cuda.mont_add([pk_data], [shard], _2q)[0]
                 pk_data.copy_(update_part, non_blocking=True)
 
@@ -263,9 +262,9 @@ class CkksEngineMPCExtension(CkksEngine):
         self, sk: SecretKey, delta: int, a=None
     ) -> RotationKey:
         sk_new_data = [s.clone() for s in sk.data]
-        self.ntt.intt(sk_new_data)
+        self.nttCtx.intt(sk_new_data)
         sk_new_data = [rotate(s, delta) for s in sk_new_data]
-        self.ntt.ntt(sk_new_data)
+        self.nttCtx.ntt(sk_new_data)
         sk_rotated = DataStruct(
             data=sk_new_data,
             include_special=False,
@@ -289,7 +288,7 @@ class CkksEngineMPCExtension(CkksEngine):
         crotk = self.clone(rotks[0])
         for rotk in rotks[1:]:
             for ksk_idx in range(len(rotk.data)):
-                update_parts = self.ntt.mont_add(
+                update_parts = self.nttCtx.mont_add(
                     crotk.data[ksk_idx].data[0], rotk.data[ksk_idx].data[0]
                 )
                 crotk.data[ksk_idx].data[0][0].copy_(
@@ -333,7 +332,7 @@ class CkksEngineMPCExtension(CkksEngine):
     ) -> GaloisKey:
         # if sk.origin != origin_names["sk"]:
         #     raise errors.NotMatchType(origin=sk.origin, to=origin_names["sk"])
-        
+
         galois_deltas = [2**i for i in range(self.ctx.logN - 1)]
         galois_key_parts = [
             self.multiparty_create_rotation_key(
@@ -361,7 +360,7 @@ class CkksEngineMPCExtension(CkksEngine):
         for galk in galks[1:]:  # galk
             for rotk_idx in range(len(galk.data)):  # rotk
                 for ksk_idx in range(len(galk.data[rotk_idx].data)):  # ksk
-                    update_parts = self.ntt.mont_add(
+                    update_parts = self.nttCtx.mont_add(
                         cgalk.data[rotk_idx].data[ksk_idx].data[0],
                         galk.data[rotk_idx].data[ksk_idx].data[0],
                     )
@@ -378,7 +377,7 @@ class CkksEngineMPCExtension(CkksEngine):
         evk_sum = self.clone(evks_share[0])
         for evk_share in evks_share[1:]:
             for ksk_idx in range(len(evk_sum.data)):
-                update_parts = self.ntt.mont_add(
+                update_parts = self.nttCtx.mont_add(
                     evk_sum.data[ksk_idx].data[0],
                     evk_share.data[ksk_idx].data[0],
                 )
@@ -399,10 +398,10 @@ class CkksEngineMPCExtension(CkksEngine):
         evk_sum_mult = self.clone(evk_sum)
 
         for ksk_idx in range(len(evk_sum.data)):
-            update_part_b = self.ntt.mont_mult(
+            update_part_b = self.nttCtx.mont_mult(
                 evk_sum_mult.data[ksk_idx].data[0], sk.data
             )
-            update_part_a = self.ntt.mont_mult(
+            update_part_a = self.nttCtx.mont_mult(
                 evk_sum_mult.data[ksk_idx].data[1], sk.data
             )
             for dev_id in range(len(update_part_b)):
@@ -421,10 +420,10 @@ class CkksEngineMPCExtension(CkksEngine):
         cevk = self.clone(evk_sum_mult[0])
         for evk in evk_sum_mult[1:]:
             for ksk_idx in range(len(cevk.data)):
-                update_part_b = self.ntt.mont_add(
+                update_part_b = self.nttCtx.mont_add(
                     cevk.data[ksk_idx].data[0], evk.data[ksk_idx].data[0]
                 )
-                update_part_a = self.ntt.mont_add(
+                update_part_a = self.nttCtx.mont_add(
                     cevk.data[ksk_idx].data[1], evk.data[ksk_idx].data[1]
                 )
                 for dev_id in range(len(update_part_b)):

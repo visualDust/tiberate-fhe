@@ -4,10 +4,12 @@
 # Github: github.com/visualDust
 
 import math
-import torch
 from typing import Any, Callable, Union
-from tiberate.fhe.typing import *
+
+import torch
 from loguru import logger
+
+from tiberate.fhe.typing import *
 
 from .framing import get_caller_info_traceback
 
@@ -121,11 +123,12 @@ def decompose_rot_offsets(offset: int, num_slots: int) -> list:
 
     return offsets
 
+
 class CachedDict:
     def __init__(self, generator_func):
         """
         Initializes the CachedDict with a generator function.
-        
+
         Parameters:
         - generator_func: A function that takes a key and returns a value.
         """
@@ -138,7 +141,11 @@ class CachedDict:
         the generator function is called with the key to produce the value.
         """
         if key not in self._cache:
-            self._cache[key] = self.generator_func(key)
+            self._cache[key] = (
+                self.generator_func(*key)  # Unpack the keys as arguments
+                if isinstance(key, tuple)
+                else self.generator_func(key)
+            )
         return self._cache[key]
 
     def __contains__(self, key):

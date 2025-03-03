@@ -3,6 +3,7 @@ import time
 
 import numpy as np
 import torch
+from loguru import logger
 
 from tiberate.fhe.context.ckks_context import CkksContext
 
@@ -16,32 +17,18 @@ class NTTContext:
         ctx: CkksContext,
         index_type=torch.int32,
         devices=None,
-        verbose=False,
     ):
-        # Mark the start time.
-        t0 = time.time()
-
         # Set devices first.
         if devices is None:
-            gpu_count = torch.cuda.device_count()
-            self.devices = [f"cuda:{i}" for i in range(gpu_count)]
-        else:
-            self.devices = devices
+            devices = ["cuda:0"]
+            logger.info(f"Device not specified. Usingd default {devices}.")
 
+        self.devices = devices
         self.num_devices = len(self.devices)
 
         # Transfer input parameters.
         self.index_type = index_type
         self.ckksCtx = ctx
-
-        if verbose:
-            print(
-                f"[{str(datetime.datetime.now())}] I have received the context:\n"
-            )
-            self.ckksCtx.init_print()
-            print(
-                f"[{str(datetime.datetime.now())}] Requested devices for computation are {self.devices}."
-            )
 
         self.num_ordinary_primes = self.ckksCtx.num_scales + 1
         self.num_special_primes = self.ckksCtx.num_special_primes
@@ -49,32 +36,8 @@ class NTTContext:
         self.p = rns_partition(
             self.num_ordinary_primes, self.num_special_primes, self.num_devices
         )
-        if verbose:
-            print(
-                f"[{str(datetime.datetime.now())}] I have generated a partitioning scheme."
-            )
-            print(
-                f"[{str(datetime.datetime.now())}] I have in total {self.num_levels} levels available."
-            )
-            print(
-                f"[{str(datetime.datetime.now())}] I have {self.num_ordinary_primes} ordinary primes."
-            )
-            print(
-                f"[{str(datetime.datetime.now())}] I have {self.num_special_primes} special primes."
-            )
 
         self.prepare_parameters()
-
-        if verbose:
-            print(
-                f"[{str(datetime.datetime.now())}] I prepared ntt parameters."
-            )
-
-        t1 = time.time()
-        if verbose:
-            print(
-                f"[{str(datetime.datetime.now())}] ntt initialization took {(t1 - t0):.2f} seconds."
-            )
 
         self.qlists = [qi.tolist() for qi in self.q]
 
@@ -305,10 +268,10 @@ class NTTContext:
 
                     if len(key) > 0:
                         if key not in self.parts_pack[device_id]:
-                            self.parts_pack[device_id][key] = (
-                                self.params_pack_device(
-                                    device_id, astart, astop
-                                )
+                            self.parts_pack[device_id][
+                                key
+                            ] = self.params_pack_device(
+                                device_id, astart, astop
                             )
 
                 for p in self.p.p_special[level][device_id]:
@@ -316,9 +279,9 @@ class NTTContext:
                     if key not in self.parts_pack[device_id].keys():
                         astart = p[0]
                         astop = p[-1]
-                        self.parts_pack[device_id][key] = (
-                            self.params_pack_device(device_id, astart, astop)
-                        )
+                        self.parts_pack[device_id][
+                            key
+                        ] = self.params_pack_device(device_id, astart, astop)
 
         for device_id in range(self.num_devices):
             for level in range(self.num_levels):
@@ -605,3 +568,18 @@ class NTTContext:
         return ntt_cuda.tile_unsigned(
             a, self._2q_prepack[mult_type][lvl][part]
         )
+
+    def __repr__(self):
+        pass
+
+    def __str__(self):
+        what_is_this = f"{self.__class__}"
+        what_is_this += f"""
+        Using CKKS Context:
+        {str(self.ckksCtx).replace('\n', '\n\t')}
+        Using devices = {self.devices}
+        Available levels = {self.num_levels}
+        Ordinary primes = {self.num_ordinary_primes}
+        Special primes = {self.num_special_primes}
+        """
+        return what_is_this

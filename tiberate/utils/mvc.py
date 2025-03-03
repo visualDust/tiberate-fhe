@@ -3,10 +3,11 @@
 # Author: GavinGong aka VisualDust
 # Github: github.com/visualDust
 
-import typing
-from loguru import logger
 import inspect
+import typing
 from functools import wraps
+
+from loguru import logger
 
 
 def singleton(class_):
@@ -35,9 +36,12 @@ def patch(func=None, *, name=None, overwrite=True):
     """Patch a function into a class type
 
     Args:
-        func (Function): A function that takes at least one argument with a specific class type 'self:YourClass'
-        name (str, optional): The name to assign to the method in the class. Defaults to the function's name.
-        overwrite (bool, optional): Whether to overwrite an existing method in the class. Defaults to True.
+        func (Function): A function that takes at least
+        one argument with a specific class type 'self:YourClass'
+        name (str, optional): The name to assign to the
+        method in the class. Defaults to the function's name.
+        overwrite (bool, optional): Whether to overwrite
+        an existing method in the class. Defaults to True.
 
     Returns:
         function: The patched function
@@ -74,8 +78,10 @@ def initonly(func):
     def wrapper(*args, **kwargs):
         # Get the current call stack
         stack = inspect.stack()
-        # Ensure there's a caller frame; typically, __init__ should be the immediate caller.
-        # You might need to adjust the depth if there are intermediary wrappers.
+        # Ensure there's a caller frame; typically,
+        # __init__ should be the immediate caller.
+        # You might need to adjust the depth if there
+        # are intermediary wrappers.
         if len(stack) < 2 or stack[1].function != "__init__":
             raise RuntimeError(
                 f"Method '{func.__name__}' can only be called from __init__"
@@ -84,18 +90,20 @@ def initonly(func):
 
     return wrapper
 
-STRICT_TYPE_CHECKING = False
+
+SKIP_STRICT_TYPE_CHECKING = True
+
 
 def strictype(func):
     """
     A decorator that checks the types of the arguments passed to a function.
-    
+
     Warning, this will cause cpu bound in some cases, use with caution.
     """
 
     @wraps(func)
     def wrapper(*args, **kwargs):
-        if not STRICT_TYPE_CHECKING:
+        if SKIP_STRICT_TYPE_CHECKING:
             return func(*args, **kwargs)
         # Get type hints for the function
         hints = typing.get_type_hints(func)
