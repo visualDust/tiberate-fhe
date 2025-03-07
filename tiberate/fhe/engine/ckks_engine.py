@@ -4,11 +4,13 @@ import pickle
 import warnings
 from hashlib import sha256
 from pathlib import Path
+from time import time
 
 import numpy as np
 import nvtx
 import torch
 from loguru import logger
+from vdtoys.mvc import initonly, strictype
 
 from tiberate.csprng.csprng import Csprng
 from tiberate.fhe.context import presets
@@ -19,7 +21,6 @@ from tiberate.fhe.encdec import encode as codec_encode
 from tiberate.fhe.encdec import rotate as codec_rotate
 from tiberate.fhe.typing import *
 from tiberate.ntt import NTTContext, ntt_cuda
-from tiberate.utils.mvc import initonly, strictype
 
 from . import errors
 
@@ -295,7 +296,8 @@ class CkksEngine:
                 padding_result = np.pad(
                     [m], (0, self.num_slots - m_len), constant_values=(0, 0)
                 )
-
+        if not isinstance(padding_result, torch.Tensor):
+            padding_result = torch.tensor(padding_result)
         return padding_result
 
     def encode(self, m, level: int = 0, padding=True) -> list[torch.Tensor]:
@@ -1841,184 +1843,6 @@ class CkksEngine:
         return conj_ct
 
     # -------------------------------------------------------------------------------------------
-    # Move data back and forth from GPUs to the CPU.
-    # -------------------------------------------------------------------------------------------
-
-    # todo rewrite movetos
-
-    def download_to_cpu(self, gpu_data, level, include_special):
-        # Prepare destination arrays.
-        if include_special:
-            dest = self.nttCtx.p.destination_arrays_with_special[level]
-        else:
-            dest = self.nttCtx.p.destination_arrays[level]
-
-        # dest contain indices that are the absolute order of primes.
-        # Convert them to tensor channel indices at this level.
-        # That is, force them to start from zero.
-        min_ind = min([min(d) for d in dest])
-        dest = [[di - min_ind for di in d] for d in dest]
-
-        # Tensor size parameters.
-        num_rows = sum([len(d) for d in dest])
-        num_cols = self.ctx.N
-        cpu_size = (num_rows, num_cols)
-
-        # Make a cpu tensor to aggregate the data in GPUs.
-        cpu_tensor = torch.empty(
-            cpu_size, dtype=self.ctx.torch_dtype, device="cpu"
-        )
-
-        for ten, dest_i in zip(gpu_data, dest):
-            # Check if the tensor is in the gpu.
-            if ten.device.type != "cuda":
-                raise Exception(
-                    "To download data to the CPU, it must already be in a GPU!!!"
-                )
-
-            # Copy in the data.
-            cpu_tensor[dest_i] = ten.cpu()
-
-        # To avoid confusion, make a list with a single element (only one device, that is the CPU),
-        # and return it.
-        return [cpu_tensor]
-
-    def upload_to_gpu(self, cpu_data, level, include_special):
-        # There's only one device data in the cpu data.
-        cpu_tensor = cpu_data[0]
-
-        # Check if the tensor is in the cpu.
-        if cpu_tensor.device.type != "cpu":
-            raise Exception(
-                "To upload data to GPUs, it must already be in the CPU!!!"
-            )
-
-        # Prepare destination arrays.
-        if include_special:
-            dest = self.nttCtx.p.destination_arrays_with_special[level]
-        else:
-            dest = self.nttCtx.p.destination_arrays[level]
-
-        # dest contain indices that are the absolute order of primes.
-        # Convert them to tensor channel indices at this level.
-        # That is, force them to start from zero.
-        min_ind = min([min(d) for d in dest])
-        dest = [[di - min_ind for di in d] for d in dest]
-
-        gpu_data = []
-        for device_id in range(len(dest)):
-            # Copy in the data.
-            dest_device = dest[device_id]
-            device = self.nttCtx.devices[device_id]
-            gpu_tensor = cpu_tensor[dest_device].to(device=device)
-
-            # Append to the gpu_data list.
-            gpu_data.append(gpu_tensor)
-
-        return gpu_data
-
-    def move_tensors(self, data, level, include_special, direction):
-        func = {
-            "gpu2cpu": self.download_to_cpu,
-            "cpu2gpu": self.upload_to_gpu,
-        }[direction]
-
-        # Some data has 1 depth.
-        if not isinstance(data[0], list):
-            moved = func(data, level, include_special)
-            new_data = moved
-        else:
-            new_data = []
-            for part in data:
-                moved = func(part, level, include_special)
-                new_data.append(moved)
-        return new_data
-
-    def move_to(self, text, direction="gpu2cpu"):
-        if not isinstance(text.data[0], DataStruct):
-            level = text.level
-            include_special = text.include_special
-
-            # data are tensors.
-            data = self.move_tensors(
-                text.data, level, include_special, direction
-            )
-
-            wrapper = DataStruct(
-                data,
-                text.include_special,
-                text.ntt_state,
-                text.montgomery_state,
-                text.origin,
-                text.level,
-                text.hash,
-                text.version,
-            )
-
-        else:
-            wrapper = DataStruct(
-                [],
-                text.include_special,
-                text.ntt_state,
-                text.montgomery_state,
-                text.origin,
-                text.level,
-                text.hash,
-                text.version,
-            )
-
-            for d in text.data:
-                moved = self.move_to(d, direction)
-                wrapper.data.append(moved)
-
-        return wrapper
-
-        # Shortcuts
-
-    def cpu(self, ct):
-        return self.move_to(ct, "gpu2cpu")
-
-    def cuda(self, ct):
-        return self.move_to(ct, "cpu2gpu")
-
-    # -------------------------------------------------------------------------------------------
-    # Save and load.
-    # -------------------------------------------------------------------------------------------
-
-    def auto_generate_filename(self, fmt_str="%Y%m%d%H%M%s%f"):
-        return datetime.datetime.now().strftime(fmt_str) + ".pkl"
-
-    def save(self, text, filename=None):
-        if filename is None:
-            filename = self.auto_generate_filename()
-
-        savepath = Path(filename)
-
-        # Check if the text is in the CPU.
-        # If not, move to CPU.
-        if self.device(text) != "cpu":
-            cpu_text = self.cpu(text)
-        else:
-            cpu_text = text
-
-        with savepath.open("wb") as f:
-            pickle.dump(cpu_text, f)
-
-    def load(self, filename, move_to_gpu=True):
-        savepath = Path(filename)
-        with savepath.open("rb") as f:
-            # gc.disable()
-            cpu_text = pickle.load(f)
-            # gc.enable()
-
-        if move_to_gpu:
-            text = self.cuda(cpu_text)
-        else:
-            text = cpu_text
-
-        return text
-
-    # -------------------------------------------------------------------------------------------
     # Negate.
     # -------------------------------------------------------------------------------------------
 
@@ -2071,7 +1895,7 @@ class CkksEngine:
         self,
         pt: Plaintext,
         ct: Ciphertext,
-        inplace=False,
+        inplace=False,  # actually is fake inplace, its not inplace in inderlaying conputations
         post_rescale=True,
     ):
         # process cache

@@ -1,7 +1,8 @@
+from vdtoys.mvc import strictype
+
 from tiberate.fhe.encdec import rotate
 from tiberate.fhe.typing import *
 from tiberate.ntt import ntt_cuda
-from tiberate.utils.mvc import strictype
 
 from .. import errors
 from ..ckks_engine import CkksEngine

@@ -10,7 +10,4 @@ git clone https://github.com/wens-lab/tiberate-fhe.git
 cd tiberate-fhe
 # install the dependencies
 poetry install # this will also install the package itself into current environment
-# build the project
-python setup.py install
 ```
-

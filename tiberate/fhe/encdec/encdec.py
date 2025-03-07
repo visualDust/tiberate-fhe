@@ -2,10 +2,10 @@ from typing import Tuple
 
 import numpy as np
 import torch
+from vdtoys.cache import CachedDict
 
 from tiberate.csprng.csprng import Csprng
 from tiberate.fhe.typing import DataStruct
-from tiberate.utils.massive import CachedDict
 
 # ---------------------------------------------------------------
 # Permutation.

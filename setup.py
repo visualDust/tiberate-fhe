@@ -1,5 +1,37 @@
+import logging
+import pathlib
+import shutil
+
 from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
+
+logger = logging.getLogger(__name__)
+
+
+def clean_built():
+    """
+    Remove common build directories and *.so files in a Python project.
+    """
+    # Directories to remove
+    dirs_to_remove = [
+        "__pycache__",
+        ".pytest_cache",
+        "build",
+        "*.egg-info",  # "dist",
+    ]
+    # File patterns to remove
+    files_to_remove = ["*.so"]
+
+    for path in pathlib.Path(".").rglob("*"):
+        # Remove specified directories
+        if path.is_dir() and any(path.match(d) for d in dirs_to_remove):
+            shutil.rmtree(path, ignore_errors=True)
+            logger.info(f"Removed directory: {path}")
+        # Remove specified files
+        elif path.is_file() and any(path.match(f) for f in files_to_remove):
+            path.unlink()
+            logger.info(f"Removed file: {path}")
+
 
 ext_modules = [
     CUDAExtension(
@@ -42,28 +74,31 @@ ext_modules_ntt = [
     )
 ]
 
-if __name__ == "__main__":
-    setup(
-        name="csprng",
-        ext_modules=ext_modules,
-        cmdclass={"build_ext": BuildExtension},
-        script_args=["build_ext"],
-        options={
-            "build": {
-                "build_lib": "tiberate/csprng",
-            }
-        },
-    )
+logger.info("Cleaning up built directories and files...")
+clean_built()  # Clean up the build directories and *.so files
 
-    setup(
-        name="ntt",
-        ext_modules=ext_modules_ntt,
-        script_args=["build_ext"],
-        cmdclass={"build_ext": BuildExtension},
-        options={
-            "build": {
-                "build_lib": "tiberate/ntt",
-            }
-        },
-    )
+logger.info("Building csprng...")
+setup(
+    name="csprng",
+    ext_modules=ext_modules,
+    cmdclass={"build_ext": BuildExtension},
+    script_args=["build_ext"],
+    options={
+        "build": {
+            "build_lib": "tiberate/csprng",
+        }
+    },
+)
 
+logger.info("Building ntt...")
+setup(
+    name="ntt",
+    ext_modules=ext_modules_ntt,
+    script_args=["build_ext"],
+    cmdclass={"build_ext": BuildExtension},
+    options={
+        "build": {
+            "build_lib": "tiberate/ntt",
+        }
+    },
+)
