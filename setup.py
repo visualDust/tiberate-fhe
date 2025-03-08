@@ -3,6 +3,7 @@ import pathlib
 import shutil
 
 from setuptools import setup
+from setuptools.command.install import install
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ def clean_built():
         "__pycache__",
         ".pytest_cache",
         "build",
-        "*.egg-info",  # "dist",
+        "*.egg-info",
     ]
     # File patterns to remove
     files_to_remove = ["*.so"]
@@ -33,7 +34,7 @@ def clean_built():
             logger.info(f"Removed file: {path}")
 
 
-ext_modules = [
+ext_modules_csprng = [
     CUDAExtension(
         name="randint_cuda",
         sources=[
@@ -74,13 +75,9 @@ ext_modules_ntt = [
     )
 ]
 
-logger.info("Cleaning up built directories and files...")
-clean_built()  # Clean up the build directories and *.so files
-
-logger.info("Building csprng...")
 setup(
     name="csprng",
-    ext_modules=ext_modules,
+    ext_modules=ext_modules_csprng,
     cmdclass={"build_ext": BuildExtension},
     script_args=["build_ext"],
     options={
@@ -90,12 +87,11 @@ setup(
     },
 )
 
-logger.info("Building ntt...")
 setup(
     name="ntt",
     ext_modules=ext_modules_ntt,
-    script_args=["build_ext"],
     cmdclass={"build_ext": BuildExtension},
+    script_args=["build_ext"],
     options={
         "build": {
             "build_lib": "tiberate/ntt",

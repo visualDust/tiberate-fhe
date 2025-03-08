@@ -40,7 +40,7 @@ def calculate_tensor_size_in_bytes(tensor: torch.Tensor):
 
 
 def calculate_ckks_cipher_datastruct_size_in_list_recursive(
-    list_or_cipher: Union[tuple, list, torch.Tensor, DataStruct]
+    list_or_cipher: Union[tuple, list, torch.Tensor, DataStruct],
 ):
     if isinstance(list_or_cipher, DataStruct):
         return calculate_ckks_cipher_datastruct_size_in_list_recursive(

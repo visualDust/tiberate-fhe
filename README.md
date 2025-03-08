@@ -2,7 +2,13 @@
 
 this is a variant of [Desilo/liberate-fhe](https://github.com/Desilo/liberate-fhe) with better typing (and for my own modifications). This fork has left fork network and will not return to the original branch.
 
-## Installation
+## Install
+
+```bash
+pip install tiberate --verbose
+```
+
+## Install from source
 
 ```bash
 # clone the repository

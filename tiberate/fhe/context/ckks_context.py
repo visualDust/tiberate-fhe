@@ -293,7 +293,7 @@ class CkksContext:
         if save_cache:
             with savepath.open("wb") as f:
                 pickle.dump(self.__dict__, f)
-                logger.info("Saved cache to {savepath}.")
+                logger.info(f"Saved cache to {savepath}.")
 
     def generate_montgomery_parameters(self):
         self.R = 2**self.buffer_bit_length
