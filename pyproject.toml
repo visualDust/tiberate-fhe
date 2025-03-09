@@ -1,33 +1,38 @@
 [tool.poetry]
 name = "tiberate"
-version = "0.9.1"
+version = "0.9.2"
 description = "T(yped-l)iberate-fhe: a variant of Liberate-fhe with better typing"
 authors = [
     "Juwhan Kim <juwhan.kim@desilo.ai>",
     "Hanyul Ryu <hanyul.ryu@desilo.ai>",
     "Gavin Gong <gavin@gong.host>"
 ]
-maintainers = [
-    "Gavin Gong <gavin@gong.host>"
-]
-readme = [
-    "README.md"
-]
+maintainers = ["Gavin Gong <gavin@gong.host>"]
+readme = ["README.md"]
 build = "setup.py"
 
-repository = "https://github.com/wens-lab/tiberate-fhe"
+repository = "https://github.com/VisualDust/tiberate-fhe"
 
 license = "BSD-3-Clause-Clear"
 
 keywords = [
-    "DESILO", "python", "cryptoghraphy", "privacy", "encryption", "cuda",
-    "homomorphic encryption", "homomorphic encryption library", "fhe", "gpu accelerated", "liberate"
+    "DESILO",
+    "python",
+    "cryptoghraphy",
+    "privacy",
+    "encryption",
+    "cuda",
+    "homomorphic encryption",
+    "homomorphic encryption library",
+    "fhe",
+    "gpu accelerated",
+    "liberate",
 ]
 classifiers = [
     "Environment :: GPU :: NVIDIA CUDA",
     "License :: OSI Approved :: BSD License",
     "Programming Language :: Python",
-    "Topic :: Software Development :: Libraries"
+    "Topic :: Software Development :: Libraries",
 ]
 
 [tool.poetry.dependencies]

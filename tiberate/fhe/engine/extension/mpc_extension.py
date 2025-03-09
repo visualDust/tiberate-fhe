@@ -32,7 +32,7 @@ class CkksEngineMPCExtension(CkksEngine):
         e = self.nttCtx.tile_unsigned(e, level, mult_type)
 
         self.nttCtx.enter_ntt(e, level, mult_type)
-        repeats = self.ctx.num_special_primes if sk.include_special else 0
+        repeats = self.ckksCtx.num_special_primes if sk.include_special else 0
 
         if a is None:
             a = self.rng.randint(
@@ -165,7 +165,9 @@ class CkksEngineMPCExtension(CkksEngine):
 
         self.nttCtx.reduce_2q(pt, level)
 
-        base_at = -self.ctx.num_special_primes - 1 if include_special else -1
+        base_at = (
+            -self.ckksCtx.num_special_primes - 1 if include_special else -1
+        )
 
         base = pt[0][base_at][None, :]
         scaler = pt[0][0][None, :]
@@ -334,7 +336,7 @@ class CkksEngineMPCExtension(CkksEngine):
         # if sk.origin != origin_names["sk"]:
         #     raise errors.NotMatchType(origin=sk.origin, to=origin_names["sk"])
 
-        galois_deltas = [2**i for i in range(self.ctx.logN - 1)]
+        galois_deltas = [2**i for i in range(self.ckksCtx.logN - 1)]
         galois_key_parts = [
             self.multiparty_create_rotation_key(
                 sk, galois_deltas[idx], a=a[idx]

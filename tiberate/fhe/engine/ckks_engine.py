@@ -1,4 +1,5 @@
 import datetime
+import functools
 import math
 import pickle
 import warnings
@@ -10,6 +11,7 @@ import numpy as np
 import nvtx
 import torch
 from loguru import logger
+from vdtoys.cache import CachedDict
 from vdtoys.mvc import initonly, strictype
 
 from tiberate.csprng.csprng import Csprng
@@ -26,6 +28,20 @@ from . import errors
 
 
 class CkksEngine:
+    __default = None
+
+    def set_as_default(self):
+        CkksEngine.__default = self
+        return self
+
+    @property
+    def default(cls):
+        if cls.__default is None:
+            raise RuntimeError(
+                "Default CKKS engine is not set. Please set it using `set_as_default` method."
+            )
+        return cls.__default
+
     def __init__(
         self,
         devices: List[
@@ -39,8 +55,8 @@ class CkksEngine:
             ckks_params = presets["silver"]
             logger.info(f"CKKS parameters not specified. Using silver preset.")
 
-        self.ctx = CkksContext(**ckks_params)
-        self.nttCtx = NTTContext(self.ctx, devices=devices)
+        self.ckksCtx = CkksContext(**ckks_params)
+        self.nttCtx = NTTContext(self.ckksCtx, devices=devices)
         self.rng = Csprng(
             num_coefs=self.nttCtx.ckksCtx.N,
             num_channels=[len(di) for di in self.nttCtx.p.d],
@@ -57,6 +73,72 @@ class CkksEngine:
         self.leveled_devices()
         self.rescale_scales = self.create_rescale_scales()
 
+        # by default, do not create any keys
+        self.__sk = None
+        self.__pk = None
+        self.__evk = None
+        self.__gk = None
+        self.rotk = CachedDict(
+            generator_func=functools.partial(
+                self._create_rotation_key, sk=self.sk
+            )
+        )
+
+    @property
+    def sk(self) -> SecretKey:
+        if self.__sk is None:
+            self.__sk = self._create_secret_key()
+            logger.debug("Created a new secret key.")
+        return self.__sk
+
+    @sk.setter
+    def sk(self, sk: SecretKey):
+        logger.debug(
+            "Setting a new secret key manually, this will remove all keys."
+        )
+        self.__sk = sk
+        self.__pk = None
+        self.__evk = None
+        self.__gk = None
+        self.rotk = CachedDict(
+            generator_func=functools.partial(
+                self._create_rotation_key, self.sk
+            )
+        )
+
+    @property
+    def pk(self) -> PublicKey:
+        if self.__pk is None:
+            self.__pk = self._create_public_key(self.sk)
+            logger.debug("Created a new public key.")
+        return self.__pk
+
+    @pk.setter
+    def pk(self, pk: PublicKey):
+        self.__pk = pk
+
+    @property
+    def evk(self) -> EvaluationKey:
+        if self.__evk is None:
+            self.__evk = self._create_evk(self.sk)
+            logger.debug("Created a new evaluation key.")
+        return self.__evk
+
+    @evk.setter
+    def evk(self, evk: EvaluationKey):
+        self.__evk = evk
+
+    @property
+    def gk(self) -> GaloisKey:
+        if self.__gk is None:
+            self.__gk = self._create_galois_key(self.sk)
+            logger.debug("Created a new galois key.")
+        return self.__gk
+
+    @gk.setter
+    def gk(self, gk: GaloisKey):
+        self.__gk = gk
+
     def __str__(self):
         what_is_this = f"{self.__class__}"
         what_is_this += f"""
@@ -67,7 +149,7 @@ class CkksEngine:
 
     @property
     def num_slots(self) -> int:
-        return self.ctx.N // 2
+        return self.ckksCtx.N // 2
 
     @property
     def num_levels(self) -> int:
@@ -75,20 +157,21 @@ class CkksEngine:
 
     @property
     def int_scale(self) -> int:
-        return 2**self.ctx.scale_bits
+        return 2**self.ckksCtx.scale_bits
 
     @property
     def scale(self) -> float:
-        return np.float64(2**self.ctx.scale_bits)
+        return np.float64(2**self.ckksCtx.scale_bits)
 
     @property
     def device0(self) -> int:
+        # todo remove multi-device by default
         return self.nttCtx.devices[0]
 
     @property
     def hash(self) -> str:
-        qstr = ",".join([str(qi) for qi in self.ctx.q])
-        hashstr = (self.ctx.generation_string + "_" + qstr).encode("utf-8")
+        qstr = ",".join([str(qi) for qi in self.ckksCtx.q])
+        hashstr = (self.ckksCtx.generation_string + "_" + qstr).encode("utf-8")
         return sha256(bytes(hashstr)).hexdigest()
 
     # -------------------------------------------------------------------------------------------
@@ -106,18 +189,20 @@ class CkksEngine:
                 if device_id < len(dest_level):
                     dest = dest_level[device_id]
                     rescaler_device_id = self.nttCtx.p.rescaler_loc[level]
-                    m0 = self.ctx.q[level]
+                    m0 = self.ckksCtx.q[level]
 
                     if rescaler_device_id == device_id:
-                        m = [self.ctx.q[i] for i in dest[1:]]
+                        m = [self.ckksCtx.q[i] for i in dest[1:]]
                     else:
-                        m = [self.ctx.q[i] for i in dest]
+                        m = [self.ckksCtx.q[i] for i in dest]
 
-                    scales = [(pow(m0, -1, mi) * self.ctx.R) % mi for mi in m]
+                    scales = [
+                        (pow(m0, -1, mi) * self.ckksCtx.R) % mi for mi in m
+                    ]
 
                     scales = torch.tensor(
                         scales,
-                        dtype=self.ctx.torch_dtype,
+                        dtype=self.ckksCtx.torch_dtype,
                         device=self.nttCtx.devices[device_id],
                     )
                     rescale_scales[level].append(scales)
@@ -174,15 +259,15 @@ class CkksEngine:
             self.ksk_buffers.append([])
             for part_id in range(len(self.nttCtx.p.p[0][device_id])):
                 buffer = torch.empty(
-                    [self.nttCtx.num_special_primes, self.ctx.N],
-                    dtype=self.ctx.torch_dtype,
+                    [self.nttCtx.num_special_primes, self.ckksCtx.N],
+                    dtype=self.ckksCtx.torch_dtype,
                 ).pin_memory()
                 self.ksk_buffers[device_id].append(buffer)
 
         # Create the buffers.
-        R = self.ctx.R
-        P = self.ctx.q[-self.nttCtx.num_special_primes :][::-1]
-        m = self.ctx.q
+        R = self.ckksCtx.R
+        P = self.ckksCtx.q[-self.nttCtx.num_special_primes :][::-1]
+        m = self.ckksCtx.q
         PiR = [
             [(pow(Pj, -1, mi) * R) % mi for mi in m[: -P_ind - 1]]
             for P_ind, Pj in enumerate(P)
@@ -204,7 +289,7 @@ class CkksEngine:
                 PiRi = torch.tensor(
                     PiRi,
                     device=self.nttCtx.devices[device_id],
-                    dtype=self.ctx.torch_dtype,
+                    dtype=self.ckksCtx.torch_dtype,
                 )
                 self.PiRs[level][P_ind].append(PiRi)
 
@@ -223,17 +308,17 @@ class CkksEngine:
     @initonly
     def make_mont_PR(self):
         P = math.prod(self.nttCtx.ckksCtx.q[-self.nttCtx.num_special_primes :])
-        R = self.ctx.R
+        R = self.ckksCtx.R
         PR = P * R
         mont_PR = []
         for device_id in range(self.nttCtx.num_devices):
             dest = self.nttCtx.p.destination_arrays[0][device_id]
-            m = [self.ctx.q[i] for i in dest]
+            m = [self.ckksCtx.q[i] for i in dest]
             PRm = [PR % mi for mi in m]
             PRm = torch.tensor(
                 PRm,
                 device=self.nttCtx.devices[device_id],
-                dtype=self.ctx.torch_dtype,
+                dtype=self.ckksCtx.torch_dtype,
             )
             mont_PR.append(PRm)
         return mont_PR
@@ -242,7 +327,7 @@ class CkksEngine:
     def make_adjustments_and_corrections(self):
         self.alpha = [
             (self.scale / np.float64(q)) ** 2
-            for q in self.ctx.q[: self.ctx.num_scales]
+            for q in self.ckksCtx.q[: self.ckksCtx.num_scales]
         ]
         self.deviations = [1]
         for al in self.alpha:
@@ -251,23 +336,23 @@ class CkksEngine:
         self.final_q_ind = [
             da[0][0] for da in self.nttCtx.p.destination_arrays[:-1]
         ]
-        self.final_q = [self.ctx.q[ind] for ind in self.final_q_ind]
+        self.final_q = [self.ckksCtx.q[ind] for ind in self.final_q_ind]
         self.final_alpha = [(self.scale / np.float64(q)) for q in self.final_q]
         self.corrections = [
             1 / (d * fa) for d, fa in zip(self.deviations, self.final_alpha)
         ]
 
-        self.base_prime = self.ctx.q[self.nttCtx.p.base_prime_idx]
+        self.base_prime = self.ckksCtx.q[self.nttCtx.p.base_prime_idx]
 
         self.final_scalar = []
         for qi, q in zip(self.final_q_ind, self.final_q):
             scalar = (
-                pow(q, -1, self.base_prime) * self.ctx.R
+                pow(q, -1, self.base_prime) * self.ckksCtx.R
             ) % self.base_prime
             scalar = torch.tensor(
                 [scalar],
                 device=self.nttCtx.devices[0],
-                dtype=self.ctx.torch_dtype,
+                dtype=self.ckksCtx.torch_dtype,
             )
             self.final_scalar.append(scalar)
 
@@ -337,7 +422,7 @@ class CkksEngine:
             correction=correction,
             norm=self.norm,
         )
-        m = decoded[: self.ctx.N // 2].cpu().numpy()
+        m = decoded[: self.ckksCtx.N // 2].cpu().numpy()
         if is_real:
             m = m.real
         return m
@@ -346,7 +431,7 @@ class CkksEngine:
     # secret key/public key generation.
     # -------------------------------------------------------------------------------------------
 
-    def create_secret_key(self, include_special: bool = True) -> SecretKey:
+    def _create_secret_key(self, include_special: bool = True) -> SecretKey:
         uniform_ternary = self.rng.randint(amax=3, shift=-1, repeats=1)
 
         mult_type = -2 if include_special else -1
@@ -364,9 +449,10 @@ class CkksEngine:
         )
 
     @strictype
-    def create_public_key(
+    def _create_public_key(
         self,
-        sk: SecretKey,
+        sk: SecretKey = None,
+        *,
         include_special: bool = False,
         a: List[torch.Tensor] = None,
     ) -> PublicKey:
@@ -374,8 +460,9 @@ class CkksEngine:
         Generates a public key against the secret key sk.
         pk = -a * sk + e = e - a * sk
         """
-        # if sk.origin != origin_names["sk"]:
-        #     raise errors.NotMatchType(origin=sk.origin, to=origin_names["sk"])
+
+        sk = sk or self.sk
+
         if include_special and not sk.include_special:
             raise errors.SecretKeyNotIncludeSpecialPrime()
 
@@ -388,7 +475,7 @@ class CkksEngine:
         e = self.nttCtx.tile_unsigned(e, level, mult_type)
 
         self.nttCtx.enter_ntt(e, level, mult_type)
-        repeats = self.ctx.num_special_primes if sk.include_special else 0
+        repeats = self.ckksCtx.num_special_primes if sk.include_special else 0
 
         # Applying mont_mult in the order of 'a', sk will
         if a is None:
@@ -413,7 +500,7 @@ class CkksEngine:
 
     @strictype
     def encrypt(
-        self, pt: List[torch.Tensor], pk: PublicKey, level: int = 0
+        self, pt: List[torch.Tensor], pk: PublicKey = None, *, level: int = 0
     ) -> Ciphertext:
         """
         We again, multiply pt by the scale.
@@ -426,8 +513,7 @@ class CkksEngine:
         levels other than 0, and that will take care of multiplying
         the deviation factors.
         """
-        # if pk.origin != origin_names["pk"]:
-        #     raise errors.NotMatchType(origin=pk.origin, to=origin_names["pk"])
+        pk = pk or self.pk
 
         mult_type = -2 if pk.include_special else -1
 
@@ -483,7 +569,11 @@ class CkksEngine:
 
     @strictype
     def decrypt_triplet(
-        self, ct_mult: CiphertextTriplet, sk: SecretKey, final_round=True
+        self,
+        ct_mult: CiphertextTriplet,
+        sk: SecretKey = None,
+        *,
+        final_round=True,
     ) -> list[torch.Tensor]:
         if not ct_mult.ntt_state:
             raise errors.NTTStateError(expected=True)
@@ -493,6 +583,8 @@ class CkksEngine:
             raise errors.NTTStateError(expected=True)
         if not sk.montgomery_state:
             raise errors.MontgomeryStateError(expected=True)
+
+        sk = sk or self.sk
 
         level = ct_mult.level
         d0 = [ct_mult.data[0][0].clone()]
@@ -516,7 +608,9 @@ class CkksEngine:
         self.nttCtx.reduce_2q(pt, level)
 
         base_at = (
-            -self.ctx.num_special_primes - 1 if ct_mult.include_special else -1
+            -self.ckksCtx.num_special_primes - 1
+            if ct_mult.include_special
+            else -1
         )
 
         base = pt[0][base_at][None, :]
@@ -533,7 +627,7 @@ class CkksEngine:
             # The scaler and the base channels are guaranteed to be in the
             # device 0.
             rounding_prime = self.nttCtx.qlists[0][
-                -self.ctx.num_special_primes - 2
+                -self.ckksCtx.num_special_primes - 2
             ]
             rounder = (scaler[0] > (rounding_prime // 2)) * 1
             scaled[0] += rounder
@@ -542,7 +636,7 @@ class CkksEngine:
 
     @strictype
     def decrypt_double(
-        self, ct: Ciphertext, sk: SecretKey, final_round=True
+        self, ct: Ciphertext, sk: SecretKey = None, *, final_round=True
     ) -> list[torch.Tensor]:
         if ct.ntt_state:
             raise errors.NTTStateError(expected=False)
@@ -552,6 +646,8 @@ class CkksEngine:
             raise errors.NTTStateError(expected=True)
         if not sk.montgomery_state:
             raise errors.MontgomeryStateError(expected=True)
+
+        sk = sk or self.sk
 
         ct0 = ct.data[0][0]
         level = ct.level
@@ -566,7 +662,7 @@ class CkksEngine:
         self.nttCtx.reduce_2q(pt, level)
 
         base_at = (
-            -self.ctx.num_special_primes - 1 if ct.include_special else -1
+            -self.ckksCtx.num_special_primes - 1 if ct.include_special else -1
         )
 
         base = pt[0][base_at][None, :]
@@ -583,7 +679,7 @@ class CkksEngine:
             # The scaler and the base channels are guaranteed to be in the
             # device 0.
             rounding_prime = self.nttCtx.qlists[0][
-                -self.ctx.num_special_primes - 2
+                -self.ckksCtx.num_special_primes - 2
             ]
             rounder = (scaler[0] > (rounding_prime // 2)) * 1
             scaled[0] += rounder
@@ -594,16 +690,15 @@ class CkksEngine:
     def decrypt(
         self,
         ct: Union[Ciphertext, CiphertextTriplet],
-        sk: SecretKey,
+        sk: SecretKey = None,
+        *,
         final_round=True,
     ) -> list[torch.Tensor]:
         """
         Decrypt the cipher text ct using the secret key sk.
         Note that the final rescaling must precede the actual decryption process.
         """
-
-        # if sk.origin != origin_names["sk"]:
-        #     raise errors.NotMatchType(origin=sk.origin, to=origin_names["sk"])
+        sk = sk or self.sk
 
         if isinstance(ct, CiphertextTriplet):
             pt = self.decrypt_triplet(
@@ -660,7 +755,9 @@ class CkksEngine:
                 ]
 
                 crs = a[global_part_id] if a else None
-                pk = self.create_public_key(sk_to, include_special=True, a=crs)
+                pk = self._create_public_key(
+                    sk_to, include_special=True, a=crs
+                )
 
                 key = tuple(part)
                 astart = part[0]
@@ -1084,7 +1181,7 @@ class CkksEngine:
                 rescaler_device_id
             ][0]
 
-            round_at = self.ctx.q[rescale_channel_prime_id] // 2
+            round_at = self.ckksCtx.q[rescale_channel_prime_id] // 2
 
             rounder0 = [[] for _ in range(len_devices_before)]
             rounder1 = [[] for _ in range(len_devices_before)]
@@ -1124,7 +1221,8 @@ class CkksEngine:
         )
 
     @strictype
-    def create_evk(self, sk: SecretKey) -> EvaluationKey:
+    def _create_evk(self, sk: SecretKey = None) -> EvaluationKey:
+        sk = sk or self.sk
         sk2_data = self.nttCtx.mont_mult(sk.data, sk.data, 0, -2)
         sk2 = EvaluationKey(
             data=sk2_data,
@@ -1141,6 +1239,7 @@ class CkksEngine:
         a: Ciphertext,
         b: Ciphertext,
         evk: EvaluationKey = None,
+        *,
         pre_rescale=True,
         post_relin=True,
     ) -> Union[Ciphertext, CiphertextTriplet]:
@@ -1180,20 +1279,21 @@ class CkksEngine:
             level=level,
         )
         if post_relin:
-            assert evk, "evk is required for post_relin=True"
+            evk = evk or self.evk
             ct_mult = self.relinearize(ct_triplet=ct_mult, evk=evk)
 
         return ct_mult
 
     @strictype
     def relinearize(
-        self, ct_triplet: CiphertextTriplet, evk: EvaluationKey
+        self, ct_triplet: CiphertextTriplet, evk: EvaluationKey = None
     ) -> Ciphertext:
         if not ct_triplet.ntt_state:
             raise errors.NTTStateError(expected=True)
         if not ct_triplet.montgomery_state:
             raise errors.MontgomeryStateError(expected=True)
 
+        evk = evk or self.evk
         d0, d1, d2 = ct_triplet.data
         level = ct_triplet.level
 
@@ -1227,9 +1327,10 @@ class CkksEngine:
     # -------------------------------------------------------------------------------------------
 
     @strictype
-    def create_rotation_key(
-        self, sk: SecretKey, delta: int, a: List[torch.Tensor] = None
+    def _create_rotation_key(
+        self, delta: int, a: List[torch.Tensor] = None, sk: SecretKey = None
     ) -> RotationKey:
+        sk = sk or self.sk
         sk_new_data = [s.clone() for s in sk.data]
         self.nttCtx.intt(sk_new_data)
         sk_new_data = [codec_rotate(s, delta) for s in sk_new_data]
@@ -1245,8 +1346,9 @@ class CkksEngine:
         rotk = RotationKey.wrap(
             self.create_key_switching_key(sk_rotated, sk, a=a)
         )
-
         rotk.delta = delta
+
+        logger.debug(f"Rotation key created for delta {delta}")
         return rotk
 
     @strictype
@@ -1281,10 +1383,12 @@ class CkksEngine:
         return rotated_ct
 
     @strictype
-    def create_galois_key(self, sk: SecretKey) -> GaloisKey:
-        galois_deltas = [2**i for i in range(self.ctx.logN - 1)]
+    def _create_galois_key(self, sk: SecretKey = None) -> GaloisKey:
+        sk = sk or self.sk
+        galois_deltas = [2**i for i in range(self.ckksCtx.logN - 1)]
         galois_key_parts = [
-            self.create_rotation_key(sk, delta) for delta in galois_deltas
+            self._create_rotation_key(delta=delta, sk=sk)
+            for delta in galois_deltas
         ]
 
         galois_key = GaloisKey(
@@ -1298,11 +1402,17 @@ class CkksEngine:
 
     @strictype
     def rotate_galois(
-        self, ct: Ciphertext, gk: GaloisKey, delta: int, return_circuit=False
+        self,
+        ct: Ciphertext,
+        gk: GaloisKey = None,
+        *,
+        delta: int,
+        return_circuit=False,
     ) -> Ciphertext:
-        current_delta = delta % (self.ctx.N // 2)
+        gk = gk or self.gk
+        current_delta = delta % (self.ckksCtx.N // 2)
         galois_circuit = []
-        galois_deltas = [2**i for i in range(self.ctx.logN - 1)]
+        galois_deltas = [2**i for i in range(self.ckksCtx.logN - 1)]
         while current_delta:
             galois_ind = int(math.log2(current_delta))
             galois_delta = galois_deltas[galois_ind]
@@ -1526,12 +1636,12 @@ class CkksEngine:
         multipliers = []
         for device_id in range(dst_len_devices):
             dest = self.nttCtx.p.destination_arrays[dst_level][device_id]
-            q = [self.ctx.q[i] for i in dest]
+            q = [self.ckksCtx.q[i] for i in dest]
 
-            multiplier = [(deviated_delta * self.ctx.R) % qi for qi in q]
+            multiplier = [(deviated_delta * self.ckksCtx.R) % qi for qi in q]
             multiplier = torch.tensor(
                 multiplier,
-                dtype=self.ctx.torch_dtype,
+                dtype=self.ckksCtx.torch_dtype,
                 device=self.nttCtx.devices[device_id],
             )
             multipliers.append(multiplier)
@@ -1558,11 +1668,11 @@ class CkksEngine:
 
     @strictype
     def encodecrypt(
-        self, m, pk: PublicKey, level: int = 0, padding=True
+        self, m, pk: PublicKey = None, *, level: int = 0, padding=True
     ) -> Ciphertext:
+        pk = pk or self.pk
         if padding:
             m = self.padding(m=m)
-
         deviation = self.deviations[level]
         pt = codec_encode(
             m,
@@ -1583,10 +1693,10 @@ class CkksEngine:
             for device_id, dest in enumerate(
                 self.nttCtx.p.destination_arrays[level]
             ):
-                dci = [dc_scale % self.ctx.q[i] for i in dest]
+                dci = [dc_scale % self.ckksCtx.q[i] for i in dest]
                 dci = torch.tensor(
                     dci,
-                    dtype=self.ctx.torch_dtype,
+                    dtype=self.ckksCtx.torch_dtype,
                     device=self.nttCtx.devices[device_id],
                 )
                 dc_rns.append(dci)
@@ -1661,7 +1771,8 @@ class CkksEngine:
     def decryptcode(
         self,
         ct: Union[Ciphertext, CiphertextTriplet],
-        sk: SecretKey,
+        sk: SecretKey = None,
+        *,
         is_real=False,
         final_round=True,
     ):  # todo keep on GPU or not convert back to numpy
@@ -1670,6 +1781,7 @@ class CkksEngine:
         if not sk.montgomery_state:
             raise errors.MontgomeryStateError(expected=True)
 
+        sk = sk or self.sk
         level = ct.level
         sk_data = sk.data[0][self.nttCtx.starts[level][0] :]
 
@@ -1720,7 +1832,7 @@ class CkksEngine:
             self.nttCtx.reduce_2q(pt, level)
 
         base_at = (
-            -self.ctx.num_special_primes - 1 if ct.include_special else -1
+            -self.ckksCtx.num_special_primes - 1 if ct.include_special else -1
         )
         base = pt[0][base_at][None, :]
         scaler = pt[0][0][None, :]
@@ -1739,9 +1851,9 @@ class CkksEngine:
             q1_ind = self.nttCtx.p.destination_arrays[level][0][0]
             q2_ind = self.nttCtx.p.destination_arrays[level][0][1]
 
-            q0 = self.ctx.q[q0_ind]
-            q1 = self.ctx.q[q1_ind]
-            q2 = self.ctx.q[q2_ind]
+            q0 = self.ckksCtx.q[q0_ind]
+            q1 = self.ckksCtx.q[q1_ind]
+            q2 = self.ckksCtx.q[q2_ind]
 
             Q = q0 * q1 * q2
             Q0 = q1 * q2
@@ -1770,7 +1882,7 @@ class CkksEngine:
             # The scaler and the base channels are guaranteed to be in the
             # device 0.
             rounding_prime = self.nttCtx.qlists[0][
-                -self.ctx.num_special_primes - 2
+                -self.ckksCtx.num_special_primes - 2
             ]
             rounder = (scaler[0] > (rounding_prime // 2)) * 1
             scaled[0] += rounder
@@ -1784,7 +1896,7 @@ class CkksEngine:
             norm=self.norm,
             return_without_scaling=self.bias_guard,
         )
-        decoded = decoded[: self.ctx.N // 2].cpu().numpy()
+        decoded = decoded[: self.ckksCtx.N // 2].cpu().numpy()
         ##
 
         decoded = decoded / self.scale * correction
@@ -1801,11 +1913,13 @@ class CkksEngine:
     # -------------------------------------------------------------------------------------------
 
     @strictype
-    def create_conjugation_key(self, sk: SecretKey) -> ConjugationKey:
+    def create_conjugation_key(self, sk: SecretKey = None) -> ConjugationKey:
         if not sk.ntt_state:
             raise errors.NTTStateError(expected=True)
         if not sk.montgomery_state:
             raise errors.MontgomeryStateError(expected=True)
+
+        sk = sk or self.sk
 
         sk_new_data = [s.clone() for s in sk.data]
         self.nttCtx.intt(sk_new_data)
@@ -1841,10 +1955,6 @@ class CkksEngine:
 
         conj_ct = self.switch_key(conj_ct_sk, conjk)
         return conj_ct
-
-    # -------------------------------------------------------------------------------------------
-    # Negate.
-    # -------------------------------------------------------------------------------------------
 
     @strictype
     def negate(self, ct: Ciphertext) -> Ciphertext:
@@ -1934,7 +2044,9 @@ class CkksEngine:
         device_len = len(ct.data[0])
 
         int_scalar = int(scalar)
-        mont_scalar = [(int_scalar * self.ctx.R) % qi for qi in self.ctx.q]
+        mont_scalar = [
+            (int_scalar * self.ckksCtx.R) % qi for qi in self.ckksCtx.q
+        ]
 
         dest = self.nttCtx.p.destination_arrays[ct.level]
 
@@ -1945,7 +2057,7 @@ class CkksEngine:
         for device_id in range(device_len):
             scal_tensor = torch.tensor(
                 partitioned_mont_scalar[device_id],
-                dtype=self.ctx.torch_dtype,
+                dtype=self.ckksCtx.torch_dtype,
                 device=self.nttCtx.devices[device_id],
             )
             tensorized_scalar.append(scal_tensor)
@@ -1968,7 +2080,9 @@ class CkksEngine:
             scalar * self.scale * np.sqrt(self.deviations[ct.level + 1]) + 0.5
         )
 
-        mont_scalar = [(scaled_scalar * self.ctx.R) % qi for qi in self.ctx.q]
+        mont_scalar = [
+            (scaled_scalar * self.ckksCtx.R) % qi for qi in self.ckksCtx.q
+        ]
 
         dest = self.nttCtx.p.destination_arrays[ct.level]
 
@@ -1979,7 +2093,7 @@ class CkksEngine:
         for device_id in range(device_len):
             scal_tensor = torch.tensor(
                 partitioned_mont_scalar[device_id],
-                dtype=self.ctx.torch_dtype,
+                dtype=self.ckksCtx.torch_dtype,
                 device=self.nttCtx.devices[device_id],
             )
             tensorized_scalar.append(scal_tensor)
@@ -2006,11 +2120,11 @@ class CkksEngine:
         )
 
         if self.norm == "backward":
-            scaled_scalar *= self.ctx.N
+            scaled_scalar *= self.ckksCtx.N
 
         scaled_scalar *= self.int_scale
 
-        scaled_scalar = [scaled_scalar % qi for qi in self.ctx.q]
+        scaled_scalar = [scaled_scalar % qi for qi in self.ckksCtx.q]
 
         dest = self.nttCtx.p.destination_arrays[ct.level]
 
@@ -2021,7 +2135,7 @@ class CkksEngine:
         for device_id in range(device_len):
             scal_tensor = torch.tensor(
                 partitioned_mont_scalar[device_id],
-                dtype=self.ctx.torch_dtype,
+                dtype=self.ckksCtx.torch_dtype,
                 device=self.nttCtx.devices[device_id],
             )
             tensorized_scalar.append(scal_tensor)
@@ -2113,21 +2227,23 @@ class CkksEngine:
         return self.mult_scalar(ct, 1.0)
 
     @strictype
-    def sum(self, ct: Ciphertext, gk: GaloisKey) -> Ciphertext:
+    def sum(self, ct: Ciphertext, gk: GaloisKey = None) -> Ciphertext:
+        gk = gk or self.gk
         new_ct = ct.clone()
-        for roti in range(self.ctx.logN - 1):
+        for roti in range(self.ckksCtx.logN - 1):
             rotk = gk.data[roti]
             rot_ct = self.rotate_single(new_ct, rotk)
             new_ct = self.cc_add(rot_ct, new_ct)
         return new_ct
 
     @strictype
-    def mean(self, ct: Ciphertext, gk: GaloisKey, alpha=1):
+    def mean(self, ct: Ciphertext, gk: GaloisKey = None, *, alpha=1):
         # Divide by num_slots.
         # The cipher text is refreshed here, and hence
         # doesn't beed to be refreshed at roti=0 in the loop.
+        gk = gk or self.gk
         new_ct = self.mc_mult(m=1 / self.num_slots / alpha, ct=ct)
-        for roti in range(self.ctx.logN - 1):
+        for roti in range(self.ckksCtx.logN - 1):
             rotk = gk.data[roti]
             rot_ct = self.rotate_single(new_ct, rotk)
             new_ct = self.cc_add(rot_ct, new_ct)
@@ -2138,9 +2254,12 @@ class CkksEngine:
         self,
         ct_a: Ciphertext,
         ct_b: Ciphertext,
-        evk: EvaluationKey,
-        gk: GaloisKey,
+        evk: EvaluationKey = None,
+        gk: GaloisKey = None,
     ) -> Ciphertext:
+        evk = evk or self.evk
+        gk = gk or self.gk
+
         cta_mean = self.mean(ct_a, gk)
         ctb_mean = self.mean(ct_b, gk)
 
@@ -2154,8 +2273,10 @@ class CkksEngine:
 
     @strictype
     def pow(
-        self, ct: Ciphertext, power: int, evk: EvaluationKey
+        self, ct: Ciphertext, power: int, evk: EvaluationKey = None
     ) -> Ciphertext:
+        evk = evk or self.evk
+
         current_exponent = 2
         pow_list = [ct]
         while current_exponent <= power:
@@ -2179,7 +2300,7 @@ class CkksEngine:
 
     @strictype
     def square(
-        self, ct: Ciphertext, evk: EvaluationKey, relin=True
+        self, ct: Ciphertext, evk: EvaluationKey = None, *, post_relin=True
     ) -> Union[CiphertextTriplet, Ciphertext]:
         x = self.rescale(ct)
 
@@ -2204,7 +2325,8 @@ class CkksEngine:
             montgomery_state=True,
             level=level,
         )
-        if relin:
+        if post_relin:
+            evk = evk or self.evk
             ct_mult = self.relinearize(ct_triplet=ct_mult, evk=evk)
 
         return ct_mult
@@ -2215,10 +2337,11 @@ class CkksEngine:
 
     @strictype
     def sqrt(
-        self, ct: Ciphertext, evk: EvaluationKey, e=0.0001, alpha=0.0001
+        self, ct: Ciphertext, evk: EvaluationKey = None, e=0.0001, alpha=0.0001
     ) -> Ciphertext:
         a = ct.clone()
         b = ct.clone()
+        evk = evk or self.evk
 
         while e <= 1 - alpha:
             k = float(np.roots([1 - e**3, -6 + 6 * e**2, 9 - 9 * e])[1])
@@ -2237,19 +2360,33 @@ class CkksEngine:
 
     @strictype
     def var(
-        self, ct: Ciphertext, evk: EvaluationKey, gk: GaloisKey, relin=False
+        self,
+        ct: Ciphertext,
+        evk: EvaluationKey = None,
+        gk: GaloisKey = None,
+        *,
+        post_relin=False,
     ) -> Ciphertext:
+        evk = evk or self.evk
+        gk = gk or self.gk
         ct_mean = self.mean(ct=ct, gk=gk)
-        dev = self.sub(ct, ct_mean)
-        dev = self.square(ct=dev, evk=evk, relin=relin)
-        if not relin:
+        dev = self.cc_sub(ct, ct_mean)
+        dev = self.square(ct=dev, evk=evk, post_relin=post_relin)
+        if not post_relin:
             dev = self.relinearize(ct_triplet=dev, evk=evk)
         ct_var = self.mean(ct=dev, gk=gk)
         return ct_var
 
+    @strictype
     def std(
-        self, ct: Ciphertext, evk: EvaluationKey, gk: GaloisKey, relin=False
+        self,
+        ct: Ciphertext,
+        evk: EvaluationKey = None,
+        gk: GaloisKey = None,
+        post_relin=False,
     ) -> Ciphertext:
-        ct_var = self.var(ct=ct, evk=evk, gk=gk, relin=relin)
+        evk = evk or self.evk
+        gk = gk or self.gk
+        ct_var = self.var(ct=ct, evk=evk, gk=gk, post_relin=post_relin)
         ct_std = self.sqrt(ct=ct_var, evk=evk)
         return ct_std
