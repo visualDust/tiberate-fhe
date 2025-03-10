@@ -78,11 +78,7 @@ class CkksEngine:
         self.__pk = None
         self.__evk = None
         self.__gk = None
-        self.rotk = CachedDict(
-            generator_func=functools.partial(
-                self._create_rotation_key, sk=self.sk
-            )
-        )
+        self.__rotk = None
 
     @property
     def sk(self) -> SecretKey:
@@ -93,18 +89,10 @@ class CkksEngine:
 
     @sk.setter
     def sk(self, sk: SecretKey):
-        logger.debug(
-            "Setting a new secret key manually, this will remove all keys."
+        logger.warning(
+            "Setting a new secret key manually can lead to unexpected behavior, use with caution."
         )
         self.__sk = sk
-        self.__pk = None
-        self.__evk = None
-        self.__gk = None
-        self.rotk = CachedDict(
-            generator_func=functools.partial(
-                self._create_rotation_key, self.sk
-            )
-        )
 
     @property
     def pk(self) -> PublicKey:
@@ -138,6 +126,23 @@ class CkksEngine:
     @gk.setter
     def gk(self, gk: GaloisKey):
         self.__gk = gk
+
+    @property
+    def rotk(self) -> CachedDict:
+        if self.__rotk is None:
+            self.__rotk = CachedDict(
+                generator_func=functools.partial(
+                    self._create_rotation_key, sk=self.sk
+                )
+            )
+        return self.__rotk
+
+    @rotk.setter
+    def rotk(self, rotk: CachedDict):
+        logger.warning(
+            "Setting rotation key mauanlly can lead to unexpected behavior, use with caution."
+        )
+        self.__rotk = rotk
 
     def __str__(self):
         what_is_this = f"{self.__class__}"
