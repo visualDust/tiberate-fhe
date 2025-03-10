@@ -283,7 +283,8 @@ class Plaintext(DataStruct):
         padding=True,  # todo remove padding flag in legacy code
         scale=None,  # by default None, which means use engine's parameter
     ):
-        src = torch.tensor(src)
+        if not isinstance(src, torch.Tensor):
+            src = torch.tensor(src)
         if src.dim() == 2 and src.size(0) == 1:
             src = src.squeeze(0)
         assert src.dim() == 1, RuntimeError(
