@@ -21,7 +21,7 @@ class NTTContext:
         # Set devices first.
         if devices is None:
             devices = ["cuda:0"]
-            logger.info(f"Device not specified. Usingd default {devices}.")
+            logger.info(f"Device not specified. Using default {devices}.")
 
         self.devices = devices
         self.num_devices = len(self.devices)

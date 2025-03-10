@@ -385,7 +385,9 @@ class CkksEngine:
             padding_result = torch.tensor(padding_result)
         return padding_result
 
-    def encode(self, m, level: int = 0, padding=True) -> list[torch.Tensor]:
+    def encode(
+        self, m, level: int = 0, padding=True, scale=None
+    ) -> list[torch.Tensor]:
         """
         Encode a plain message m.
         Note that the encoded plain text is pre-permuted to yield cyclic rotation.
@@ -396,7 +398,7 @@ class CkksEngine:
         encoded = [
             codec_encode(
                 m,
-                scale=self.scale,
+                scale=scale or self.scale,
                 rng=self.rng,
                 device=self.device0,
                 deviation=deviation,
@@ -575,6 +577,8 @@ class CkksEngine:
         *,
         final_round=True,
     ) -> list[torch.Tensor]:
+        sk = sk or self.sk
+
         if not ct_mult.ntt_state:
             raise errors.NTTStateError(expected=True)
         if not ct_mult.montgomery_state:
@@ -583,8 +587,6 @@ class CkksEngine:
             raise errors.NTTStateError(expected=True)
         if not sk.montgomery_state:
             raise errors.MontgomeryStateError(expected=True)
-
-        sk = sk or self.sk
 
         level = ct_mult.level
         d0 = [ct_mult.data[0][0].clone()]
@@ -638,6 +640,8 @@ class CkksEngine:
     def decrypt_double(
         self, ct: Ciphertext, sk: SecretKey = None, *, final_round=True
     ) -> list[torch.Tensor]:
+        sk = sk or self.sk
+
         if ct.ntt_state:
             raise errors.NTTStateError(expected=False)
         if ct.montgomery_state:
@@ -646,8 +650,6 @@ class CkksEngine:
             raise errors.NTTStateError(expected=True)
         if not sk.montgomery_state:
             raise errors.MontgomeryStateError(expected=True)
-
-        sk = sk or self.sk
 
         ct0 = ct.data[0][0]
         level = ct.level
@@ -1288,12 +1290,13 @@ class CkksEngine:
     def relinearize(
         self, ct_triplet: CiphertextTriplet, evk: EvaluationKey = None
     ) -> Ciphertext:
+        evk = evk or self.evk
+
         if not ct_triplet.ntt_state:
             raise errors.NTTStateError(expected=True)
         if not ct_triplet.montgomery_state:
             raise errors.MontgomeryStateError(expected=True)
 
-        evk = evk or self.evk
         d0, d1, d2 = ct_triplet.data
         level = ct_triplet.level
 
@@ -1433,6 +1436,15 @@ class CkksEngine:
             return rotated_ct, galois_circuit
         else:
             return rotated_ct
+
+    @strictype
+    def rotate_offset(
+        self, ct: Ciphertext, offset: int, memory_save=True
+    ) -> Ciphertext:
+        if memory_save:
+            return self.rotate_galois(ct, delta=offset)
+        else:
+            return self.rotate_single(ct, rotk=self.rotk[offset])
 
     # -------------------------------------------------------------------------------------------
     # Add/sub.
@@ -1776,12 +1788,13 @@ class CkksEngine:
         is_real=False,
         final_round=True,
     ):  # todo keep on GPU or not convert back to numpy
+        sk = sk or self.sk
+
         if not sk.ntt_state:
             raise errors.NTTStateError(expected=True)
         if not sk.montgomery_state:
             raise errors.MontgomeryStateError(expected=True)
 
-        sk = sk or self.sk
         level = ct.level
         sk_data = sk.data[0][self.nttCtx.starts[level][0] :]
 
@@ -1914,12 +1927,12 @@ class CkksEngine:
 
     @strictype
     def create_conjugation_key(self, sk: SecretKey = None) -> ConjugationKey:
+        sk = sk or self.sk
+
         if not sk.ntt_state:
             raise errors.NTTStateError(expected=True)
         if not sk.montgomery_state:
             raise errors.MontgomeryStateError(expected=True)
-
-        sk = sk or self.sk
 
         sk_new_data = [s.clone() for s in sk.data]
         self.nttCtx.intt(sk_new_data)
@@ -2011,7 +2024,7 @@ class CkksEngine:
         # process cache
         if not str(self.pc_mult) in pt.cache[ct.level]:
             m = pt.src * math.sqrt(self.deviations[ct.level + 1])
-            pt_ = self.encode(m, ct.level)
+            pt_ = self.encode(m, ct.level, scale=pt.scale)
             pt_ = self.nttCtx.tile_unsigned(pt_, ct.level)
             self.nttCtx.enter_ntt(pt_, ct.level)
             pt.cache[ct.level][str(self.pc_mult)] = pt_

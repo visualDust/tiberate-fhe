@@ -276,11 +276,12 @@ class Plaintext(DataStruct):
     def __init__(
         self,
         src: Union[list, tuple],
+        *,
         cache: Dict[
             int, Dict[str, Any]
         ] = None,  # level: {what_cache: cache_data}
         padding=True,  # todo remove padding flag in legacy code
-        use_cache=True,
+        scale=None,  # by default None, which means use engine's parameter
     ):
         src = torch.tensor(src)
         if src.dim() == 2 and src.size(0) == 1:
@@ -291,7 +292,7 @@ class Plaintext(DataStruct):
         self.src = src
         self.data = cache or defaultdict(dict)  # cache is alias of data
         self.padding = padding
-        self.use_cache = use_cache  # todo allow to disable cache
+        self.scale = scale
 
     @property
     def cache(self):
