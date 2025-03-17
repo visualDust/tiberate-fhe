@@ -15,6 +15,8 @@ this is a variant of [Desilo/liberate-fhe](https://github.com/Desilo/liberate-fh
 
 ## Install
 
+![PyPI - Version](https://img.shields.io/pypi/v/tiberate) ![PyPI - Downloads](https://img.shields.io/pypi/dw/tiberate)
+
 ```bash
 pip install tiberate --verbose
 ```

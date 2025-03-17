@@ -55,6 +55,13 @@ def calculate_ckks_cipher_datastruct_size_in_list_recursive(
         )
     elif isinstance(list_or_cipher, torch.Tensor):
         return calculate_tensor_size_in_bytes(list_or_cipher)
+    elif isinstance(list_or_cipher, dict):
+        total_size = sum(
+            [
+                calculate_ckks_cipher_datastruct_size_in_list_recursive(v)
+                for v in list_or_cipher.values()
+            ]
+        )
     else:
         raise ValueError(f"Unknown type: {type(list_or_cipher)}")
 

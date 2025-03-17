@@ -1,4 +1,5 @@
 import inspect
+import pickle
 import typing
 from collections import defaultdict
 from functools import wraps
@@ -210,6 +211,22 @@ class DataStruct:
     def to(self, device: str, non_blocking=True):
         # alias for copy_to
         return self.copy_to(device, non_blocking)
+
+    def dump(self, path: str):
+        with open(path, "wb") as f:
+            pickle.dump(self, f)
+
+    def dumps(self):
+        return pickle.dumps(self)
+
+    @classmethod
+    def load(cls, path: str):
+        with open(path, "rb") as f:
+            return pickle.load(f)
+
+    @classmethod
+    def loads(cls, data):
+        return pickle.loads(data)
 
     def __repr__(self):
         return f"{self.__class__.__name__}(data={self.data}, include_special={self.include_special}, ntt_state={self.ntt_state}, montgomery_state={self.montgomery_state}, level={self.level}, description={self.description})"
