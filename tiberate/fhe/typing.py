@@ -220,12 +220,12 @@ class DataStruct:
         return pickle.dumps(self)
 
     @classmethod
-    def load(cls, path: str):
+    def load(cls, path: str) -> "DataStruct":
         with open(path, "rb") as f:
             return pickle.load(f)
 
     @classmethod
-    def loads(cls, data):
+    def loads(cls, data) -> "DataStruct":
         return pickle.loads(data)
 
     def __repr__(self):

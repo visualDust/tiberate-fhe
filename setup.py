@@ -7,6 +7,7 @@ from setuptools.command.install import install
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG)
 
 
 def clean_built():
@@ -75,26 +76,28 @@ ext_modules_ntt = [
     )
 ]
 
-setup(
-    name="csprng",
-    ext_modules=ext_modules_csprng,
-    cmdclass={"build_ext": BuildExtension},
-    script_args=["build_ext"],
-    options={
-        "build": {
-            "build_lib": "tiberate/csprng",
-        }
-    },
-)
+if __name__ == "__main__":
+    clean_built()
+    setup(
+        name="csprng",
+        ext_modules=ext_modules_csprng,
+        cmdclass={"build_ext": BuildExtension},
+        script_args=["build_ext"],
+        options={
+            "build": {
+                "build_lib": "tiberate/csprng",
+            }
+        },
+    )
 
-setup(
-    name="ntt",
-    ext_modules=ext_modules_ntt,
-    cmdclass={"build_ext": BuildExtension},
-    script_args=["build_ext"],
-    options={
-        "build": {
-            "build_lib": "tiberate/ntt",
-        }
-    },
-)
+    setup(
+        name="ntt",
+        ext_modules=ext_modules_ntt,
+        cmdclass={"build_ext": BuildExtension},
+        script_args=["build_ext"],
+        options={
+            "build": {
+                "build_lib": "tiberate/ntt",
+            }
+        },
+    )

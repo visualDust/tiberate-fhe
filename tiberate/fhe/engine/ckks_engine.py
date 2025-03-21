@@ -898,7 +898,11 @@ class CkksEngine:
 
     # @nvtx.annotate() # todo see why memory copy with only one device
     def create_switcher(
-        self, a: List[torch.Tensor], ksk: KeySwitchKey, level, exit_ntt=False
+        self,
+        a: List[torch.Tensor],
+        ksk: KeySwitchKey,
+        level: int,
+        exit_ntt: bool = False,
     ) -> tuple:
         # ksk parts allocation.
         ksk_alloc = self.parts_alloc[level]

@@ -3,11 +3,11 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-#include "chacha20_cuda_kernel.h"
+#include "chacha20.h"
 
 #define GE(x_high, x_low, y_high, y_low)\
     (((x_high) > (y_high)) | (((x_high) == (y_high)) & ((x_low) >= (y_low))))
-    
+
 #define COMBINE_TWO(high, low)\
     ((static_cast<uint64_t>(high) << 32) | static_cast<uint64_t>(low))
 
@@ -30,35 +30,35 @@ __global__ void discrete_gaussian_fast_cuda_kernel(
     int btree_size,
     int depth,
     size_t step){
-    
+
     // Where am I?
     const int thread_ind = threadIdx.x;
     const int poly_order = blockIdx.x * blockDim.x + threadIdx.x;
-    
+
     __shared__ int64_t x[BLOCK_SIZE][16];
-    
+
      #pragma unroll
     for(int i=0; i<16; ++i){
         x[thread_ind][i] = states[poly_order][i];
     }
-    
+
     // Repeat 10 times for chacha20.
     #pragma unroll
     for(int i=0; i<10; ++i){
         ONE_ROUND(x, thread_ind);
     }
-    
+
     #pragma unroll
     for(int i=0; i<16; ++i){
         x[thread_ind][i] = (states[poly_order][i] + x[thread_ind][i]) & MASK;
     }
-    
+
     // Step the state.
     states[poly_order][12] += step;
     states[poly_order][13] += (states[poly_order][12] >> 32);
     states[poly_order][12] &= MASK;
-    
-    
+
+
     // Discrete gaussian
     for(int i=0; i<16; i+=4){
         // Traverse the tree in the LUT.
@@ -86,7 +86,7 @@ __global__ void discrete_gaussian_fast_cuda_kernel(
 
         // Traverse the binary search tree.
         for(int j=0; j<depth; j++){
-            int ge_flag = GE(x_high, x_low, 
+            int ge_flag = GE(x_high, x_low,
                           LUT[counter+current+btree_size],
                           LUT[counter+current]);
 
@@ -97,7 +97,7 @@ __global__ void discrete_gaussian_fast_cuda_kernel(
             counter += jump;
 
             // Update the jump
-            jump *= 2;    
+            jump *= 2;
         }
         int64_t sample = (sign_bit * 2 - 1) * static_cast<int64_t>(current);
 
@@ -121,10 +121,10 @@ __global__ void discrete_gaussian_cuda_kernel(
     int depth){
     // Where am I?
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
-    
+
     // i is the index of the starting element at the threadIdx.y row.
     const int i = threadIdx.y * 4;
-    
+
     // Traverse the tree in the LUT.
     // Note that, out of the 16 32-bit randon numbers,
     // we generate 4 discrete gaussian samples.
@@ -150,7 +150,7 @@ __global__ void discrete_gaussian_cuda_kernel(
 
     // Traverse the binary search tree.
     for(int j=0; j<depth; j++){
-        int ge_flag = GE(x_high, x_low, 
+        int ge_flag = GE(x_high, x_low,
                       LUT[counter+current+btree_size],
                       LUT[counter+current]);
 
@@ -161,7 +161,7 @@ __global__ void discrete_gaussian_cuda_kernel(
         counter += jump;
 
         // Update the jump
-        jump *= 2;    
+        jump *= 2;
     }
     int64_t sample = (sign_bit * 2 - 1) * static_cast<int64_t>(current);
 
@@ -183,29 +183,29 @@ torch::Tensor discrete_gaussian_fast_cuda(torch::Tensor states,
                             int btree_size,
                             int depth,
                             size_t step){
-    
+
     // rand_bytes has the dim N x 16.
     int dim_block = BLOCK_SIZE;
     int dim_grid = states.size(0) / dim_block;
-    
+
     // Retrieve the device index, then set the corresponding device and stream.
     auto device_id = states.device().index();
     cudaSetDevice(device_id);
     auto stream = at::cuda::getCurrentCUDAStream(device_id);
-    
+
     // Prepare the result.
     // 16 elements in each state turn into 4 random numbers.
     auto result = states.new_empty({states.size(0) * 4});
-    
+
     // Fill in the LUT constant memory.
     cudaMemcpyToSymbol(LUT, btree, btree_size * 2 * sizeof(uint64_t));
-    
+
     // Run the cuda kernel.
     auto states_acc = states.packed_accessor32<int64_t, 2>();
     auto result_acc = result.packed_accessor32<int64_t, 1>();
     discrete_gaussian_fast_cuda_kernel<<<dim_grid, dim_block, 0, stream>>>(
         states_acc, result_acc, btree_size, depth, step);
-    
+
     return result;
 }
 
@@ -218,19 +218,19 @@ void discrete_gaussian_cuda(torch::Tensor rand_bytes,
                             uint64_t* btree,
                             int btree_size,
                             int depth){
-    
+
     // rand_bytes has the dim N x 16.
     dim3 dim_block(BLOCK_SIZE, 4);
     int dim_grid = rand_bytes.size(0) / dim_block.x;
-    
+
     // Retrieve the device index, then set the corresponding device and stream.
     auto device_id = rand_bytes.device().index();
     cudaSetDevice(device_id);
     auto stream = at::cuda::getCurrentCUDAStream(device_id);
-    
+
     // Fill in the LUT constant memory.
     cudaMemcpyToSymbol(LUT, btree, btree_size * 2 * sizeof(uint64_t));
-    
+
     // Run the cuda kernel.
     auto access = rand_bytes.packed_accessor32<int64_t, 2>();
     discrete_gaussian_cuda_kernel<<<dim_grid, dim_block, 0, stream>>>(access, btree_size, depth);

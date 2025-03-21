@@ -22,7 +22,7 @@
     x[ind][c] &= MASK;\
     x[ind][b] ^= x[ind][c];\
     ROLL7(x[ind][b])
-    
+
 #define ONE_ROUND(x, ind)\
     QR(x, ind, 0, 4,  8, 12);\
     QR(x, ind, 1, 5,  9, 13);\
