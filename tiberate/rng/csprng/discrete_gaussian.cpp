@@ -30,10 +30,10 @@ void discrete_gaussian(std::vector<torch::Tensor> inputs,
                        size_t btree_ptr,
                        int btree_size,
                        int depth) {
-    
+
     // reinterpret pointers from numpy.
     uint64_t *btree = reinterpret_cast<uint64_t*>(btree_ptr);
-        
+
     for (auto &rand_bytes : inputs){
         CHECK_INPUT(rand_bytes);
 
@@ -50,12 +50,12 @@ std::vector<torch::Tensor> discrete_gaussian_fast(std::vector<torch::Tensor> sta
                        int btree_size,
                        int depth,
                        size_t step) {
-    
+
     // reinterpret pointers from numpy.
     uint64_t *btree = reinterpret_cast<uint64_t*>(btree_ptr);
-        
+
     std::vector<torch::Tensor> outputs;
-    
+
     for (auto &my_states : states){
         auto result = discrete_gaussian_fast_cuda(my_states, btree, btree_size, depth, step);
         outputs.push_back(result);

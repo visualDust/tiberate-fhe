@@ -8,7 +8,7 @@ from loguru import logger
 from tiberate.fhe.context.ckks_context import CkksContext
 
 from . import ntt_cuda
-from .rns_partition import rns_partition
+from .rns_partition import RnsPartition
 
 
 class NTTContext:
@@ -33,7 +33,7 @@ class NTTContext:
         self.num_ordinary_primes = self.ckksCtx.num_scales + 1
         self.num_special_primes = self.ckksCtx.num_special_primes
 
-        self.p = rns_partition(
+        self.rnsPart = RnsPartition(
             self.num_ordinary_primes, self.num_special_primes, self.num_devices
         )
 
@@ -42,10 +42,10 @@ class NTTContext:
         self.qlists = [qi.tolist() for qi in self.q]
 
         astop_special = [
-            len(d) for d in self.p.destination_arrays_with_special[0]
+            len(d) for d in self.rnsPart.destination_arrays_with_special[0]
         ]
-        astop_ordinary = [len(d) for d in self.p.destination_arrays[0]]
-        self.starts = self.p.diff
+        astop_ordinary = [len(d) for d in self.rnsPart.destination_arrays[0]]
+        self.starts = self.rnsPart.diff
 
         self.stops = [astop_special, astop_ordinary]
 
@@ -64,7 +64,7 @@ class NTTContext:
         np_v = np.array(variable, dtype=self.ckksCtx.numpy_dtype)
 
         v_special = []
-        dest = self.p.d_special
+        dest = self.rnsPart.d_special
         for dev_id in range(self.num_devices):
             d = dest[dev_id]
             parted_v = np_v[d]
@@ -251,7 +251,7 @@ class NTTContext:
             self.parts_pack.append({})
 
             for i in range(
-                len(self.p.destination_arrays_with_special[0][device_id])
+                len(self.rnsPart.destination_arrays_with_special[0][device_id])
             ):
                 self.parts_pack[device_id][i,] = self.params_pack_device(
                     device_id, i, i
@@ -274,7 +274,7 @@ class NTTContext:
                                 device_id, astart, astop
                             )
 
-                for p in self.p.p_special[level][device_id]:
+                for p in self.rnsPart.p_special[level][device_id]:
                     key = tuple(p)
                     if key not in self.parts_pack[device_id].keys():
                         astart = p[0]
@@ -287,9 +287,9 @@ class NTTContext:
             for level in range(self.num_levels):
                 # We do basis extension for only ordinary parts.
                 for part_index, part in enumerate(
-                    self.p.destination_parts[level][device_id]
+                    self.rnsPart.destination_parts[level][device_id]
                 ):
-                    key = tuple(self.p.p[level][device_id][part_index])
+                    key = tuple(self.rnsPart.p[level][device_id][part_index])
 
                     # Check if Y and L are already calculated for this part.
                     if (
@@ -319,9 +319,11 @@ class NTTContext:
 
                         L_enter_devices = []
                         for target_device_id in range(self.num_devices):
-                            dest = self.p.destination_arrays_with_special[0][
-                                target_device_id
-                            ]
+                            dest = (
+                                self.rnsPart.destination_arrays_with_special[
+                                    0
+                                ][target_device_id]
+                            )
                             q = [self.ckksCtx.q[idx] for idx in dest]
                             Rs = [self.ckksCtx.R_square[idx] for idx in dest]
 
@@ -413,7 +415,7 @@ class NTTContext:
                 Rs_scale_prepack_part = []
                 _2q_prepack_part = []
                 q_prepack_part = []
-                for part in self.p.p_special[lvl][device_id]:
+                for part in self.rnsPart.p_special[lvl][device_id]:
                     key = tuple(part)
                     item = self.parts_pack[device_id][key]
 

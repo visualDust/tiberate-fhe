@@ -39,29 +39,29 @@ ext_modules_csprng = [
     CUDAExtension(
         name="randint_cuda",
         sources=[
-            "tiberate/csprng/randint.cpp",
-            "tiberate/csprng/randint_cuda_kernel.cu",
+            "tiberate/rng/csprng/randint.cpp",
+            "tiberate/rng/csprng/randint_cuda_kernel.cu",
         ],
     ),
     CUDAExtension(
         name="randround_cuda",
         sources=[
-            "tiberate/csprng/randround.cpp",
-            "tiberate/csprng/randround_cuda_kernel.cu",
+            "tiberate/rng/csprng/randround.cpp",
+            "tiberate/rng/csprng/randround_cuda_kernel.cu",
         ],
     ),
     CUDAExtension(
         name="discrete_gaussian_cuda",
         sources=[
-            "tiberate/csprng/discrete_gaussian.cpp",
-            "tiberate/csprng/discrete_gaussian_cuda_kernel.cu",
+            "tiberate/rng/csprng/discrete_gaussian.cpp",
+            "tiberate/rng/csprng/discrete_gaussian_cuda_kernel.cu",
         ],
     ),
     CUDAExtension(
         name="chacha20_cuda",
         sources=[
-            "tiberate/csprng/chacha20.cpp",
-            "tiberate/csprng/chacha20_cuda_kernel.cu",
+            "tiberate/rng/csprng/chacha20.cpp",
+            "tiberate/rng/csprng/chacha20_cuda_kernel.cu",
         ],
     ),
 ]
@@ -85,7 +85,7 @@ if __name__ == "__main__":
         script_args=["build_ext"],
         options={
             "build": {
-                "build_lib": "tiberate/csprng",
+                "build_lib": "tiberate/rng/csprng",
             }
         },
     )

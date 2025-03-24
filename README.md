@@ -9,8 +9,10 @@ This is a variant of [Desilo/liberate-fhe](https://github.com/Desilo/liberate-fh
 
 ## Pre-requisites
 
-- Python 3.12 or later.
+- Python 3.10 or later.
 - CUDA 11 or later, CUDA 12+ is recommended. `nvcc` is required for compiling.
+- [PyTorch](https://pytorch.org/) 2.0 or later installed.
+- Optionally, [Poetry](https://python-poetry.org/) for development.
 
 ## Install
 
@@ -43,8 +45,8 @@ poetry install # this will also install the package itself into current environm
 
 ```python
 import torch
-from tiberate.fhe import CkksEngine
-from tiberate.fhe.typing import Plaintext,Ciphertext
+from tiberate import CkksEngine
+from tiberate.typing import Plaintext, Ciphertext
 from vdtoys.plot import diff_distribution
 
 # Engine creation

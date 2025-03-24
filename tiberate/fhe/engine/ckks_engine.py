@@ -14,15 +14,15 @@ from loguru import logger
 from vdtoys.cache import CachedDict
 from vdtoys.mvc import initonly, strictype
 
-from tiberate.csprng.csprng import Csprng
 from tiberate.fhe.context import presets
 from tiberate.fhe.context.ckks_context import CkksContext
 from tiberate.fhe.encdec import conjugate as codec_conjugate
 from tiberate.fhe.encdec import decode as codec_decode
 from tiberate.fhe.encdec import encode as codec_encode
 from tiberate.fhe.encdec import rotate as codec_rotate
-from tiberate.fhe.typing import *
 from tiberate.ntt import NTTContext, ntt_cuda
+from tiberate.rng import Csprng, RandNumGen, SimpleRNG
+from tiberate.typing import *
 
 from . import errors
 
@@ -44,25 +44,31 @@ class CkksEngine:
 
     def __init__(
         self,
-        devices: List[
-            int
-        ] = None,  # if device is None, will use default in creating NTTContext
+        *,
+        devices: List[int] = None,  # if device is None, will use default in creating NTTContext
         bias_guard: bool = True,
         norm: str = "forward",
         ckks_params=None,
+        rng_class="Csprng",  # 'Csprng' or 'SimpleRNG'
     ):
         if ckks_params is None:
-            ckks_params = presets["silver"]
+            ckks_params = presets.logN15
             logger.info(f"CKKS parameters not specified. Using silver preset.")
 
         self.ckksCtx = CkksContext(**ckks_params)
         self.nttCtx = NTTContext(self.ckksCtx, devices=devices)
-        self.rng = Csprng(
+
+        # eavl rng class, to the specific type
+        RngClass = SimpleRNG if rng_class == "SimpleRNG" else Csprng
+        self.rng: RandNumGen = RngClass(
             num_coefs=self.nttCtx.ckksCtx.N,
-            num_channels=[len(di) for di in self.nttCtx.p.d],
+            num_channels=[len(di) for di in self.nttCtx.rnsPart.d],
             num_repeating_channels=max(self.nttCtx.num_special_primes, 2),
             devices=self.nttCtx.devices,
         )
+
+        logger.info(f"Using Random Number Generator: {self.rng.__class__.__name__}")
+
         self.bias_guard = bias_guard
         self.norm = norm
 
@@ -131,9 +137,7 @@ class CkksEngine:
     def rotk(self) -> CachedDict:
         if self.__rotk is None:
             self.__rotk = CachedDict(
-                generator_func=functools.partial(
-                    self._create_rotation_key, sk=self.sk
-                )
+                generator_func=functools.partial(self._create_rotation_key, sk=self.sk)
             )
         return self.__rotk
 
@@ -189,11 +193,11 @@ class CkksEngine:
             rescale_scales.append([])
 
             for device_id in range(self.nttCtx.num_devices):
-                dest_level = self.nttCtx.p.destination_arrays[level]
+                dest_level = self.nttCtx.rnsPart.destination_arrays[level]
 
                 if device_id < len(dest_level):
                     dest = dest_level[device_id]
-                    rescaler_device_id = self.nttCtx.p.rescaler_loc[level]
+                    rescaler_device_id = self.nttCtx.rnsPart.rescaler_loc[level]
                     m0 = self.ckksCtx.q[level]
 
                     if rescaler_device_id == device_id:
@@ -201,9 +205,7 @@ class CkksEngine:
                     else:
                         m = [self.ckksCtx.q[i] for i in dest]
 
-                    scales = [
-                        (pow(m0, -1, mi) * self.ckksCtx.R) % mi for mi in m
-                    ]
+                    scales = [(pow(m0, -1, mi) * self.ckksCtx.R) % mi for mi in m]
 
                     scales = torch.tensor(
                         scales,
@@ -218,9 +220,7 @@ class CkksEngine:
     def leveled_devices(self):
         self.len_devices = []
         for level in range(self.num_levels):
-            self.len_devices.append(
-                len([[a] for a in self.nttCtx.p.p[level] if len(a) > 0])
-            )
+            self.len_devices.append(len([[a] for a in self.nttCtx.rnsPart.p[level] if len(a) > 0]))
 
         self.neighbor_devices = []
         for level in range(self.num_levels):
@@ -229,9 +229,7 @@ class CkksEngine:
             available_devices_ids = range(len_devices_at)
             for src_device_id in available_devices_ids:
                 neighbor_devices_at = [
-                    device_id
-                    for device_id in available_devices_ids
-                    if device_id != src_device_id
+                    device_id for device_id in available_devices_ids if device_id != src_device_id
                 ]
                 self.neighbor_devices[level].append(neighbor_devices_at)
 
@@ -239,10 +237,10 @@ class CkksEngine:
     def alloc_parts(self):
         self.parts_alloc = []
         for level in range(self.num_levels):
-            num_parts = [len(parts) for parts in self.nttCtx.p.p[level]]
+            num_parts = [len(parts) for parts in self.nttCtx.rnsPart.p[level]]
             parts_alloc = [
                 alloc[-num_parts[di] - 1 : -1]
-                for di, alloc in enumerate(self.nttCtx.p.part_allocations)
+                for di, alloc in enumerate(self.nttCtx.rnsPart.part_allocations)
             ]
             self.parts_alloc.append(parts_alloc)
 
@@ -262,7 +260,7 @@ class CkksEngine:
         self.ksk_buffers = []
         for device_id in range(self.nttCtx.num_devices):
             self.ksk_buffers.append([])
-            for part_id in range(len(self.nttCtx.p.p[0][device_id])):
+            for part_id in range(len(self.nttCtx.rnsPart.p[0][device_id])):
                 buffer = torch.empty(
                     [self.nttCtx.num_special_primes, self.ckksCtx.N],
                     dtype=self.ckksCtx.torch_dtype,
@@ -273,10 +271,7 @@ class CkksEngine:
         R = self.ckksCtx.R
         P = self.ckksCtx.q[-self.nttCtx.num_special_primes :][::-1]
         m = self.ckksCtx.q
-        PiR = [
-            [(pow(Pj, -1, mi) * R) % mi for mi in m[: -P_ind - 1]]
-            for P_ind, Pj in enumerate(P)
-        ]
+        PiR = [[(pow(Pj, -1, mi) * R) % mi for mi in m[: -P_ind - 1]] for P_ind, Pj in enumerate(P)]
 
         self.PiRs = []
 
@@ -287,9 +282,7 @@ class CkksEngine:
             self.PiRs[level].append([])
 
             for device_id in range(self.nttCtx.num_devices):
-                dest = self.nttCtx.p.destination_arrays_with_special[level][
-                    device_id
-                ]
+                dest = self.nttCtx.rnsPart.destination_arrays_with_special[level][device_id]
                 PiRi = [PiR[P_ind][i] for i in dest[: -P_ind - 1]]
                 PiRi = torch.tensor(
                     PiRi,
@@ -317,7 +310,7 @@ class CkksEngine:
         PR = P * R
         mont_PR = []
         for device_id in range(self.nttCtx.num_devices):
-            dest = self.nttCtx.p.destination_arrays[0][device_id]
+            dest = self.nttCtx.rnsPart.destination_arrays[0][device_id]
             m = [self.ckksCtx.q[i] for i in dest]
             PRm = [PR % mi for mi in m]
             PRm = torch.tensor(
@@ -331,29 +324,22 @@ class CkksEngine:
     @initonly
     def make_adjustments_and_corrections(self):
         self.alpha = [
-            (self.scale / np.float64(q)) ** 2
-            for q in self.ckksCtx.q[: self.ckksCtx.num_scales]
+            (self.scale / np.float64(q)) ** 2 for q in self.ckksCtx.q[: self.ckksCtx.num_scales]
         ]
         self.deviations = [1]
         for al in self.alpha:
             self.deviations.append(self.deviations[-1] ** 2 * al)
 
-        self.final_q_ind = [
-            da[0][0] for da in self.nttCtx.p.destination_arrays[:-1]
-        ]
+        self.final_q_ind = [da[0][0] for da in self.nttCtx.rnsPart.destination_arrays[:-1]]
         self.final_q = [self.ckksCtx.q[ind] for ind in self.final_q_ind]
         self.final_alpha = [(self.scale / np.float64(q)) for q in self.final_q]
-        self.corrections = [
-            1 / (d * fa) for d, fa in zip(self.deviations, self.final_alpha)
-        ]
+        self.corrections = [1 / (d * fa) for d, fa in zip(self.deviations, self.final_alpha)]
 
-        self.base_prime = self.ckksCtx.q[self.nttCtx.p.base_prime_idx]
+        self.base_prime = self.ckksCtx.q[self.nttCtx.rnsPart.base_prime_idx]
 
         self.final_scalar = []
         for qi, q in zip(self.final_q_ind, self.final_q):
-            scalar = (
-                pow(q, -1, self.base_prime) * self.ckksCtx.R
-            ) % self.base_prime
+            scalar = (pow(q, -1, self.base_prime) * self.ckksCtx.R) % self.base_prime
             scalar = torch.tensor(
                 [scalar],
                 device=self.nttCtx.devices[0],
@@ -368,9 +354,7 @@ class CkksEngine:
     def padding(self, m: Union[list, np.ndarray, torch.Tensor]):
         # todo how about length > num_slots
         if isinstance(m, torch.Tensor):
-            assert (
-                len(m.shape) == 1
-            ), f"Input tensor should be 1D, but got {len(m.shape)}D."
+            assert len(m.shape) == 1, f"Input tensor should be 1D, but got {len(m.shape)}D."
         if isinstance(m, torch.Tensor):
             padding_result = torch.cat(
                 (m, torch.zeros(self.num_slots - m.shape[0], device=m.device))
@@ -378,21 +362,15 @@ class CkksEngine:
         else:
             try:
                 m_len = len(m)
-                padding_result = np.pad(
-                    m, (0, self.num_slots - m_len), constant_values=(0, 0)
-                )
+                padding_result = np.pad(m, (0, self.num_slots - m_len), constant_values=(0, 0))
             except TypeError as e:
                 m_len = len([m])
-                padding_result = np.pad(
-                    [m], (0, self.num_slots - m_len), constant_values=(0, 0)
-                )
+                padding_result = np.pad([m], (0, self.num_slots - m_len), constant_values=(0, 0))
         if not isinstance(padding_result, torch.Tensor):
             padding_result = torch.tensor(padding_result)
         return padding_result
 
-    def encode(
-        self, m, level: int = 0, padding=True, scale=None
-    ) -> list[torch.Tensor]:
+    def encode(self, m, level: int = 0, padding=True, scale=None) -> list[torch.Tensor]:
         """
         Encode a plain message m.
         Note that the encoded plain text is pre-permuted to yield cyclic rotation.
@@ -442,9 +420,7 @@ class CkksEngine:
         uniform_ternary = self.rng.randint(amax=3, shift=-1, repeats=1)
 
         mult_type = -2 if include_special else -1
-        unsigned_ternary = self.nttCtx.tile_unsigned(
-            uniform_ternary, lvl=0, mult_type=mult_type
-        )
+        unsigned_ternary = self.nttCtx.tile_unsigned(uniform_ternary, lvl=0, mult_type=mult_type)
         self.nttCtx.enter_ntt(unsigned_ternary, 0, mult_type)
 
         return SecretKey(
@@ -486,9 +462,7 @@ class CkksEngine:
 
         # Applying mont_mult in the order of 'a', sk will
         if a is None:
-            a = self.rng.randint(
-                self.nttCtx.q_prepack[mult_type][level][0], repeats=repeats
-            )
+            a = self.rng.randint(self.nttCtx.q_prepack[mult_type][level][0], repeats=repeats)
 
         sa = self.nttCtx.mont_mult(a, sk.data, 0, mult_type)
         pk0 = self.nttCtx.mont_sub(e, sa, 0, mult_type)
@@ -538,14 +512,8 @@ class CkksEngine:
         pte0 = self.nttCtx.mont_add(pt_tiled, e0_tiled, level, mult_type)
 
         start = self.nttCtx.starts[level]
-        pk0 = [
-            pk.data[0][di][start[di] :]
-            for di in range(self.nttCtx.num_devices)
-        ]
-        pk1 = [
-            pk.data[1][di][start[di] :]
-            for di in range(self.nttCtx.num_devices)
-        ]
+        pk0 = [pk.data[0][di][start[di] :] for di in range(self.nttCtx.num_devices)]
+        pk1 = [pk.data[1][di][start[di] :] for di in range(self.nttCtx.num_devices)]
 
         v = self.rng.randint(amax=2, shift=0, repeats=1)
 
@@ -614,11 +582,7 @@ class CkksEngine:
         pt = self.nttCtx.mont_add(pt, d2_s2, level)
         self.nttCtx.reduce_2q(pt, level)
 
-        base_at = (
-            -self.ckksCtx.num_special_primes - 1
-            if ct_mult.include_special
-            else -1
-        )
+        base_at = -self.ckksCtx.num_special_primes - 1 if ct_mult.include_special else -1
 
         base = pt[0][base_at][None, :]
         scaler = pt[0][0][None, :]
@@ -633,9 +597,7 @@ class CkksEngine:
         if final_round:
             # The scaler and the base channels are guaranteed to be in the
             # device 0.
-            rounding_prime = self.nttCtx.qlists[0][
-                -self.ckksCtx.num_special_primes - 2
-            ]
+            rounding_prime = self.nttCtx.qlists[0][-self.ckksCtx.num_special_primes - 2]
             rounder = (scaler[0] > (rounding_prime // 2)) * 1
             scaled[0] += rounder
 
@@ -668,9 +630,7 @@ class CkksEngine:
         pt = self.nttCtx.mont_add([ct0], sa, level)
         self.nttCtx.reduce_2q(pt, level)
 
-        base_at = (
-            -self.ckksCtx.num_special_primes - 1 if ct.include_special else -1
-        )
+        base_at = -self.ckksCtx.num_special_primes - 1 if ct.include_special else -1
 
         base = pt[0][base_at][None, :]
         scaler = pt[0][0][None, :]
@@ -685,9 +645,7 @@ class CkksEngine:
         if final_round:
             # The scaler and the base channels are guaranteed to be in the
             # device 0.
-            rounding_prime = self.nttCtx.qlists[0][
-                -self.ckksCtx.num_special_primes - 2
-            ]
+            rounding_prime = self.nttCtx.qlists[0][-self.ckksCtx.num_special_primes - 2]
             rounder = (scaler[0] > (rounding_prime // 2)) * 1
             scaled[0] += rounder
 
@@ -708,9 +666,7 @@ class CkksEngine:
         sk = sk or self.sk
 
         if isinstance(ct, CiphertextTriplet):
-            pt = self.decrypt_triplet(
-                ct_mult=ct, sk=sk, final_round=final_round
-            )
+            pt = self.decrypt_triplet(ct_mult=ct, sk=sk, final_round=final_round)
         else:
             # raise errors.NotMatchType(origin=ct.origin, to=f"{origin_names['ct']} or {origin_names['ctt']}")
             # try decode as ct
@@ -746,25 +702,18 @@ class CkksEngine:
         level = 0
 
         stops = self.nttCtx.stops[-1]
-        Psk_src = [
-            sk_from.data[di][: stops[di]].clone()
-            for di in range(self.nttCtx.num_devices)
-        ]
+        Psk_src = [sk_from.data[di][: stops[di]].clone() for di in range(self.nttCtx.num_devices)]
 
         self.nttCtx.mont_enter_scalar(Psk_src, self.mont_PR, level)
 
-        ksk = [[] for _ in range(self.nttCtx.p.num_partitions + 1)]
+        ksk = [[] for _ in range(self.nttCtx.rnsPart.num_partitions + 1)]
 
         for device_id in range(self.nttCtx.num_devices):
-            for part_id, part in enumerate(self.nttCtx.p.p[level][device_id]):
-                global_part_id = self.nttCtx.p.part_allocations[device_id][
-                    part_id
-                ]
+            for part_id, part in enumerate(self.nttCtx.rnsPart.p[level][device_id]):
+                global_part_id = self.nttCtx.rnsPart.part_allocations[device_id][part_id]
 
                 crs = a[global_part_id] if a else None
-                pk = self._create_public_key(
-                    sk_to, include_special=True, a=crs
-                )
+                pk = self._create_public_key(sk_to, include_special=True, a=crs)
 
                 key = tuple(part)
                 astart = part[0]
@@ -792,8 +741,8 @@ class CkksEngine:
         # param_parts contain only the ordinary parts.
         # Hence, loop around it.
         # text_parts contain special primes.
-        text_part = self.nttCtx.p.parts[level][device_id][part_id]
-        param_part = self.nttCtx.p.p[level][device_id][part_id]
+        text_part = self.nttCtx.rnsPart.parts[level][device_id][part_id]
+        param_part = self.nttCtx.rnsPart.p[level][device_id][part_id]
 
         # Carve out the partition.
         alpha = len(text_part)
@@ -815,13 +764,9 @@ class CkksEngine:
 
         key = tuple(param_part)
         for i in range(alpha - 1):
-            mont_pack = self.nttCtx.parts_pack[device_id][param_part[i + 1],][
-                "mont_pack"
-            ]
+            mont_pack = self.nttCtx.parts_pack[device_id][param_part[i + 1],]["mont_pack"]
             _2q = self.nttCtx.parts_pack[device_id][param_part[i + 1],]["_2q"]
-            Y_scalar = self.nttCtx.parts_pack[device_id][key]["Y_scalar"][i][
-                None
-            ]
+            Y_scalar = self.nttCtx.parts_pack[device_id][key]["Y_scalar"][i][None]
 
             Y = (a_part[i + 1] - state[i + 1])[None, :]
 
@@ -834,13 +779,9 @@ class CkksEngine:
 
             if i + 2 < alpha:
                 state_key = tuple(param_part[i + 2 :])
-                state_mont_pack = self.nttCtx.parts_pack[device_id][state_key][
-                    "mont_pack"
-                ]
+                state_mont_pack = self.nttCtx.parts_pack[device_id][state_key]["mont_pack"]
                 state_2q = self.nttCtx.parts_pack[device_id][state_key]["_2q"]
-                L_scalar = self.nttCtx.parts_pack[device_id][key]["L_scalar"][
-                    i
-                ]
+                L_scalar = self.nttCtx.parts_pack[device_id][key]["L_scalar"][i]
                 new_state_len = alpha - (i + 2)
                 new_state = Y.repeat(new_state_len, 1)
                 ntt_cuda.mont_enter([new_state], [L_scalar], *state_mont_pack)
@@ -858,11 +799,7 @@ class CkksEngine:
         if target_device_id is None:
             target_device_id = device_id
 
-        rns_len = len(
-            self.nttCtx.p.destination_arrays_with_special[level][
-                target_device_id
-            ]
-        )
+        rns_len = len(self.nttCtx.rnsPart.destination_arrays_with_special[level][target_device_id])
         alpha = len(state)
 
         # Initialize the output
@@ -870,13 +807,11 @@ class CkksEngine:
         self.nttCtx.mont_enter([extended], level, target_device_id, -2)
 
         # Generate the search key to find the L_enter.
-        part = self.nttCtx.p.p[level][device_id][part_id]
+        part = self.nttCtx.rnsPart.p[level][device_id][part_id]
         key = tuple(part)
 
         # Extract the L_enter in the target device.
-        L_enter = self.nttCtx.parts_pack[device_id][key]["L_enter"][
-            target_device_id
-        ]
+        L_enter = self.nttCtx.parts_pack[device_id][key]["L_enter"][target_device_id]
 
         # L_enter covers the whole rns range.
         # Start from the leveled start.
@@ -886,12 +821,8 @@ class CkksEngine:
         for i in range(alpha - 1):
             Y = state[i + 1].repeat(rns_len, 1)
 
-            self.nttCtx.mont_enter_scalar(
-                [Y], [L_enter[i][start:]], level, target_device_id, -2
-            )
-            extended = self.nttCtx.mont_add(
-                [extended], [Y], level, target_device_id, -2
-            )[0]
+            self.nttCtx.mont_enter_scalar([Y], [L_enter[i][start:]], level, target_device_id, -2)
+            extended = self.nttCtx.mont_add([extended], [Y], level, target_device_id, -2)[0]
 
         # Returned extended is in the Montgomery format.
         return extended
@@ -924,19 +855,15 @@ class CkksEngine:
         # 1. Generate states.
         states = [[] for _ in range(num_parts)]
         for src_device_id in range(len_devices):
-            for part_id in range(len(self.nttCtx.p.p[level][src_device_id])):
+            for part_id in range(len(self.nttCtx.rnsPart.p[level][src_device_id])):
                 storage_id = self.stor_ids[level][src_device_id][part_id]
-                state = self.pre_extend(
-                    a, src_device_id, level, part_id, exit_ntt
-                )
+                state = self.pre_extend(a, src_device_id, level, part_id, exit_ntt)
                 states[storage_id] = state
 
         # 2. Copy to CPU.
         CPU_states = [[] for _ in range(num_parts)]
         for src_device_id in range(len_devices):
-            for part_id, part in enumerate(
-                self.nttCtx.p.p[level][src_device_id]
-            ):
+            for part_id, part in enumerate(self.nttCtx.rnsPart.p[level][src_device_id]):
                 storage_id = self.stor_ids[level][src_device_id][part_id]
                 alpha = len(part)
                 CPU_state = self.ksk_buffers[src_device_id][part_id][:alpha]
@@ -945,7 +872,7 @@ class CkksEngine:
 
         # 3. Continue on with the follow ups on source devices.
         for src_device_id in range(len_devices):
-            for part_id in range(len(self.nttCtx.p.p[level][src_device_id])):
+            for part_id in range(len(self.nttCtx.rnsPart.p[level][src_device_id])):
                 storage_id = self.stor_ids[level][src_device_id][part_id]
                 state = states[storage_id]
                 d0, d1 = self.switcher_later_part(
@@ -959,9 +886,7 @@ class CkksEngine:
         CUDA_states = [[] for _ in range(num_parts)]
         for src_device_id in range(len_devices):
             for j, dst_device_id in enumerate(neighbor_devices[src_device_id]):
-                for part_id, part in enumerate(
-                    self.nttCtx.p.p[level][src_device_id]
-                ):
+                for part_id, part in enumerate(self.nttCtx.rnsPart.p[level][src_device_id]):
                     storage_id = self.stor_ids[level][src_device_id][part_id]
                     CPU_state = CPU_states[storage_id]
                     CUDA_states[storage_id] = CPU_state.cuda(
@@ -974,9 +899,7 @@ class CkksEngine:
         # 6. Do follow ups on neighbors.
         for src_device_id in range(len_devices):
             for j, dst_device_id in enumerate(neighbor_devices[src_device_id]):
-                for part_id, part in enumerate(
-                    self.nttCtx.p.p[level][src_device_id]
-                ):
+                for part_id, part in enumerate(self.nttCtx.rnsPart.p[level][src_device_id]):
                     storage_id = self.stor_ids[level][src_device_id][part_id]
                     CUDA_state = CUDA_states[storage_id]
                     d0, d1 = self.switcher_later_part(
@@ -995,12 +918,8 @@ class CkksEngine:
         summed1 = part_results[0][1]
 
         for i in range(1, len(part_results)):
-            summed0 = self.nttCtx.mont_add(
-                summed0, part_results[i][0], level, -2
-            )
-            summed1 = self.nttCtx.mont_add(
-                summed1, part_results[i][1], level, -2
-            )
+            summed0 = self.nttCtx.mont_add(summed0, part_results[i][0], level, -2)
+            summed1 = self.nttCtx.mont_add(summed1, part_results[i][1], level, -2)
 
         # Rename summed's.
         d0 = summed0
@@ -1023,23 +942,14 @@ class CkksEngine:
         self.nttCtx.mont_enter(c0, level, -1)
         self.nttCtx.mont_enter(c1, level, -1)
 
-        current_len = [
-            len(d)
-            for d in self.nttCtx.p.destination_arrays_with_special[level]
-        ]
+        current_len = [len(d) for d in self.nttCtx.rnsPart.destination_arrays_with_special[level]]
 
         for P_ind in range(self.nttCtx.num_special_primes):
             PiRi = self.PiRs[level][P_ind]
 
             # Tile.
-            P0 = [
-                d[-1 - P_ind].repeat(current_len[di], 1)
-                for di, d in enumerate(d0)
-            ]
-            P1 = [
-                d[-1 - P_ind].repeat(current_len[di], 1)
-                for di, d in enumerate(d1)
-            ]
+            P0 = [d[-1 - P_ind].repeat(current_len[di], 1) for di, d in enumerate(d0)]
+            P1 = [d[-1 - P_ind].repeat(current_len[di], 1) for di, d in enumerate(d1)]
 
             # mont enter only the ordinary part.
             Q0 = [d[: -self.nttCtx.num_special_primes] for d in P0]
@@ -1082,9 +992,7 @@ class CkksEngine:
         part_id,
     ):
         # Extend basis.
-        extended = self.extend(
-            state, src_device_id, level, part_id, dst_device_id
-        )
+        extended = self.extend(state, src_device_id, level, part_id, dst_device_id)
 
         # ntt extended to prepare polynomial multiplication.
         # extended is in the Montgomery format already.
@@ -1099,12 +1007,8 @@ class CkksEngine:
         ksk1_data = ksk_part_data[1][dst_device_id][start:]
 
         # Multiply.
-        d0 = self.nttCtx.mont_mult(
-            [extended], [ksk0_data], level, dst_device_id, -2
-        )
-        d1 = self.nttCtx.mont_mult(
-            [extended], [ksk1_data], level, dst_device_id, -2
-        )
+        d0 = self.nttCtx.mont_mult([extended], [ksk0_data], level, dst_device_id, -2)
+        d1 = self.nttCtx.mont_mult([extended], [ksk1_data], level, dst_device_id, -2)
 
         # When returning, un-list the results by taking the 0th element.
         return d0[0], d1[0]
@@ -1142,11 +1046,9 @@ class CkksEngine:
         next_level = level + 1
 
         if next_level >= self.num_levels:
-            raise errors.MaximumLevelError(
-                level=ct.level, level_max=self.num_levels
-            )
+            raise errors.MaximumLevelError(level=ct.level, level_max=self.num_levels)
 
-        rescaler_device_id = self.nttCtx.p.rescaler_loc[level]
+        rescaler_device_id = self.nttCtx.rnsPart.rescaler_loc[level]
         neighbor_devices_before = self.neighbor_devices[level]
         neighbor_devices_after = self.neighbor_devices[next_level]
         len_devices_after = len(neighbor_devices_after)
@@ -1188,7 +1090,7 @@ class CkksEngine:
                 data1[device_id] = ct.data[1][device_id]
 
         if exact_rounding:
-            rescale_channel_prime_id = self.nttCtx.p.destination_arrays[level][
+            rescale_channel_prime_id = self.nttCtx.rnsPart.destination_arrays[level][
                 rescaler_device_id
             ][0]
 
@@ -1198,23 +1100,15 @@ class CkksEngine:
             rounder1 = [[] for _ in range(len_devices_before)]
 
             for device_id in range(len_devices_after):
-                rounder0[device_id] = torch.where(
-                    rescaler0[device_id] > round_at, 1, 0
-                )
-                rounder1[device_id] = torch.where(
-                    rescaler1[device_id] > round_at, 1, 0
-                )
+                rounder0[device_id] = torch.where(rescaler0[device_id] > round_at, 1, 0)
+                rounder1[device_id] = torch.where(rescaler1[device_id] > round_at, 1, 0)
 
         data0 = [(d - s) for d, s in zip(data0, rescaler0)]
         data1 = [(d - s) for d, s in zip(data1, rescaler1)]
 
-        self.nttCtx.mont_enter_scalar(
-            data0, self.rescale_scales[level], next_level
-        )
+        self.nttCtx.mont_enter_scalar(data0, self.rescale_scales[level], next_level)
 
-        self.nttCtx.mont_enter_scalar(
-            data1, self.rescale_scales[level], next_level
-        )
+        self.nttCtx.mont_enter_scalar(data1, self.rescale_scales[level], next_level)
 
         if exact_rounding:
             data0 = [(d + r) for d, r in zip(data0, rounder0)]
@@ -1296,9 +1190,7 @@ class CkksEngine:
         return ct_mult
 
     @strictype
-    def relinearize(
-        self, ct_triplet: CiphertextTriplet, evk: EvaluationKey = None
-    ) -> Ciphertext:
+    def relinearize(self, ct_triplet: CiphertextTriplet, evk: EvaluationKey = None) -> Ciphertext:
         evk = evk or self.evk
 
         if not ct_triplet.ntt_state:
@@ -1355,9 +1247,7 @@ class CkksEngine:
             level=0,
         )
 
-        rotk = RotationKey.wrap(
-            self.create_key_switching_key(sk_rotated, sk, a=a)
-        )
+        rotk = RotationKey.wrap(self.create_key_switching_key(sk_rotated, sk, a=a))
         rotk.delta = delta
 
         logger.debug(f"Rotation key created for delta {delta}")
@@ -1372,10 +1262,7 @@ class CkksEngine:
         # origin = rotk.origin
         # delta = int(origin.split(":")[-1])
 
-        rotated_ct_data = [
-            [codec_rotate(d, rotk.delta) for d in ct_data]
-            for ct_data in ct.data
-        ]
+        rotated_ct_data = [[codec_rotate(d, rotk.delta) for d in ct_data] for ct_data in ct.data]
 
         # Rotated ct may contain negative numbers.
         mult_type = -2 if include_special else -1
@@ -1399,8 +1286,7 @@ class CkksEngine:
         sk = sk or self.sk
         galois_deltas = [2**i for i in range(self.ckksCtx.logN - 1)]
         galois_key_parts = [
-            self._create_rotation_key(delta=delta, sk=sk)
-            for delta in galois_deltas
+            self._create_rotation_key(delta=delta, sk=sk) for delta in galois_deltas
         ]
 
         galois_key = GaloisKey(
@@ -1447,9 +1333,7 @@ class CkksEngine:
             return rotated_ct
 
     @strictype
-    def rotate_offset(
-        self, ct: Ciphertext, offset: int, memory_save=True
-    ) -> Ciphertext:
+    def rotate_offset(self, ct: Ciphertext, offset: int, memory_save=True) -> Ciphertext:
         if memory_save:
             return self.rotate_galois(ct, delta=offset)
         else:
@@ -1486,9 +1370,7 @@ class CkksEngine:
         )
 
     @strictype
-    def cc_add_triplet(
-        self, a: CiphertextTriplet, b: CiphertextTriplet
-    ) -> CiphertextTriplet:
+    def cc_add_triplet(self, a: CiphertextTriplet, b: CiphertextTriplet) -> CiphertextTriplet:
         if not a.ntt_state:
             raise errors.NTTStateError(expected=True)
         if not a.montgomery_state:
@@ -1528,9 +1410,7 @@ class CkksEngine:
         # elif (
         #     a.origin == origin_names["ctt"] and b.origin == origin_names["ctt"]
         # ):
-        elif isinstance(a, CiphertextTriplet) and isinstance(
-            b, CiphertextTriplet
-        ):
+        elif isinstance(a, CiphertextTriplet) and isinstance(b, CiphertextTriplet):
             result = self.cc_add_triplet(a, b)
         else:
             raise errors.DifferentTypeError(a=type(a), b=type(b))
@@ -1566,9 +1446,7 @@ class CkksEngine:
         )
 
     @strictype
-    def cc_sub_triplet(
-        self, a: CiphertextTriplet, b: CiphertextTriplet
-    ) -> CiphertextTriplet:
+    def cc_sub_triplet(self, a: CiphertextTriplet, b: CiphertextTriplet) -> CiphertextTriplet:
         if not a.ntt_state:
             raise errors.NTTStateError(expected=True)
         if not a.montgomery_state:
@@ -1604,9 +1482,7 @@ class CkksEngine:
     ) -> Union[Ciphertext, CiphertextTriplet]:
         if isinstance(a, Ciphertext) and isinstance(b, Ciphertext):
             ct_sub = self.cc_sub_double(a, b)
-        elif isinstance(a, CiphertextTriplet) and isinstance(
-            b, CiphertextTriplet
-        ):
+        elif isinstance(a, CiphertextTriplet) and isinstance(b, CiphertextTriplet):
             ct_sub = self.cc_sub_triplet(a, b)
         else:
             raise errors.DifferentTypeError(a=type(a), b=type(b))
@@ -1623,21 +1499,15 @@ class CkksEngine:
 
         src_level = current_level + 1
 
-        dst_len_devices = len(self.nttCtx.p.destination_arrays[dst_level])
+        dst_len_devices = len(self.nttCtx.rnsPart.destination_arrays[dst_level])
 
-        diff_deviation = self.deviations[dst_level] / np.sqrt(
-            self.deviations[src_level]
-        )
+        diff_deviation = self.deviations[dst_level] / np.sqrt(self.deviations[src_level])
 
         deviated_delta = round(self.scale * diff_deviation)
 
         if dst_level - src_level > 0:
-            src_rns_lens = [
-                len(d) for d in self.nttCtx.p.destination_arrays[src_level]
-            ]
-            dst_rns_lens = [
-                len(d) for d in self.nttCtx.p.destination_arrays[dst_level]
-            ]
+            src_rns_lens = [len(d) for d in self.nttCtx.rnsPart.destination_arrays[src_level]]
+            dst_rns_lens = [len(d) for d in self.nttCtx.rnsPart.destination_arrays[dst_level]]
 
             diff_rns_lens = [y - x for x, y in zip(dst_rns_lens, src_rns_lens)]
 
@@ -1645,18 +1515,14 @@ class CkksEngine:
             new_ct_data1 = []
 
             for device_id in range(dst_len_devices):
-                new_ct_data0.append(
-                    new_ct.data[0][device_id][diff_rns_lens[device_id] :]
-                )
-                new_ct_data1.append(
-                    new_ct.data[1][device_id][diff_rns_lens[device_id] :]
-                )
+                new_ct_data0.append(new_ct.data[0][device_id][diff_rns_lens[device_id] :])
+                new_ct_data1.append(new_ct.data[1][device_id][diff_rns_lens[device_id] :])
         else:
             new_ct_data0, new_ct_data1 = new_ct.data
 
         multipliers = []
         for device_id in range(dst_len_devices):
-            dest = self.nttCtx.p.destination_arrays[dst_level][device_id]
+            dest = self.nttCtx.rnsPart.destination_arrays[dst_level][device_id]
             q = [self.ckksCtx.q[i] for i in dest]
 
             multiplier = [(deviated_delta * self.ckksCtx.R) % qi for qi in q]
@@ -1688,9 +1554,7 @@ class CkksEngine:
     # -------------------------------------------------------------------------------------------
 
     @strictype
-    def encodecrypt(
-        self, m, pk: PublicKey = None, *, level: int = 0, padding=True
-    ) -> Ciphertext:
+    def encodecrypt(self, m, pk: PublicKey = None, *, level: int = 0, padding=True) -> Ciphertext:
         pk = pk or self.pk
         if padding:
             m = self.padding(m=m)
@@ -1711,9 +1575,7 @@ class CkksEngine:
 
             dc_scale = int(dc_integral) * int(self.scale)
             dc_rns = []
-            for device_id, dest in enumerate(
-                self.nttCtx.p.destination_arrays[level]
-            ):
+            for device_id, dest in enumerate(self.nttCtx.rnsPart.destination_arrays[level]):
                 dci = [dc_scale % self.ckksCtx.q[i] for i in dest]
                 dci = torch.tensor(
                     dci,
@@ -1753,14 +1615,8 @@ class CkksEngine:
         pte0 = self.nttCtx.mont_add(pt_tiled, e0_tiled, level, mult_type)
 
         start = self.nttCtx.starts[level]
-        pk0 = [
-            pk.data[0][di][start[di] :]
-            for di in range(self.nttCtx.num_devices)
-        ]
-        pk1 = [
-            pk.data[1][di][start[di] :]
-            for di in range(self.nttCtx.num_devices)
-        ]
+        pk0 = [pk.data[0][di][start[di] :] for di in range(self.nttCtx.num_devices)]
+        pk1 = [pk.data[1][di][start[di] :] for di in range(self.nttCtx.num_devices)]
 
         v = self.rng.randint(amax=2, shift=0, repeats=1)
 
@@ -1853,13 +1709,11 @@ class CkksEngine:
             pt = self.nttCtx.mont_add([ct0], sa, level)
             self.nttCtx.reduce_2q(pt, level)
 
-        base_at = (
-            -self.ckksCtx.num_special_primes - 1 if ct.include_special else -1
-        )
+        base_at = -self.ckksCtx.num_special_primes - 1 if ct.include_special else -1
         base = pt[0][base_at][None, :]
         scaler = pt[0][0][None, :]
 
-        len_left = len(self.nttCtx.p.destination_arrays[level][0])
+        len_left = len(self.nttCtx.rnsPart.destination_arrays[level][0])
 
         if (len_left >= 3) and self.bias_guard:
             dc0 = base[0][0].item()
@@ -1869,9 +1723,9 @@ class CkksEngine:
             base[0][0] = 0
             scaler[0][0] = 0
 
-            q0_ind = self.nttCtx.p.destination_arrays[level][0][base_at]
-            q1_ind = self.nttCtx.p.destination_arrays[level][0][0]
-            q2_ind = self.nttCtx.p.destination_arrays[level][0][1]
+            q0_ind = self.nttCtx.rnsPart.destination_arrays[level][0][base_at]
+            q1_ind = self.nttCtx.rnsPart.destination_arrays[level][0][0]
+            q2_ind = self.nttCtx.rnsPart.destination_arrays[level][0][1]
 
             q0 = self.ckksCtx.q[q0_ind]
             q1 = self.ckksCtx.q[q1_ind]
@@ -1903,9 +1757,7 @@ class CkksEngine:
         if final_round:
             # The scaler and the base channels are guaranteed to be in the
             # device 0.
-            rounding_prime = self.nttCtx.qlists[0][
-                -self.ckksCtx.num_special_primes - 2
-            ]
+            rounding_prime = self.nttCtx.qlists[0][-self.ckksCtx.num_special_primes - 2]
             rounder = (scaler[0] > (rounding_prime // 2)) * 1
             scaled[0] += rounder
 
@@ -1954,18 +1806,13 @@ class CkksEngine:
             montgomery_state=True,
             level=0,
         )
-        rotk = ConjugationKey.wrap(
-            self.create_key_switching_key(sk_rotated, sk)
-        )
-        # rotk = rotk.origin = origin_names["conjk"]
+        rotk = ConjugationKey.wrap(self.create_key_switching_key(sk_rotated, sk))
         return rotk
 
     @strictype
     def conjugate(self, ct: Ciphertext, conjk: ConjugationKey) -> Ciphertext:
         level = ct.level
-        conj_ct_data = [
-            [codec_conjugate(d) for d in ct_data] for ct_data in ct.data
-        ]
+        conj_ct_data = [[codec_conjugate(d) for d in ct_data] for ct_data in ct.data]
 
         conj_ct_sk = Ciphertext(
             data=conj_ct_data,
@@ -2066,15 +1913,11 @@ class CkksEngine:
         device_len = len(ct.data[0])
 
         int_scalar = int(scalar)
-        mont_scalar = [
-            (int_scalar * self.ckksCtx.R) % qi for qi in self.ckksCtx.q
-        ]
+        mont_scalar = [(int_scalar * self.ckksCtx.R) % qi for qi in self.ckksCtx.q]
 
-        dest = self.nttCtx.p.destination_arrays[ct.level]
+        dest = self.nttCtx.rnsPart.destination_arrays[ct.level]
 
-        partitioned_mont_scalar = [
-            [mont_scalar[i] for i in desti] for desti in dest
-        ]
+        partitioned_mont_scalar = [[mont_scalar[i] for i in desti] for desti in dest]
         tensorized_scalar = []
         for device_id in range(device_len):
             scal_tensor = torch.tensor(
@@ -2087,9 +1930,7 @@ class CkksEngine:
         new_ct = ct.clone()
         new_data = new_ct.data
         for i in [0, 1]:
-            self.nttCtx.mont_enter_scalar(
-                new_data[i], tensorized_scalar, ct.level
-            )
+            self.nttCtx.mont_enter_scalar(new_data[i], tensorized_scalar, ct.level)
             self.nttCtx.reduce_2q(new_data[i], ct.level)
 
         return new_ct
@@ -2098,19 +1939,13 @@ class CkksEngine:
     def mult_scalar(self, ct: Ciphertext, scalar) -> Ciphertext:
         device_len = len(ct.data[0])
 
-        scaled_scalar = int(
-            scalar * self.scale * np.sqrt(self.deviations[ct.level + 1]) + 0.5
-        )
+        scaled_scalar = int(scalar * self.scale * np.sqrt(self.deviations[ct.level + 1]) + 0.5)
 
-        mont_scalar = [
-            (scaled_scalar * self.ckksCtx.R) % qi for qi in self.ckksCtx.q
-        ]
+        mont_scalar = [(scaled_scalar * self.ckksCtx.R) % qi for qi in self.ckksCtx.q]
 
-        dest = self.nttCtx.p.destination_arrays[ct.level]
+        dest = self.nttCtx.rnsPart.destination_arrays[ct.level]
 
-        partitioned_mont_scalar = [
-            [mont_scalar[i] for i in dest_i] for dest_i in dest
-        ]
+        partitioned_mont_scalar = [[mont_scalar[i] for i in dest_i] for dest_i in dest]
         tensorized_scalar = []
         for device_id in range(device_len):
             scal_tensor = torch.tensor(
@@ -2126,9 +1961,7 @@ class CkksEngine:
         new_data = new_ct.data
 
         for i in [0, 1]:
-            self.nttCtx.mont_enter_scalar(
-                new_data[i], tensorized_scalar, ct.level
-            )
+            self.nttCtx.mont_enter_scalar(new_data[i], tensorized_scalar, ct.level)
             self.nttCtx.reduce_2q(new_data[i], ct.level)
 
         return self.rescale(new_ct)
@@ -2137,9 +1970,7 @@ class CkksEngine:
     def add_scalar(self, ct: Ciphertext, scalar) -> Ciphertext:
         device_len = len(ct.data[0])
 
-        scaled_scalar = int(
-            scalar * self.scale * self.deviations[ct.level] + 0.5
-        )
+        scaled_scalar = int(scalar * self.scale * self.deviations[ct.level] + 0.5)
 
         if self.norm == "backward":
             scaled_scalar *= self.ckksCtx.N
@@ -2148,11 +1979,9 @@ class CkksEngine:
 
         scaled_scalar = [scaled_scalar % qi for qi in self.ckksCtx.q]
 
-        dest = self.nttCtx.p.destination_arrays[ct.level]
+        dest = self.nttCtx.rnsPart.destination_arrays[ct.level]
 
-        partitioned_mont_scalar = [
-            [scaled_scalar[i] for i in desti] for desti in dest
-        ]
+        partitioned_mont_scalar = [[scaled_scalar[i] for i in desti] for desti in dest]
         tensorized_scalar = []
         for device_id in range(device_len):
             scal_tensor = torch.tensor(
@@ -2173,32 +2002,12 @@ class CkksEngine:
 
         return new_ct
 
-    # todo try to rewrite ops into the data structure as override methods
-
-    # def sub_scalar(self, ct, scalar):
-    #     return self.add_scalar(ct, -scalar)
-
-    # def int_scalar_mult(self, scalar, ct, evk=None, relin=True):
-    #     return self.mult_int_scalar(ct, scalar)
-
-    # def scalar_mult(self, scalar, ct, evk=None, relin=True):
-    #     return self.mult_scalar(ct, scalar)
-
-    # def scalar_add(self, scalar, ct):
-    #     return self.add_scalar(ct, scalar)
-
-    # def scalar_sub(self, scalar, ct):
-    #     neg_ct = self.negate(ct)
-    #     return self.add_scalar(neg_ct, scalar)
-
     # -------------------------------------------------------------------------------------------
     # message ops.
     # -------------------------------------------------------------------------------------------
 
     @strictype
-    def mc_mult(
-        self, m, ct: Ciphertext, inplace=False, post_rescale=True
-    ) -> Ciphertext:
+    def mc_mult(self, m, ct: Ciphertext, inplace=False, post_rescale=True) -> Ciphertext:
         return self.pc_mult(
             pt=Plaintext(m),
             ct=ct,
@@ -2209,21 +2018,6 @@ class CkksEngine:
     @strictype
     def mc_add(self, m, ct: Ciphertext, inplace=False) -> Ciphertext:
         return self.pc_add(pt=Plaintext(m), ct=ct, inplace=inplace)
-
-    # todo overwrite ops in the data structure, in a new file with @patch
-
-    # def mc_sub(self, m, ct):
-    #     neg_ct = self.negate(ct)
-    #     return self.mc_add(m, neg_ct)
-
-    # def cm_mult(self, ct, m, evk=None, relin=True):
-    #     return self.mc_mult(m, ct)
-
-    # def cm_add(self, ct, m):
-    #     return self.mc_add(m, ct)
-
-    # def cm_sub(self, ct, m):
-    #     return self.mc_add(-np.array(m), ct)
 
     # -------------------------------------------------------------------------------------------
     # Misc.
@@ -2288,15 +2082,11 @@ class CkksEngine:
         cta_dev = self.cc_sub(ct_a, cta_mean)
         ctb_dev = self.cc_sub(ct_b, ctb_mean)
 
-        ct_cov = self.mc_mult(
-            ct=self.cc_mult(cta_dev, ctb_dev, evk), m=1 / (self.num_slots - 1)
-        )
+        ct_cov = self.mc_mult(ct=self.cc_mult(cta_dev, ctb_dev, evk), m=1 / (self.num_slots - 1))
         return ct_cov
 
     @strictype
-    def pow(
-        self, ct: Ciphertext, power: int, evk: EvaluationKey = None
-    ) -> Ciphertext:
+    def pow(self, ct: Ciphertext, power: int, evk: EvaluationKey = None) -> Ciphertext:
         evk = evk or self.evk
 
         current_exponent = 2
@@ -2321,46 +2111,7 @@ class CkksEngine:
         return new_ct
 
     @strictype
-    def square(
-        self, ct: Ciphertext, evk: EvaluationKey = None, *, post_relin=True
-    ) -> Union[CiphertextTriplet, Ciphertext]:
-        x = self.rescale(ct)
-
-        level = x.level
-
-        # Multiply.
-        x0, x1 = x.data
-
-        self.nttCtx.enter_ntt(x0, level)
-        self.nttCtx.enter_ntt(x1, level)
-
-        d0 = self.nttCtx.mont_mult(x0, x0, level)
-        x0y1 = self.nttCtx.mont_mult(x0, x1, level)
-        d2 = self.nttCtx.mont_mult(x1, x1, level)
-
-        d1 = self.nttCtx.mont_add(x0y1, x0y1, level)
-
-        ct_mult = CiphertextTriplet(
-            data=[d0, d1, d2],
-            include_special=False,
-            ntt_state=True,
-            montgomery_state=True,
-            level=level,
-        )
-        if post_relin:
-            evk = evk or self.evk
-            ct_mult = self.relinearize(ct_triplet=ct_mult, evk=evk)
-
-        return ct_mult
-
-    #### -------------------------------------------------------------------------------------------
-    ####  Statistics
-    #### -------------------------------------------------------------------------------------------
-
-    @strictype
-    def sqrt(
-        self, ct: Ciphertext, evk: EvaluationKey = None, e=0.0001, alpha=0.0001
-    ) -> Ciphertext:
+    def sqrt(self, ct: Ciphertext, evk: EvaluationKey = None, e=0.0001, alpha=0.0001) -> Ciphertext:
         a = ct.clone()
         b = ct.clone()
         evk = evk or self.evk
@@ -2368,17 +2119,21 @@ class CkksEngine:
         while e <= 1 - alpha:
             k = float(np.roots([1 - e**3, -6 + 6 * e**2, 9 - 9 * e])[1])
             t = self.mult_scalar(a, k, evk)
-            b0 = self.sub_scalar(t, 3)
+            b0 = self.add_scalar(t, -3)
             b1 = self.mult_scalar(b, (k**0.5) / 2, evk)
             b = self.cc_mult(b0, b1, evk)
 
             a0 = self.mult_scalar(a, (k**3) / 4)
-            t = self.sub_scalar(a, 3 / k)
-            a1 = self.square(t, evk)
+            t = self.add_scalar(a, -3 / k)
+            a1 = self.cc_mult(t, t, evk)
             a = self.cc_mult(a0, a1, evk)
             e = k * (3 - k) ** 2 / 4
 
         return b
+
+    #### -------------------------------------------------------------------------------------------
+    ####  Statistics
+    #### -------------------------------------------------------------------------------------------
 
     @strictype
     def var(

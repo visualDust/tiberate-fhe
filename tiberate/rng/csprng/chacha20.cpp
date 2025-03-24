@@ -19,22 +19,22 @@ std::vector<torch::Tensor> chacha20(std::vector<torch::Tensor> inputs, size_t st
     // Also, the tensor must be contiguous to enable pointer arithmetic,
     // and must be stored in a cuda device.
     // Note that the input is a vector of inputs in different devices.
-    
+
     std::vector<torch::Tensor> outputs;
-    
+
     for (auto &input : inputs){
         CHECK_INPUT(input);
-    
+
         // Prepare an output.
         auto dest = input.clone();
-        
+
         // Run in cuda.
         chacha20_cuda(input, dest, step);
-        
+
         // Store to the dest.
         outputs.push_back(dest);
     }
-    
+
     return outputs;
 }
 

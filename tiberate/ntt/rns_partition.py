@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class rns_partition:
+class RnsPartition:
     def __init__(
         self, num_ordinary_primes=17, num_special_primes=2, num_devices=2
     ):

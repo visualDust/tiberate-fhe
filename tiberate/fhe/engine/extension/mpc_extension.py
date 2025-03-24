@@ -1,8 +1,8 @@
 from vdtoys.mvc import strictype
 
 from tiberate.fhe.encdec import rotate
-from tiberate.fhe.typing import *
 from tiberate.ntt import ntt_cuda
+from tiberate.typing import *
 
 from .. import errors
 from ..ckks_engine import CkksEngine
@@ -222,12 +222,14 @@ class CkksEngineMPCExtension(CkksEngine):
 
         self.nttCtx.mont_enter_scalar(Psk_src, self.mont_PR, level)
 
-        ksk = [[] for _ in range(self.nttCtx.p.num_partitions + 1)]
+        ksk = [[] for _ in range(self.nttCtx.rnsPart.num_partitions + 1)]
         for device_id in range(self.nttCtx.num_devices):
-            for part_id, part in enumerate(self.nttCtx.p.p[level][device_id]):
-                global_part_id = self.nttCtx.p.part_allocations[device_id][
-                    part_id
-                ]
+            for part_id, part in enumerate(
+                self.nttCtx.rnsPart.p[level][device_id]
+            ):
+                global_part_id = self.nttCtx.rnsPart.part_allocations[
+                    device_id
+                ][part_id]
 
                 crs = a[global_part_id] if a else None
                 pk = self.multiparty_create_public_key(

@@ -46,12 +46,8 @@ def build_CDT_binary_search_tree(security_bits=128, sigma=3.2):
     mp_sigma = mpm.mpf(str(sigma))
     mp_two = mpm.mpf("2")
     S = mp_sigma * mpm.sqrt(mp_two * mpm.pi)
-    discrete_gaussian_prob = (
-        lambda x: mpm.exp(-mpm.mpf(str(x)) ** 2 / (mp_two * mp_sigma**2)) / S
-    )
-    gaussian_prob_at_sampling_points = [
-        discrete_gaussian_prob(x) for x in sampling_points
-    ]
+    discrete_gaussian_prob = lambda x: mpm.exp(-mpm.mpf(str(x)) ** 2 / (mp_two * mp_sigma**2)) / S
+    gaussian_prob_at_sampling_points = [discrete_gaussian_prob(x) for x in sampling_points]
 
     # We need to halve the probability at 0.
     # We need to take into account the effect of symmetry, and we have
@@ -95,9 +91,7 @@ def build_CDT_binary_search_tree(security_bits=128, sigma=3.2):
         num_nodes = 2**depth
         node_index_step = num_sampling_points // num_nodes
         first_node_index = num_sampling_points // num_nodes // 2
-        node_indices = list(
-            range(first_node_index, num_sampling_points, node_index_step)
-        )
+        node_indices = list(range(first_node_index, num_sampling_points, node_index_step))
         CDT_binary_tree += node_indices
         # Use 1D expanded binary tree.
         # See https://en.wikipedia.org/wiki/Binary_tree#Arrays.

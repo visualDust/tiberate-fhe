@@ -25,7 +25,7 @@ void randint(std::vector<torch::Tensor> inputs,
 
         // reinterpret pointers from numpy.
         uint64_t *q = reinterpret_cast<uint64_t*>(q_ptrs[i]);
-        
+
         // Run in cuda.
         randint_cuda(inputs[i], q);
     }
@@ -40,7 +40,7 @@ std::vector<torch::Tensor> randint_fast(
     size_t step) {
 
     std::vector<torch::Tensor> outputs;
-    
+
     for (auto i=0; i<states.size(); i++){
         uint64_t *q = reinterpret_cast<uint64_t*>(q_ptrs[i]);
         auto result = randint_fast_cuda(states[i], q, shift, step);

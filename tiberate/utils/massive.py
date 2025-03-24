@@ -9,7 +9,7 @@ from typing import Any, Callable, Union
 import torch
 from loguru import logger
 
-from tiberate.fhe.typing import *
+from tiberate.typing import *
 
 
 def copy_some_datastruct(src):

@@ -18,10 +18,10 @@ void randround_cuda(torch::Tensor input, torch::Tensor rand_bytes);
 // The output will be returned in rand_bytes.
 void randround(std::vector<torch::Tensor> inputs,
                std::vector<torch::Tensor> rand_bytes) {
-    
+
     for (auto i=0; i<inputs.size(); i++){
         CHECK_INPUT(rand_bytes[i]);
-        
+
         // Run in cuda.
         randround_cuda(inputs[i], rand_bytes[i]);
     }
