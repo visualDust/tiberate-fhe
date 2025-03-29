@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "tiberate"
-version = "0.9.5"
+version = "0.9.6"
 description = "T(yped-l)iberate-fhe: a variant of Liberate-fhe with better typing"
 authors = [
     "Juwhan Kim <juwhan.kim@desilo.ai>",
@@ -48,6 +48,7 @@ matplotlib = "^3.10.1"
 scipy = "^1.15.2"
 nvtx = "^0.2.11"
 vdtoys = "^0.1.2"
+torch = "^2.6.0"
 
 [build-system]
 requires = ["poetry-core", "torch", "setuptools"]

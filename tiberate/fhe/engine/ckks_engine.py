@@ -23,6 +23,7 @@ from tiberate.fhe.encdec import rotate as codec_rotate
 from tiberate.ntt import NTTContext, ntt_cuda
 from tiberate.rng import Csprng, RandNumGen, SimpleRNG
 from tiberate.typing import *
+from tiberate.utils.massive import decompose_rot_offsets
 
 from . import errors
 
@@ -126,6 +127,9 @@ class CkksEngine:
     def gk(self) -> GaloisKey:
         if self.__gk is None:
             self.__gk = self._create_galois_key(self.sk)
+            warnings.deprecated(
+                "Galois key (gk) will deprecate in the future. Use rotation key (rotk) instead.",
+            )
             logger.debug("Created a new galois key.")
         return self.__gk
 
@@ -1254,7 +1258,9 @@ class CkksEngine:
         return rotk
 
     @strictype
-    def rotate_single(self, ct: Ciphertext, rotk: RotationKey) -> Ciphertext:
+    def rotate_single(
+        self, ct: Ciphertext, rotk: RotationKey, post_key_switching=True
+    ) -> Ciphertext:
         level = ct.level
         include_special = ct.include_special
         ntt_state = ct.ntt_state
@@ -1270,15 +1276,15 @@ class CkksEngine:
             self.nttCtx.make_unsigned(ct_data, level, mult_type)
             self.nttCtx.reduce_2q(ct_data, level, mult_type)
 
-        rotated_ct_rotated_sk = Ciphertext(
+        rotated_ct = Ciphertext(
             data=rotated_ct_data,
             include_special=include_special,
             ntt_state=ntt_state,
             montgomery_state=montgomery_state,
             level=level,
         )
-
-        rotated_ct = self.switch_key(rotated_ct_rotated_sk, rotk)
+        if post_key_switching:
+            rotated_ct = self.switch_key(rotated_ct, rotk)
         return rotated_ct
 
     @strictype
@@ -1307,6 +1313,7 @@ class CkksEngine:
         delta: int,
         return_circuit=False,
     ) -> Ciphertext:
+        warnings.deprecated("rotate_galois is deprecated. Use rotate_offset instead.")
         gk = gk or self.gk
         current_delta = delta % (self.ckksCtx.N // 2)
         galois_circuit = []
@@ -1333,11 +1340,13 @@ class CkksEngine:
             return rotated_ct
 
     @strictype
-    def rotate_offset(self, ct: Ciphertext, offset: int, memory_save=True) -> Ciphertext:
-        if memory_save:
-            return self.rotate_galois(ct, delta=offset)
-        else:
-            return self.rotate_single(ct, rotk=self.rotk[offset])
+    def rotate_offset(self, ct: Ciphertext, offset: int) -> Ciphertext:
+        if offset == 0:
+            return ct
+        offsets = decompose_rot_offsets(offset, self.num_slots, rotks=self.rotk)
+        for delta in offsets:
+            ct = self.rotate_single(ct, self.rotk[delta])
+        return ct
 
     # -------------------------------------------------------------------------------------------
     # Add/sub.
@@ -1404,12 +1413,9 @@ class CkksEngine:
         a: Union[Ciphertext, CiphertextTriplet],
         b: Union[Ciphertext, CiphertextTriplet],
     ) -> Union[Ciphertext, CiphertextTriplet]:
-        # if a.origin == origin_names["ct"] and b.origin == origin_names["ct"]:
         if isinstance(a, Ciphertext) and isinstance(b, Ciphertext):
             result = self.cc_add_double(a, b)
-        # elif (
-        #     a.origin == origin_names["ctt"] and b.origin == origin_names["ctt"]
-        # ):
+
         elif isinstance(a, CiphertextTriplet) and isinstance(b, CiphertextTriplet):
             result = self.cc_add_triplet(a, b)
         else:
@@ -2043,24 +2049,22 @@ class CkksEngine:
         return self.mult_scalar(ct, 1.0)
 
     @strictype
-    def sum(self, ct: Ciphertext, gk: GaloisKey = None) -> Ciphertext:
-        gk = gk or self.gk
+    def sum(self, ct: Ciphertext) -> Ciphertext:
         new_ct = ct.clone()
         for roti in range(self.ckksCtx.logN - 1):
-            rotk = gk.data[roti]
+            rotk = self.rotk[roti]
             rot_ct = self.rotate_single(new_ct, rotk)
             new_ct = self.cc_add(rot_ct, new_ct)
         return new_ct
 
     @strictype
-    def mean(self, ct: Ciphertext, gk: GaloisKey = None, *, alpha=1):
+    def mean(self, ct: Ciphertext, *, alpha=1):
         # Divide by num_slots.
         # The cipher text is refreshed here, and hence
         # doesn't beed to be refreshed at roti=0 in the loop.
-        gk = gk or self.gk
         new_ct = self.mc_mult(m=1 / self.num_slots / alpha, ct=ct)
         for roti in range(self.ckksCtx.logN - 1):
-            rotk = gk.data[roti]
+            rotk = self.rotk[roti]
             rot_ct = self.rotate_single(new_ct, rotk)
             new_ct = self.cc_add(rot_ct, new_ct)
         return new_ct
@@ -2071,13 +2075,11 @@ class CkksEngine:
         ct_a: Ciphertext,
         ct_b: Ciphertext,
         evk: EvaluationKey = None,
-        gk: GaloisKey = None,
     ) -> Ciphertext:
         evk = evk or self.evk
-        gk = gk or self.gk
 
-        cta_mean = self.mean(ct_a, gk)
-        ctb_mean = self.mean(ct_b, gk)
+        cta_mean = self.mean(ct_a)
+        ctb_mean = self.mean(ct_b)
 
         cta_dev = self.cc_sub(ct_a, cta_mean)
         ctb_dev = self.cc_sub(ct_b, ctb_mean)
@@ -2140,18 +2142,16 @@ class CkksEngine:
         self,
         ct: Ciphertext,
         evk: EvaluationKey = None,
-        gk: GaloisKey = None,
         *,
         post_relin=False,
     ) -> Ciphertext:
         evk = evk or self.evk
-        gk = gk or self.gk
-        ct_mean = self.mean(ct=ct, gk=gk)
+        ct_mean = self.mean(ct=ct)
         dev = self.cc_sub(ct, ct_mean)
         dev = self.square(ct=dev, evk=evk, post_relin=post_relin)
         if not post_relin:
             dev = self.relinearize(ct_triplet=dev, evk=evk)
-        ct_var = self.mean(ct=dev, gk=gk)
+        ct_var = self.mean(ct=dev)
         return ct_var
 
     @strictype
@@ -2159,11 +2159,9 @@ class CkksEngine:
         self,
         ct: Ciphertext,
         evk: EvaluationKey = None,
-        gk: GaloisKey = None,
         post_relin=False,
     ) -> Ciphertext:
         evk = evk or self.evk
-        gk = gk or self.gk
-        ct_var = self.var(ct=ct, evk=evk, gk=gk, post_relin=post_relin)
+        ct_var = self.var(ct=ct, evk=evk, post_relin=post_relin)
         ct_std = self.sqrt(ct=ct_var, evk=evk)
         return ct_std
