@@ -1,11 +1,9 @@
 from vdtoys.mvc import strictype
 
 from tiberate.fhe.encdec import rotate
+from tiberate.fhe.engine import CkksEngine, errors
 from tiberate.ntt import ntt_cuda
 from tiberate.typing import *
-
-from .. import errors
-from ..ckks_engine import CkksEngine
 
 
 class CkksEngineMPCExtension(CkksEngine):
@@ -35,9 +33,7 @@ class CkksEngineMPCExtension(CkksEngine):
         repeats = self.ckksCtx.num_special_primes if sk.include_special else 0
 
         if a is None:
-            a = self.rng.randint(
-                self.nttCtx.q_prepack[mult_type][level][0], repeats=repeats
-            )
+            a = self.rng.randint(self.nttCtx.q_prepack[mult_type][level][0], repeats=repeats)
 
         sa = self.nttCtx.mont_mult(a, sk.data, 0, mult_type)
         pk0 = self.nttCtx.mont_sub(e, sa, 0, mult_type)
@@ -53,9 +49,7 @@ class CkksEngineMPCExtension(CkksEngine):
         )
         return pk
 
-    def multiparty_create_collective_public_key(
-        self, pks: list[DataStruct]
-    ) -> PublicKey:
+    def multiparty_create_collective_public_key(self, pks: list[DataStruct]) -> PublicKey:
         (
             data,
             include_special,
@@ -123,9 +117,7 @@ class CkksEngineMPCExtension(CkksEngine):
         return pt
 
     @strictype
-    def multiparty_decrypt_partial(
-        self, ct: Ciphertext, sk: SecretKey
-    ) -> DataStruct:
+    def multiparty_decrypt_partial(self, ct: Ciphertext, sk: SecretKey) -> DataStruct:
         # if ct.origin != origin_names["ct"]:
         #     raise errors.NotMatchType(origin=ct.origin, to=origin_names["ct"])
         # if sk.origin != origin_names["sk"]:
@@ -156,18 +148,14 @@ class CkksEngineMPCExtension(CkksEngine):
 
         return sa
 
-    def multiparty_decrypt_fusion(
-        self, pcts: list, level=0, include_special=False
-    ):
+    def multiparty_decrypt_fusion(self, pcts: list, level=0, include_special=False):
         pt = [x.clone() for x in pcts[0]]
         for pct in pcts[1:]:
             pt = self.nttCtx.mont_add(pt, pct, level)
 
         self.nttCtx.reduce_2q(pt, level)
 
-        base_at = (
-            -self.ckksCtx.num_special_primes - 1 if include_special else -1
-        )
+        base_at = -self.ckksCtx.num_special_primes - 1 if include_special else -1
 
         base = pt[0][base_at][None, :]
         scaler = pt[0][0][None, :]
@@ -215,26 +203,17 @@ class CkksEngineMPCExtension(CkksEngine):
         level = 0
 
         stops = self.nttCtx.stops[-1]
-        Psk_src = [
-            sk_src.data[di][: stops[di]].clone()
-            for di in range(self.nttCtx.num_devices)
-        ]
+        Psk_src = [sk_src.data[di][: stops[di]].clone() for di in range(self.nttCtx.num_devices)]
 
         self.nttCtx.mont_enter_scalar(Psk_src, self.mont_PR, level)
 
         ksk = [[] for _ in range(self.nttCtx.rnsPart.num_partitions + 1)]
         for device_id in range(self.nttCtx.num_devices):
-            for part_id, part in enumerate(
-                self.nttCtx.rnsPart.p[level][device_id]
-            ):
-                global_part_id = self.nttCtx.rnsPart.part_allocations[
-                    device_id
-                ][part_id]
+            for part_id, part in enumerate(self.nttCtx.rnsPart.p[level][device_id]):
+                global_part_id = self.nttCtx.rnsPart.part_allocations[device_id][part_id]
 
                 crs = a[global_part_id] if a else None
-                pk = self.multiparty_create_public_key(
-                    sk_dst, include_special=True, a=crs
-                )
+                pk = self.multiparty_create_public_key(sk_dst, include_special=True, a=crs)
                 key = tuple(part)
                 astart = part[0]
                 astop = part[-1] + 1
@@ -263,9 +242,7 @@ class CkksEngineMPCExtension(CkksEngine):
         )
 
     @strictype
-    def multiparty_create_rotation_key(
-        self, sk: SecretKey, delta: int, a=None
-    ) -> RotationKey:
+    def multiparty_create_rotation_key(self, sk: SecretKey, delta: int, a=None) -> RotationKey:
         sk_new_data = [s.clone() for s in sk.data]
         self.nttCtx.intt(sk_new_data)
         sk_new_data = [rotate(s, delta) for s in sk_new_data]
@@ -280,25 +257,19 @@ class CkksEngineMPCExtension(CkksEngine):
             hash=self.hash,
             # version=self.version,
         )
-        rotk = RotationKey.wrap(
-            self.multiparty_create_key_switching_key(sk_rotated, sk, a=a)
-        )
+        rotk = RotationKey.wrap(self.multiparty_create_key_switching_key(sk_rotated, sk, a=a))
         # rotk = rotk._replace(origin=origin_names["rotk"] + f"{delta}")
         return rotk
 
     @strictype
-    def multiparty_generate_rotation_key(
-        self, rotks: List[RotationKey]
-    ) -> RotationKey:
+    def multiparty_generate_rotation_key(self, rotks: List[RotationKey]) -> RotationKey:
         crotk = self.clone(rotks[0])
         for rotk in rotks[1:]:
             for ksk_idx in range(len(rotk.data)):
                 update_parts = self.nttCtx.mont_add(
                     crotk.data[ksk_idx].data[0], rotk.data[ksk_idx].data[0]
                 )
-                crotk.data[ksk_idx].data[0][0].copy_(
-                    update_parts[0], non_blocking=True
-                )
+                crotk.data[ksk_idx].data[0][0].copy_(update_parts[0], non_blocking=True)
         return crotk
 
     @strictype
@@ -332,17 +303,13 @@ class CkksEngineMPCExtension(CkksEngine):
         return crs_s
 
     @strictype
-    def multiparty_create_galois_key(
-        self, sk: SecretKey, a: list
-    ) -> GaloisKey:
+    def multiparty_create_galois_key(self, sk: SecretKey, a: list) -> GaloisKey:
         # if sk.origin != origin_names["sk"]:
         #     raise errors.NotMatchType(origin=sk.origin, to=origin_names["sk"])
 
         galois_deltas = [2**i for i in range(self.ckksCtx.logN - 1)]
         galois_key_parts = [
-            self.multiparty_create_rotation_key(
-                sk, galois_deltas[idx], a=a[idx]
-            )
+            self.multiparty_create_rotation_key(sk, galois_deltas[idx], a=a[idx])
             for idx in range(len(galois_deltas))
         ]
 
@@ -358,9 +325,7 @@ class CkksEngineMPCExtension(CkksEngine):
         )
         return galois_key
 
-    def multiparty_generate_galois_key(
-        self, galks: list[DataStruct]
-    ) -> DataStruct:
+    def multiparty_generate_galois_key(self, galks: list[DataStruct]) -> DataStruct:
         cgalk = self.clone(galks[0])
         for galk in galks[1:]:  # galk
             for rotk_idx in range(len(galk.data)):  # rotk
@@ -394,21 +359,15 @@ class CkksEngineMPCExtension(CkksEngine):
         return evk_sum
 
     @strictype
-    def multiparty_mult_evk_share_sum(
-        self, evk_sum: DataStruct, sk: SecretKey
-    ) -> DataStruct:
+    def multiparty_mult_evk_share_sum(self, evk_sum: DataStruct, sk: SecretKey) -> DataStruct:
         # if sk.origin != origin_names["sk"]:
         #     raise errors.NotMatchType(origin=sk.origin, to=origin_names["sk"])
 
         evk_sum_mult = self.clone(evk_sum)
 
         for ksk_idx in range(len(evk_sum.data)):
-            update_part_b = self.nttCtx.mont_mult(
-                evk_sum_mult.data[ksk_idx].data[0], sk.data
-            )
-            update_part_a = self.nttCtx.mont_mult(
-                evk_sum_mult.data[ksk_idx].data[1], sk.data
-            )
+            update_part_b = self.nttCtx.mont_mult(evk_sum_mult.data[ksk_idx].data[0], sk.data)
+            update_part_a = self.nttCtx.mont_mult(evk_sum_mult.data[ksk_idx].data[1], sk.data)
             for dev_id in range(len(update_part_b)):
                 evk_sum_mult.data[ksk_idx].data[0][dev_id].copy_(
                     update_part_b[dev_id], non_blocking=True
@@ -419,9 +378,7 @@ class CkksEngineMPCExtension(CkksEngine):
 
         return evk_sum_mult
 
-    def multiparty_sum_evk_share_mult(
-        self, evk_sum_mult: list[DataStruct]
-    ) -> DataStruct:
+    def multiparty_sum_evk_share_mult(self, evk_sum_mult: list[DataStruct]) -> DataStruct:
         cevk = self.clone(evk_sum_mult[0])
         for evk in evk_sum_mult[1:]:
             for ksk_idx in range(len(cevk.data)):

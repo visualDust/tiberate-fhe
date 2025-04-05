@@ -9,6 +9,7 @@ import numpy as np
 import torch
 from loguru import logger
 from torch import Tensor
+from vdtoys.cache import CachedDict
 
 
 class DataStruct:
@@ -48,36 +49,6 @@ class DataStruct:
         self.level = level
         self.description = description
 
-    @classmethod
-    def clone_tensor_recursive(cls, data):
-        """Recursively clone tensors in the data structure.
-        Args:
-            data: The data structure to clone.
-        Returns:
-            The cloned data structure.
-        """
-        # Recursively clone tensors in the data structure
-        if isinstance(data, Tensor):
-            return data.clone()
-        elif isinstance(data, np.ndarray):  # plaintext src
-            return data.copy()
-        elif isinstance(data, list):
-            return [cls.clone_tensor_recursive(item) for item in data]
-        elif isinstance(data, tuple):  # legacy datastruct uses tuple
-            return tuple(cls.clone_tensor_recursive(item) for item in data)
-        elif isinstance(data, dict):  # plaintext cache
-            return {
-                key: cls.clone_tensor_recursive(value)
-                for key, value in data.items()
-            }
-        elif isinstance(data, DataStruct):
-            return data.clone()
-        else:
-            # logger.warning(
-            #     f"Unsupported data type to clone: {type(data)}, returning the original data."
-            # )
-            return data
-
     def clone(self):
         """Clone the data structure.
 
@@ -86,7 +57,7 @@ class DataStruct:
         """
         cls = self.__class__  # Get the class of the current instance
         return cls(
-            data=cls.clone_tensor_recursive(self.data),
+            data=cls.copy_tensor_to_device_recursive(self.data, self.device),
             include_special=self.include_special,
             ntt_state=self.ntt_state,
             montgomery_state=self.montgomery_state,
@@ -153,9 +124,7 @@ class DataStruct:
         return self.get_device_of_tensor(self.data)
 
     @classmethod
-    def copy_tensor_to_device_recursive(
-        cls, data, device: str, non_blocking=True
-    ):
+    def copy_tensor_to_device_recursive(cls, data, device: str, non_blocking=True):
         """Recursively move tensors in the data structure to a specified device.
         Args:
             data: The data structure to move.
@@ -167,20 +136,20 @@ class DataStruct:
         if isinstance(data, Tensor):
             return data.to(device, non_blocking=non_blocking)
         elif isinstance(data, list):
-            return [
-                cls.copy_tensor_to_device_recursive(item, device)
-                for item in data
-            ]
+            return [cls.copy_tensor_to_device_recursive(item, device) for item in data]
         elif isinstance(data, tuple):  # legacy datastruct uses tuple
-            return tuple(
-                cls.copy_tensor_to_device_recursive(item, device)
-                for item in data
-            )
+            return tuple(cls.copy_tensor_to_device_recursive(item, device) for item in data)
         elif isinstance(data, dict):  # plaintext cache
             return {
-                key: cls.copy_tensor_to_device_recursive(value, device)
+                cls.copy_tensor_to_device_recursive(
+                    key, device
+                ): cls.copy_tensor_to_device_recursive(value, device)
                 for key, value in data.items()
             }
+        elif isinstance(data, CachedDict):
+            new_instance = data.__class__(data.generator_func)
+            new_instance._cache = cls.copy_tensor_to_device_recursive(data._cache, device)
+            return new_instance
         elif isinstance(data, DataStruct):
             return data.copy_to(device)
         else:
@@ -275,6 +244,11 @@ class RotationKey(KeySwitchKey):
     delta: int = None
     pass
 
+    def copy_to(self, device, non_blocking=True) -> "RotationKey":
+        new_instance = super().copy_to(device, non_blocking)
+        new_instance.delta = self.delta
+        return new_instance
+
 
 class GaloisKey(DataStruct):
     pass
@@ -294,9 +268,7 @@ class Plaintext(DataStruct):
         self,
         src: Union[list, tuple],
         *,
-        cache: Dict[
-            int, Dict[str, Any]
-        ] = None,  # level: {what_cache: cache_data}
+        cache: Dict[int, Dict[str, Any]] = None,  # level: {what_cache: cache_data}
         padding=True,  # todo remove padding flag in legacy code
         scale=None,  # by default None, which means use engine's parameter
     ):
@@ -322,7 +294,7 @@ class Plaintext(DataStruct):
 
     def clone(self):
         cls = self.__class__
-        cache = cls.clone_tensor_recursive(self.cache)
+        cache = cls.copy_tensor_to_device_recursive(self.cache, self.device)
         return cls(self.src, cache=cache)
 
     @property
@@ -340,7 +312,9 @@ class Plaintext(DataStruct):
         return cls(self.src, cache=cache)
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(data={self.src}, cached levels={list(self.cache.keys())})"
+        return (
+            f"{self.__class__.__name__}(data={self.src}, cached levels={list(self.cache.keys())})"
+        )
 
     @property
     def level(self):
