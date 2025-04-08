@@ -1,2 +1,2 @@
 from .mpc import CkksEngineMPCExtension
-from .multigpu import MultiGPUEngineContext
+from .multigpu import IM_SCHEDULER, MultiGPUEngineContext

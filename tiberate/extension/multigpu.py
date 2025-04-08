@@ -3,13 +3,12 @@
 # Author: GavinGong aka VisualDust
 # Github: github.com/visualDust
 
-
 import atexit
 import os
 import time
 import warnings
 from functools import wraps
-from typing import Callable, Dict, Union
+from typing import Any, Callable, Dict, List, Union
 
 import torch
 import torch.distributed.rpc as rpc
@@ -21,14 +20,39 @@ from vdtoys.mvc import patch
 from tiberate import CkksEngine
 from tiberate.typing import *
 
+# Global RPC init flag
+_RPC_INITIALIZED = False
+_REGISTERED_WORKERS = []
+
+
+def init_rpc_once():
+    global _RPC_INITIALIZED
+    if _RPC_INITIALIZED:
+        return
+
+    assert "RANK" in os.environ and "WORLD_SIZE" in os.environ, "Please launch with torchrun"
+    rank = int(os.environ["RANK"])
+    world_size = int(os.environ["WORLD_SIZE"])
+    name = f"worker{rank}" if rank > 0 else "scheduler"
+
+    if rank > 0:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(rank - 1)
+
+    rpc.init_rpc(
+        name=name,
+        rank=rank,
+        world_size=world_size,
+        backend=rpc.BackendType.TENSORPIPE,
+    )
+
+    _RPC_INITIALIZED = True
+    logger.info(f"[rank {rank}] RPC initialized as {name}")
+
+
+IM_SCHEDULER = int(os.environ["RANK"]) == 0
+
 
 def warn_not_on_local_rank(rank: int):
-    """Decorator to warn if the function is not run on the specified local rank.
-
-    Args:
-        rank (int): The local rank to check.
-    """
-
     def decorator(func):
         @wraps(func)
         def wrapper(self, *args, **kwargs):
@@ -46,12 +70,7 @@ def warn_not_on_local_rank(rank: int):
 
 class WorkerContext:
     def __init__(
-        self,
-        *,
-        local_rank: int,
-        ckks_params: dict,
-        allow_sk_gen: bool = True,
-        cache: dict = {},
+        self, *, local_rank: int, ckks_params: dict, allow_sk_gen: bool = True, cache: dict = {}
     ):
         self.local_rank = local_rank
         self.engine = CkksEngine(ckks_params=ckks_params, allow_sk_gen=allow_sk_gen)
@@ -86,21 +105,6 @@ class WorkerContext:
         logger.debug(f"Worker {self.local_rank} got rotation key {rotk.keys()}")
 
     def run(self, func: Callable, *args, **kwargs) -> Union[torch.jit.Future, Any]:
-        """Run a function on this worker
-
-        Args:
-            rank (int): The rank of the worker to run the function on.
-            func (Callable): The function to run.
-            - The first argument must be CkksEngine instance.
-            - The second argument must be a dict, which is the cache of the specific worker. The changes made to the cache will be stored.
-            - If the result returns any data structure that includes tensor, it should be moved to CPU before returning.
-
-            *args: The arguments to pass to the function.
-            **kwargs: The keyword arguments to pass to the function.
-
-        Returns:
-            any: The result of the function, in the form of a Future.
-        """
         local_rank = int(os.environ["RANK"])
         logger.debug(
             f"Call {func.__name__} on local rank {local_rank}, will run on worker {self.local_rank}"
@@ -113,28 +117,13 @@ class WorkerContext:
 
 class MultiGPUEngineContext:
     def __init__(self, ckks_params: dict, allow_sk_gen: bool = True):
-        # assume the environment variables are set by torch.distributed.launch
-        assert "RANK" in os.environ, "Please launch with torchrun script"
+        init_rpc_once()
+
         rank = int(os.environ["RANK"])
         world_size = int(os.environ["WORLD_SIZE"])
-        if world_size < 2:
-            raise RuntimeError(
-                f"world_size must be at least 2 (1 scheduler + 1 worker), got {world_size}"
-            )
-        # master_addr = os.environ["MASTER_ADDR"]
-        # master_port = os.environ["MASTER_PORT"]
         self.name = f"worker{rank}" if rank > 0 else "scheduler"
-        if rank > 0:
-            os.environ["CUDA_VISIBLE_DEVICES"] = str(rank - 1)  # only one GPU per worker
-        rpc.init_rpc(
-            name=self.name,
-            rank=rank,
-            world_size=world_size,
-            backend=rpc.BackendType.TENSORPIPE,
-        )
 
         if rank == 0:
-            logger.info("[scheduler] Initializing engines on all workers")
             self._workers: List[RRef] = [
                 rpc.remote(
                     f"worker{i}",
@@ -149,10 +138,17 @@ class MultiGPUEngineContext:
             ]
 
             if allow_sk_gen and len(self._workers) > 1:
-                # read sk from worker 0
                 self.sk = self._workers[0].rpc_sync().get_sk()
                 for worker in self._workers[1:]:
                     worker.rpc_sync().set_sk(self.sk)
+        else:
+            self._context = WorkerContext(
+                local_rank=rank,
+                ckks_params=ckks_params,
+                allow_sk_gen=allow_sk_gen,
+            )
+
+        _REGISTERED_WORKERS.append(self)
 
     def set_sk(self, sk: SecretKey):
         for worker in self._workers:
@@ -171,16 +167,7 @@ class MultiGPUEngineContext:
             worker.rpc_sync().set_rotk(rotk)
 
     @property
-    def im_scheduler(self) -> bool:
-        return int(os.environ["RANK"]) == 0
-
-    @property
     def workers(self) -> List[WorkerContext]:
-        """Get the list of workers.
-
-        Returns:
-            List[WorkerContext]: The list of workers.
-        """
         local_rank = int(os.environ["RANK"])
         if local_rank != 0:
             raise RuntimeError(
@@ -189,22 +176,9 @@ class MultiGPUEngineContext:
         return self._workers
 
     def __len__(self) -> int:
-        """Get the number of workers.
-
-        Returns:
-            int: The number of workers.
-        """
         return len(self.workers)
 
     def __getitem__(self, rank: int) -> WorkerContext:
-        """Get the engine for a specific rank.
-
-        Args:
-            rank (int): The rank of the worker to get the engine for.
-
-        Returns:
-            CkksEngine: The engine for the specified rank.
-        """
         local_rank = int(os.environ["RANK"])
         if local_rank != 0:
             raise RuntimeError(
@@ -219,9 +193,10 @@ class MultiGPUEngineContext:
 
 def try_shutdown():
     try:
-        rpc.shutdown()
+        if _RPC_INITIALIZED:
+            rpc.shutdown()
     except Exception as e:
-        pass
+        logger.warning(f"RPC shutdown failed: {e}")
 
 
-atexit.register(try_shutdown)  # register shutdown function on exit
+atexit.register(try_shutdown)

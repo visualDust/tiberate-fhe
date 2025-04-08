@@ -31,20 +31,27 @@ class CkksEngine:
         self,
         ckks_params=None,
         *,
-        devices: List[int] = None,  # if device is None, will use default in creating NTTContext
+        devices: List[int] = None,  # if device is None, will use default cuda:0
         allow_sk_gen: bool = True,  # if True, will allow sk generation
         bias_guard: bool = True,
         norm: str = "forward",
-        rng_class="Csprng",  # 'Csprng' or 'SimpleRNG'
+        rng_class="Csprng",
+        **kwargs,
     ):
         if ckks_params is None:
             ckks_params = presets.logN15
             logger.info(f"CKKS parameters not specified. Using silver preset.")
 
-        self.ckksCtx = CkksContext(**ckks_params)
+        if kwargs:
+            logger.warning(
+                DeprecationWarning(
+                    "Some parameters are passed via kwargs. Please pass them explicitly via ckks_params."
+                )
+            )
+
+        self.ckksCtx = CkksContext(**{**ckks_params, **kwargs})
         self.nttCtx = NTTContext(self.ckksCtx, devices=devices)
 
-        # eavl rng class, to the specific type
         RngClass = SimpleRNG if rng_class == "SimpleRNG" else Csprng
         self.rng: RandNumGen = RngClass(
             num_coefs=self.nttCtx.ckksCtx.N,
