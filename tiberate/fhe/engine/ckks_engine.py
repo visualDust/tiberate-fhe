@@ -1,11 +1,7 @@
-import datetime
 import functools
 import math
-import pickle
 import warnings
 from hashlib import sha256
-from pathlib import Path
-from time import time
 
 import numpy as np
 import nvtx
@@ -29,19 +25,7 @@ from . import errors
 
 
 class CkksEngine:
-    __default = None
-
-    def set_as_default(self):
-        self.__class__.__default = self
-        return self
-
-    @property
-    def default(cls):
-        if cls.__default is None:
-            raise RuntimeError(
-                "Default CKKS engine is not set. Please set it using `set_as_default` method."
-            )
-        return cls.__default
+    default = None
 
     def __init__(
         self,
@@ -88,6 +72,11 @@ class CkksEngine:
         self.__evk = None
         self.__gk = None
         self.__rotk = {}
+
+        # if there is no default engine, set this as default
+        if self.__class__.default is None:
+            logger.info("Setting this engine as default.")
+            self.__class__.default = self
 
     @property
     def sk(self) -> SecretKey:
@@ -455,9 +444,9 @@ class CkksEngine:
 
         return SecretKey(
             data=unsigned_ternary,
-            include_special=include_special,
-            montgomery_state=True,
-            ntt_state=True,
+            flags=(FLAGS.INCLUDE_SPECIAL if include_special else FLAGS(0))
+            | FLAGS.MONTGOMERY_STATE
+            | FLAGS.NTT_STATE,
             level=0,
         )
 
@@ -476,7 +465,7 @@ class CkksEngine:
 
         sk = sk or self.sk
 
-        if include_special and not sk.include_special:
+        if include_special and not sk.has(FLAGS.INCLUDE_SPECIAL):
             raise errors.SecretKeyNotIncludeSpecialPrime()
 
         # Set the mult_type
@@ -488,7 +477,7 @@ class CkksEngine:
         e = self.nttCtx.tile_unsigned(e, level, mult_type)
 
         self.nttCtx.enter_ntt(e, level, mult_type)
-        repeats = self.ckksCtx.num_special_primes if sk.include_special else 0
+        repeats = self.ckksCtx.num_special_primes if sk.has(FLAGS.INCLUDE_SPECIAL) else 0
 
         # Applying mont_mult in the order of 'a', sk will
         if a is None:
@@ -499,9 +488,9 @@ class CkksEngine:
 
         return PublicKey(
             data=[pk0, a],
-            include_special=include_special,
-            ntt_state=True,
-            montgomery_state=True,
+            flags=(FLAGS.INCLUDE_SPECIAL if include_special else FLAGS(0))
+            | FLAGS.MONTGOMERY_STATE
+            | FLAGS.NTT_STATE,
             level=0,
         )
 
@@ -526,7 +515,7 @@ class CkksEngine:
         """
         pk = pk or self.pk
 
-        mult_type = -2 if pk.include_special else -1
+        mult_type = -2 if pk.has(FLAGS.INCLUDE_SPECIAL) else -1
 
         e0e1 = self.rng.discrete_gaussian(repeats=2)
 
@@ -564,9 +553,9 @@ class CkksEngine:
 
         ct = Ciphertext(
             data=[ct0, ct1],
-            include_special=mult_type == -2,
-            ntt_state=False,
-            montgomery_state=False,
+            flags=(FLAGS.INCLUDE_SPECIAL if pk.has(FLAGS.INCLUDE_SPECIAL) else FLAGS(0))
+            | FLAGS.NTT_STATE
+            | FLAGS.MONTGOMERY_STATE,
             level=level,
         )
 
@@ -582,13 +571,13 @@ class CkksEngine:
     ) -> list[torch.Tensor]:
         sk = sk or self.sk
 
-        if not ct_mult.ntt_state:
+        if not ct_mult.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=True)
-        if not ct_mult.montgomery_state:
+        if not ct_mult.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=True)
-        if not sk.ntt_state:
+        if not sk.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=True)
-        if not sk.montgomery_state:
+        if not sk.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=True)
 
         level = ct_mult.level
@@ -612,7 +601,7 @@ class CkksEngine:
         pt = self.nttCtx.mont_add(pt, d2_s2, level)
         self.nttCtx.reduce_2q(pt, level)
 
-        base_at = -self.ckksCtx.num_special_primes - 1 if ct_mult.include_special else -1
+        base_at = -self.ckksCtx.num_special_primes - 1 if ct_mult.has(FLAGS.INCLUDE_SPECIAL) else -1
 
         base = pt[0][base_at][None, :]
         scaler = pt[0][0][None, :]
@@ -639,13 +628,13 @@ class CkksEngine:
     ) -> list[torch.Tensor]:
         sk = sk or self.sk
 
-        if ct.ntt_state:
+        if ct.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=False)
-        if ct.montgomery_state:
+        if ct.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=False)
-        if not sk.ntt_state:
+        if not sk.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=True)
-        if not sk.montgomery_state:
+        if not sk.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=True)
 
         ct0 = ct.data[0][0]
@@ -660,7 +649,7 @@ class CkksEngine:
         pt = self.nttCtx.mont_add([ct0], sa, level)
         self.nttCtx.reduce_2q(pt, level)
 
-        base_at = -self.ckksCtx.num_special_primes - 1 if ct.include_special else -1
+        base_at = -self.ckksCtx.num_special_primes - 1 if ct.has(FLAGS.INCLUDE_SPECIAL) else -1
 
         base = pt[0][base_at][None, :]
         scaler = pt[0][0][None, :]
@@ -720,13 +709,13 @@ class CkksEngine:
         Creates a key to switch the key for sk_src to sk_dst.
         """
 
-        if not sk_from.ntt_state:
+        if not sk_from.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=True)
-        if not sk_from.montgomery_state:
+        if not sk_from.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=True)
-        if not sk_to.ntt_state:
+        if not sk_to.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=True)
-        if not sk_to.montgomery_state:
+        if not sk_to.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=True)
 
         level = 0
@@ -755,15 +744,15 @@ class CkksEngine:
                 update_part = ntt_cuda.mont_add([pk_data], [shard], _2q)[0]
                 pk_data.copy_(update_part, non_blocking=True)
 
-                pk.description = f"key switch key part index {global_part_id}"  # todo allow this and rename to description
+                pk.misc[
+                    "description"
+                ] = f"key switch key part index {global_part_id}"  # todo allow this and rename to description
 
                 ksk[global_part_id] = pk
 
         return KeySwitchKey(
             data=ksk,
-            include_special=True,
-            ntt_state=True,
-            montgomery_state=True,
+            flags=FLAGS.INCLUDE_SPECIAL | FLAGS.MONTGOMERY_STATE | FLAGS.NTT_STATE,
             level=level,
         )
 
@@ -1045,24 +1034,16 @@ class CkksEngine:
 
     @strictype
     def switch_key(self, ct: Ciphertext, ksk: KeySwitchKey) -> Ciphertext:
-        include_special = ct.include_special
-        ntt_state = ct.ntt_state
-        montgomery_state = ct.montgomery_state
-        # if ct.origin != origin_names["ct"]:
-        #     raise errors.NotMatchType(origin=ct.origin, to=origin_names["ct"])
-
         level = ct.level
         a = ct.data[1]
-        d0, d1 = self.create_switcher(a, ksk, level, exit_ntt=ct.ntt_state)
+        d0, d1 = self.create_switcher(a, ksk, level, exit_ntt=ct.has(FLAGS.NTT_STATE))
 
         new_ct0 = self.nttCtx.mont_add(ct.data[0], d0, level, -1)
         self.nttCtx.reduce_2q(new_ct0, level, -1)
 
         return Ciphertext(
             data=[new_ct0, d1],
-            include_special=include_special,
-            ntt_state=ntt_state,
-            montgomery_state=montgomery_state,
+            flags=ct._flags,
             level=level,
         )
 
@@ -1149,9 +1130,6 @@ class CkksEngine:
 
         return Ciphertext(
             data=[data0, data1],
-            include_special=False,
-            ntt_state=False,
-            montgomery_state=False,
             level=next_level,
         )
 
@@ -1161,9 +1139,7 @@ class CkksEngine:
         sk2_data = self.nttCtx.mont_mult(sk.data, sk.data, 0, -2)
         sk2 = EvaluationKey(
             data=sk2_data,
-            include_special=True,
-            ntt_state=True,
-            montgomery_state=True,
+            flags=FLAGS.MONTGOMERY_STATE | FLAGS.NTT_STATE | FLAGS.INCLUDE_SPECIAL,
             level=sk.level,
         )
         return EvaluationKey.wrap(self.create_key_switching_key(sk2, sk))
@@ -1208,9 +1184,7 @@ class CkksEngine:
 
         ct_mult = CiphertextTriplet(
             data=[d0, d1, d2],
-            include_special=False,
-            ntt_state=True,
-            montgomery_state=True,
+            flags=FLAGS.NTT_STATE | FLAGS.MONTGOMERY_STATE,
             level=level,
         )
         if post_relin:
@@ -1223,9 +1197,9 @@ class CkksEngine:
     def relinearize(self, ct_triplet: CiphertextTriplet, evk: EvaluationKey = None) -> Ciphertext:
         evk = evk or self.evk
 
-        if not ct_triplet.ntt_state:
+        if not ct_triplet.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=True)
-        if not ct_triplet.montgomery_state:
+        if not ct_triplet.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=True)
 
         d0, d1, d2 = ct_triplet.data
@@ -1250,9 +1224,6 @@ class CkksEngine:
         # Compose and return.
         return Ciphertext(
             data=[d0, d1],
-            include_special=False,
-            ntt_state=False,
-            montgomery_state=False,
             level=level,
         )
 
@@ -1271,14 +1242,11 @@ class CkksEngine:
         self.nttCtx.ntt(sk_new_data)
         sk_rotated = SecretKey(
             data=sk_new_data,
-            include_special=False,
-            ntt_state=True,
-            montgomery_state=True,
+            flags=FLAGS.MONTGOMERY_STATE | FLAGS.NTT_STATE,
             level=0,
         )
 
-        rotk = RotationKey.wrap(self.create_key_switching_key(sk_rotated, sk, a=a))
-        rotk.delta = delta
+        rotk = RotationKey.wrap(self.create_key_switching_key(sk_rotated, sk, a=a), delta=delta)
 
         logger.debug(f"Rotation key created for delta {delta}")
         return rotk
@@ -1288,25 +1256,18 @@ class CkksEngine:
         self, ct: Ciphertext, rotk: RotationKey, post_key_switching=True
     ) -> Ciphertext:
         level = ct.level
-        include_special = ct.include_special
-        ntt_state = ct.ntt_state
-        montgomery_state = ct.montgomery_state
-        # origin = rotk.origin
-        # delta = int(origin.split(":")[-1])
 
         rotated_ct_data = [[codec_rotate(d, rotk.delta) for d in ct_data] for ct_data in ct.data]
 
         # Rotated ct may contain negative numbers.
-        mult_type = -2 if include_special else -1
+        mult_type = -2 if ct.has(FLAGS.INCLUDE_SPECIAL) else -1
         for ct_data in rotated_ct_data:
             self.nttCtx.make_unsigned(ct_data, level, mult_type)
             self.nttCtx.reduce_2q(ct_data, level, mult_type)
 
         rotated_ct = Ciphertext(
             data=rotated_ct_data,
-            include_special=include_special,
-            ntt_state=ntt_state,
-            montgomery_state=montgomery_state,
+            flags=ct._flags,
             level=level,
         )
         if post_key_switching:
@@ -1323,9 +1284,7 @@ class CkksEngine:
 
         galois_key = GaloisKey(
             data=galois_key_parts,
-            include_special=True,
-            ntt_state=True,
-            montgomery_state=True,
+            flags=FLAGS.MONTGOMERY_STATE | FLAGS.NTT_STATE | FLAGS.INCLUDE_SPECIAL,
             level=0,
         )
         return galois_key
@@ -1339,34 +1298,43 @@ class CkksEngine:
         delta: int,
         return_circuit=False,
     ) -> Ciphertext:
-        warnings.deprecated("rotate_galois is deprecated. Use rotate_offset instead.")
-        gk = gk or self.gk
-        current_delta = delta % (self.ckksCtx.N // 2)
-        galois_circuit = []
-        galois_deltas = [2**i for i in range(self.ckksCtx.logN - 1)]
-        while current_delta:
-            galois_ind = int(math.log2(current_delta))
-            galois_delta = galois_deltas[galois_ind]
-            galois_circuit.append(galois_ind)
-            current_delta -= galois_delta
+        warnings.warn(
+            DeprecationWarning(
+                "rotate_galois is deprecated, please use rotate_offset instead. This function call has been redirected to rotate_offset."
+            )
+        )
 
-        if len(galois_circuit) > 0:
-            rotated_ct = self.rotate_single(ct, gk.data[galois_circuit[0]])
+        return self.rotate_offset(ct=ct, offset=delta, return_decomposed_offsets=return_circuit)
 
-            for delta_ind in galois_circuit[1:]:
-                rotated_ct = self.rotate_single(rotated_ct, gk.data[delta_ind])
-        elif len(galois_circuit) == 0:
-            rotated_ct = ct
-        else:
-            pass
+        # gk = gk or self.gk
+        # current_delta = delta % (self.ckksCtx.N // 2)
+        # galois_circuit = []
+        # galois_deltas = [2**i for i in range(self.ckksCtx.logN - 1)]
+        # while current_delta:
+        #     galois_ind = int(math.log2(current_delta))
+        #     galois_delta = galois_deltas[galois_ind]
+        #     galois_circuit.append(galois_ind)
+        #     current_delta -= galois_delta
 
-        if return_circuit:
-            return rotated_ct, galois_circuit
-        else:
-            return rotated_ct
+        # if len(galois_circuit) > 0:
+        #     rotated_ct = self.rotate_single(ct, gk.data[galois_circuit[0]])
+
+        #     for delta_ind in galois_circuit[1:]:
+        #         rotated_ct = self.rotate_single(rotated_ct, gk.data[delta_ind])
+        # elif len(galois_circuit) == 0:
+        #     rotated_ct = ct
+        # else:
+        #     pass
+
+        # if return_circuit:
+        #     return rotated_ct, galois_circuit
+        # else:
+        #     return rotated_ct
 
     @strictype
-    def rotate_offset(self, ct: Ciphertext, offset: int) -> Ciphertext:
+    def rotate_offset(
+        self, ct: Ciphertext, offset: int, return_decomposed_offsets=False
+    ) -> Ciphertext:
         if offset == 0:
             return ct
         if offset in self.rotk:
@@ -1374,6 +1342,8 @@ class CkksEngine:
         offsets = decompose_rot_offsets(offset, self.num_slots, rotks=self.rotk)
         for delta in offsets:
             ct = self.rotate_single(ct, self.rotk[delta])
+        if return_decomposed_offsets:
+            ct = ct, offsets
         return ct
 
     # -------------------------------------------------------------------------------------------
@@ -1381,13 +1351,13 @@ class CkksEngine:
     # -------------------------------------------------------------------------------------------
     @strictype
     def cc_add_double(self, a: Ciphertext, b: Ciphertext) -> Ciphertext:
-        if a.ntt_state:
+        if a.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=False)
-        if a.montgomery_state:
+        if a.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=False)
-        if b.ntt_state:
+        if b.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=False)
-        if b.montgomery_state:
+        if b.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=False)
 
         level = a.level
@@ -1400,21 +1370,18 @@ class CkksEngine:
 
         return Ciphertext(
             data=data,
-            include_special=False,
-            ntt_state=False,
-            montgomery_state=False,
             level=level,
         )
 
     @strictype
     def cc_add_triplet(self, a: CiphertextTriplet, b: CiphertextTriplet) -> CiphertextTriplet:
-        if not a.ntt_state:
+        if not a.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=True)
-        if not a.montgomery_state:
+        if not a.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=True)
-        if not b.ntt_state:
+        if not b.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=True)
-        if not b.montgomery_state:
+        if not b.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=True)
 
         level = a.level
@@ -1430,9 +1397,7 @@ class CkksEngine:
 
         return CiphertextTriplet(
             data=data,
-            include_special=False,
-            ntt_state=True,
-            montgomery_state=True,
+            flags=FLAGS.MONTGOMERY_STATE | FLAGS.NTT_STATE,
             level=level,
         )
 
@@ -1453,13 +1418,13 @@ class CkksEngine:
 
     @strictype
     def cc_sub_double(self, a: Ciphertext, b: Ciphertext) -> Ciphertext:
-        if a.ntt_state:
+        if a.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=False)
-        if a.montgomery_state:
+        if a.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=False)
-        if b.ntt_state:
+        if b.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=False)
-        if b.montgomery_state:
+        if b.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=False)
 
         level = a.level
@@ -1473,21 +1438,18 @@ class CkksEngine:
 
         return Ciphertext(
             data=data,
-            include_special=False,
-            ntt_state=False,
-            montgomery_state=False,
             level=level,
         )
 
     @strictype
     def cc_sub_triplet(self, a: CiphertextTriplet, b: CiphertextTriplet) -> CiphertextTriplet:
-        if not a.ntt_state:
+        if not a.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=True)
-        if not a.montgomery_state:
+        if not a.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=True)
-        if not b.ntt_state:
+        if not b.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=True)
-        if not b.montgomery_state:
+        if not b.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=True)
 
         level = a.level
@@ -1502,9 +1464,7 @@ class CkksEngine:
 
         return CiphertextTriplet(
             data=data,
-            include_special=False,
-            ntt_state=True,
-            montgomery_state=True,
+            flags=FLAGS.MONTGOMERY_STATE | FLAGS.NTT_STATE,
             level=level,
         )
 
@@ -1575,9 +1535,6 @@ class CkksEngine:
 
         new_ct = Ciphertext(
             data=[new_ct_data0, new_ct_data1],
-            include_special=False,
-            ntt_state=False,
-            montgomery_state=False,
             level=dst_level,
         )
 
@@ -1628,7 +1585,7 @@ class CkksEngine:
         for dev_id in range(1, self.nttCtx.num_devices):
             encoded.append(pt_buffer.cuda(self.nttCtx.devices[dev_id]))
 
-        mult_type = -2 if pk.include_special else -1
+        mult_type = -2 if pk.has(FLAGS.INCLUDE_SPECIAL) else -1
 
         e0e1 = self.rng.discrete_gaussian(repeats=2)
 
@@ -1671,9 +1628,7 @@ class CkksEngine:
 
         ct = Ciphertext(
             data=[ct0, ct1],
-            include_special=mult_type == -2,
-            ntt_state=False,
-            montgomery_state=False,
+            flags=(FLAGS.INCLUDE_SPECIAL if pk.has(FLAGS.INCLUDE_SPECIAL) else FLAGS(0)),
             level=level,
         )
 
@@ -1689,18 +1644,18 @@ class CkksEngine:
     ):  # todo keep on GPU or not convert back to numpy
         sk = sk or self.sk
 
-        if not sk.ntt_state:
+        if not sk.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=True)
-        if not sk.montgomery_state:
+        if not sk.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=True)
 
         level = ct.level
         sk_data = sk.data[0][self.nttCtx.starts[level][0] :]
 
         if isinstance(ct, CiphertextTriplet):
-            if not ct.ntt_state:
+            if not ct.has(FLAGS.NTT_STATE):
                 raise errors.NTTStateError(expected=True)
-            if not ct.montgomery_state:
+            if not ct.has(FLAGS.MONTGOMERY_STATE):
                 raise errors.MontgomeryStateError(expected=True)
 
             d0 = [ct.data[0][0].clone()]
@@ -1727,9 +1682,9 @@ class CkksEngine:
                 logger.warning(
                     f"ct type is mismatched: excepted {Ciphertext} or {CiphertextTriplet}, got {type(ct)}, will try to decode as ct anyway."
                 )
-            if ct.ntt_state:
+            if ct.has(FLAGS.NTT_STATE):
                 raise errors.NTTStateError(expected=False)
-            if ct.montgomery_state:
+            if ct.has(FLAGS.MONTGOMERY_STATE):
                 raise errors.MontgomeryStateError(expected=False)
 
             ct0 = ct.data[0][0]
@@ -1743,7 +1698,7 @@ class CkksEngine:
             pt = self.nttCtx.mont_add([ct0], sa, level)
             self.nttCtx.reduce_2q(pt, level)
 
-        base_at = -self.ckksCtx.num_special_primes - 1 if ct.include_special else -1
+        base_at = -self.ckksCtx.num_special_primes - 1 if ct.has(FLAGS.INCLUDE_SPECIAL) else -1
         base = pt[0][base_at][None, :]
         scaler = pt[0][0][None, :]
 
@@ -1824,9 +1779,9 @@ class CkksEngine:
     def create_conjugation_key(self, sk: SecretKey = None) -> ConjugationKey:
         sk = sk or self.sk
 
-        if not sk.ntt_state:
+        if not sk.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=True)
-        if not sk.montgomery_state:
+        if not sk.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=True)
 
         sk_new_data = [s.clone() for s in sk.data]
@@ -1835,9 +1790,7 @@ class CkksEngine:
         self.nttCtx.ntt(sk_new_data)
         sk_rotated = SecretKey(
             data=sk_new_data,
-            include_special=False,
-            ntt_state=True,
-            montgomery_state=True,
+            flags=FLAGS.MONTGOMERY_STATE | FLAGS.NTT_STATE,
             level=0,
         )
         rotk = ConjugationKey.wrap(self.create_key_switching_key(sk_rotated, sk))
@@ -1850,9 +1803,6 @@ class CkksEngine:
 
         conj_ct_sk = Ciphertext(
             data=conj_ct_data,
-            include_special=False,
-            ntt_state=False,
-            montgomery_state=False,
             level=level,
         )
 

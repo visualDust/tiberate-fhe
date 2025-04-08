@@ -19,9 +19,7 @@ class CkksEngineMPCExtension(CkksEngine):
     def multiparty_create_public_key(
         self, sk: SecretKey, a=None, include_special=False
     ) -> PublicKey:
-        # if sk.origin != origin_names["sk"]:
-        #     raise errors.NotMatchType(origin=sk.origin, to=origin_names["sk"])
-        if include_special and not sk.include_special:
+        if include_special and not sk.has(FLAGS.INCLUDE_SPECIAL):
             raise errors.SecretKeyNotIncludeSpecialPrime()
         mult_type = -2 if include_special else -1
 
@@ -30,7 +28,7 @@ class CkksEngineMPCExtension(CkksEngine):
         e = self.nttCtx.tile_unsigned(e, level, mult_type)
 
         self.nttCtx.enter_ntt(e, level, mult_type)
-        repeats = self.ckksCtx.num_special_primes if sk.include_special else 0
+        repeats = self.ckksCtx.num_special_primes if sk.has(FLAGS.INCLUDE_SPECIAL) else 0
 
         if a is None:
             a = self.rng.randint(self.nttCtx.q_prepack[mult_type][level][0], repeats=repeats)
@@ -39,13 +37,11 @@ class CkksEngineMPCExtension(CkksEngine):
         pk0 = self.nttCtx.mont_sub(e, sa, 0, mult_type)
         pk = PublicKey(
             data=[pk0, a],
-            include_special=include_special,
-            ntt_state=True,
-            montgomery_state=True,
-            # origin=origin_names["pk"],
+            flags=(FLAGS.INCLUDE_SPECIAL if include_special else FLAGS(0))
+            | FLAGS.NTT_STATE
+            | FLAGS.MONTGOMERY_STATE,
             level=level,
             hash=self.hash,
-            # version=self.version,
         )
         return pk
 
@@ -67,37 +63,30 @@ class CkksEngineMPCExtension(CkksEngine):
         for pk in pks[1:]:
             b = self.nttCtx.mont_add(b, pk.data[0], lvl=0, mult_type=mult_type)
 
+        build_flags = FLAGS(0)
+        if include_special:
+            build_flags |= FLAGS.INCLUDE_SPECIAL
+        if ntt_state:
+            build_flags |= FLAGS.NTT_STATE
+        if montgomery_state:
+            build_flags |= FLAGS.MONTGOMERY_STATE
         cpk = PublicKey(
-            (b, a),
-            include_special=include_special,
-            ntt_state=ntt_state,
-            montgomery_state=montgomery_state,
-            # origin=origin_names["pk"],
+            data=(b, a),
+            flags=build_flags,
             level=level,
             hash=self.hash,
-            # version=self.version,
         )
         return cpk
 
     @strictype
     def multiparty_decrypt_head(self, ct: Ciphertext, sk: SecretKey):
-        # if ct.origin != origin_names["ct"]:
-        #     raise errors.NotMatchType(origin=ct.origin, to=origin_names["ct"])
-        # if sk.origin != origin_names["sk"]:
-        #     raise errors.NotMatchType(origin=sk.origin, to=origin_names["sk"])
-
-        # if ct.ntt_state or ct.montgomery_state:
-        #     raise errors.NotMatchDataStructState(origin=ct.origin)
-        # if not sk.ntt_state or not sk.montgomery_state:
-        #     raise errors.NotMatchDataStructState(origin=sk.origin)
-
-        if ct.ntt_state:
+        if ct.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=False)
-        if ct.montgomery_state:
+        if ct.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=False)
-        if not sk.ntt_state:
+        if not sk.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=True)
-        if not sk.montgomery_state:
+        if not sk.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=True)
 
         level = ct.level
@@ -118,23 +107,13 @@ class CkksEngineMPCExtension(CkksEngine):
 
     @strictype
     def multiparty_decrypt_partial(self, ct: Ciphertext, sk: SecretKey) -> DataStruct:
-        # if ct.origin != origin_names["ct"]:
-        #     raise errors.NotMatchType(origin=ct.origin, to=origin_names["ct"])
-        # if sk.origin != origin_names["sk"]:
-        #     raise errors.NotMatchType(origin=sk.origin, to=origin_names["sk"])
-
-        # if ct.ntt_state or ct.montgomery_state:
-        #     raise errors.NotMatchDataStructState(origin=ct.origin)
-        # if not sk.ntt_state or not sk.montgomery_state:
-        #     raise errors.NotMatchDataStructState(origin=sk.origin)
-
-        if ct.ntt_state:
+        if ct.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=False)
-        if ct.montgomery_state:
+        if ct.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=False)
-        if not sk.ntt_state:
+        if not sk.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=True)
-        if not sk.montgomery_state:
+        if not sk.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=True)
 
         a = ct.data[1][0].clone()
@@ -178,26 +157,13 @@ class CkksEngineMPCExtension(CkksEngine):
     def multiparty_create_key_switching_key(
         self, sk_src: SecretKey, sk_dst: SecretKey, a=None
     ) -> KeySwitchKey:
-        # if (
-        #     sk_src.origin != origin_names["sk"]
-        #     or sk_src.origin != origin_names["sk"]
-        # ):
-        #     raise errors.NotMatchType(
-        #         origin="not a secret key", to=origin_names["sk"]
-        #     )
-
-        # if (not sk_src.ntt_state) or (not sk_src.montgomery_state):
-        #     raise errors.NotMatchDataStructState(origin=sk_src.origin)
-        # if (not sk_dst.ntt_state) or (not sk_dst.montgomery_state):
-        #     raise errors.NotMatchDataStructState(origin=sk_dst.origin)
-
-        if not sk_src.ntt_state:
+        if not sk_src.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=True)
-        if not sk_src.montgomery_state:
+        if not sk_src.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=True)
-        if not sk_dst.ntt_state:
+        if not sk_dst.has(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=True)
-        if not sk_dst.montgomery_state:
+        if not sk_dst.has(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=True)
 
         level = 0
@@ -232,13 +198,9 @@ class CkksEngineMPCExtension(CkksEngine):
 
         return KeySwitchKey(
             data=ksk,
-            include_special=True,
-            ntt_state=True,
-            montgomery_state=True,
-            # origin=origin_names["ksk"],
+            flags=FLAGS.NTT_STATE | FLAGS.MONTGOMERY_STATE | FLAGS.INCLUDE_SPECIAL,
             level=level,
             hash=self.hash,
-            # version=self.version,
         )
 
     @strictype
@@ -249,16 +211,14 @@ class CkksEngineMPCExtension(CkksEngine):
         self.nttCtx.ntt(sk_new_data)
         sk_rotated = DataStruct(
             data=sk_new_data,
-            include_special=False,
-            ntt_state=True,
-            montgomery_state=True,
-            # origin=origin_names["sk"],
+            flags=FLAGS.NTT_STATE | FLAGS.MONTGOMERY_STATE,
             level=0,
             hash=self.hash,
-            # version=self.version,
         )
-        rotk = RotationKey.wrap(self.multiparty_create_key_switching_key(sk_rotated, sk, a=a))
-        # rotk = rotk._replace(origin=origin_names["rotk"] + f"{delta}")
+        rotk = RotationKey.wrap(
+            self.multiparty_create_key_switching_key(sk_rotated, sk, a=a),
+            delta=delta,
+        )
         return rotk
 
     @strictype
@@ -274,13 +234,6 @@ class CkksEngineMPCExtension(CkksEngine):
 
     @strictype
     def generate_rotation_crs(self, rotk: Union[RotationKey, KeySwitchKey]):
-        # if (
-        #     origin_names["rotk"] not in rotk.origin
-        #     and origin_names["ksk"] != rotk.origin
-        # ):
-        #     raise errors.NotMatchType(
-        #         origin=rotk.origin, to=origin_names["ksk"]
-        #     )
         crss = []
         for ksk in rotk.data:
             crss.append(ksk.data[1])
@@ -292,10 +245,6 @@ class CkksEngineMPCExtension(CkksEngine):
 
     @strictype
     def generate_galois_crs(self, galk: GaloisKey):
-        # if galk.origin != origin_names["galk"]:
-        #     raise errors.NotMatchType(
-        #         origin=galk.origin, to=origin_names["galk"]
-        #     )
         crs_s = []
         for rotk in galk.data:
             crss = [ksk.data[1] for ksk in rotk.data]
@@ -304,9 +253,6 @@ class CkksEngineMPCExtension(CkksEngine):
 
     @strictype
     def multiparty_create_galois_key(self, sk: SecretKey, a: list) -> GaloisKey:
-        # if sk.origin != origin_names["sk"]:
-        #     raise errors.NotMatchType(origin=sk.origin, to=origin_names["sk"])
-
         galois_deltas = [2**i for i in range(self.ckksCtx.logN - 1)]
         galois_key_parts = [
             self.multiparty_create_rotation_key(sk, galois_deltas[idx], a=a[idx])
@@ -315,13 +261,9 @@ class CkksEngineMPCExtension(CkksEngine):
 
         galois_key = GaloisKey(
             data=galois_key_parts,
-            include_special=True,
-            montgomery_state=True,
-            ntt_state=True,
-            # origin=origin_names["galk"],
+            flags=FLAGS.NTT_STATE | FLAGS.MONTGOMERY_STATE | FLAGS.INCLUDE_SPECIAL,
             level=0,
             hash=self.hash,
-            # version=self.version,
         )
         return galois_key
 
@@ -360,9 +302,6 @@ class CkksEngineMPCExtension(CkksEngine):
 
     @strictype
     def multiparty_mult_evk_share_sum(self, evk_sum: DataStruct, sk: SecretKey) -> DataStruct:
-        # if sk.origin != origin_names["sk"]:
-        #     raise errors.NotMatchType(origin=sk.origin, to=origin_names["sk"])
-
         evk_sum_mult = self.clone(evk_sum)
 
         for ksk_idx in range(len(evk_sum.data)):

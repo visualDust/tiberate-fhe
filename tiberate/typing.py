@@ -1,53 +1,87 @@
-import inspect
 import pickle
-import typing
 from collections import defaultdict
-from functools import wraps
+from enum import Flag, auto
+from logging import warning
 from typing import Any, Dict, List, Union
 
-import numpy as np
 import torch
 from loguru import logger
 from torch import Tensor
 from vdtoys.cache import CachedDict
 
 
-class DataStruct:
-    # data: Union[list, tuple]
-    # include_special: bool
-    # ntt_state: bool
-    # montgomery_state: bool
-    # origin: str
-    # level: int
+def _default_none():
+    # use this instead of lambda: None in defaultdict to get rid of pytorch RPC Can't get local object 'DataStruct.__init__.<locals>.<lambda>' ERROR
+    return None
 
+
+class FLAGS(Flag):
+    NTT_STATE = auto()
+    MONTGOMERY_STATE = auto()
+    INCLUDE_SPECIAL = auto()
+    NEED_RESCALE = auto()
+    NEED_RELINERIZE = auto()
+
+
+class DataStruct:
     def __init__(
-        self,
-        data: Union[list, tuple],
-        include_special: bool,
-        ntt_state: bool,
-        montgomery_state: bool,
-        level: int,
-        description: str = None,
-        *args,
-        **kwargs,
+        self, data, *, flags: Union[FLAGS, List[FLAGS], None] = None, level: int, **kwargs
     ):
-        """
-        Data structure:
-        - data: the data in tensor format
-        - include_special: Boolean, including the special prime channels or not.
-        - ntt_state: Boolean, whether if the data is ntt transformed or not.
-        - montgomery_state: Boolean, whether if the data is in the Montgomery form or not.
-        - origin: String, where did this data came from - cipher text, secret key, etc.
-        - level: Integer, the current level where this data is situated.
-        - version: String, version number.
-        """
-        # todo might need a engine identifier to know which engine created this data
         self.data = data
-        self.include_special = include_special
-        self.ntt_state = ntt_state
-        self.montgomery_state = montgomery_state
+        self._flags = FLAGS(0)  # Initialize flags to 0
+        # if flags is a list of FLAGS, convert it to a single FLAGS
+        flags = flags or []
+        if isinstance(flags, list):
+            for flag in flags:
+                self._flags |= flag
+        elif isinstance(flags, FLAGS):
+            self._flags = flags
+
         self.level = level
-        self.description = description
+        self.misc = defaultdict(_default_none)
+        self.misc.update(kwargs)
+
+    def has(self, flag: FLAGS) -> bool:
+        """Check if a specific flag is set.
+        Args:
+            flag (FLAGS): The flag to check.
+        Returns:
+            bool: True if the flag is set, False otherwise.
+        """
+        return bool(self._flags & flag)
+
+    def set(self, flag: FLAGS):
+        """Set a specific flag.
+        Args:
+            flag (FLAGS): The flag to set.
+        """
+        self._flags |= flag
+
+    def remove(self, flag: FLAGS):
+        """Clear a specific flag.
+        Args:
+            flag (FLAGS): The flag to clear.
+        """
+        self._flags &= ~flag
+
+    def toggle(self, flag: FLAGS):
+        """Toggle a specific flag.
+        Args:
+            flag (FLAGS): The flag to toggle.
+        """
+        self._flags ^= flag
+
+    @property
+    def flags(self, only_set: bool = True) -> list[FLAGS]:
+        """Returns a list of all flags, optionally only those that are set."""
+        return [flag for flag in FLAGS if not only_set or self.has(flag)]
+
+    @flags.setter
+    def flags(self, value: list[FLAGS]):
+        """Set multiple flags at once."""
+        self._flags = FLAGS(0)  # Reset flags to 0
+        for flag in value:
+            self.set(flag)
 
     def clone(self):
         """Clone the data structure.
@@ -58,15 +92,13 @@ class DataStruct:
         cls = self.__class__  # Get the class of the current instance
         return cls(
             data=cls.copy_tensor_to_device_recursive(self.data, self.device),
-            include_special=self.include_special,
-            ntt_state=self.ntt_state,
-            montgomery_state=self.montgomery_state,
+            flags=self._flags,
             level=self.level,
-            description=self.description,
+            **self.misc,
         )
 
     @classmethod
-    def wrap(cls, another: "DataStruct"):
+    def wrap(cls, another: "DataStruct", **kwargs):
         """Wrap another data structure into a new instance of the same class.
         Args:
             another (DataStruct): The data structure to wrap.
@@ -75,11 +107,9 @@ class DataStruct:
         """
         return cls(
             data=another.data,
-            include_special=another.include_special,
-            ntt_state=another.ntt_state,
-            montgomery_state=another.montgomery_state,
+            flags=another._flags,
             level=another.level,
-            description=another.description,
+            **{**another.misc, **kwargs},  # another misc and kwargs
         )
 
     @classmethod
@@ -110,9 +140,6 @@ class DataStruct:
         elif isinstance(data, DataStruct):
             return cls.get_device_of_tensor(data.data)
         else:
-            # logger.warning(
-            #     f"Unsupported data type to get device: {type(data)}, will return 'cpu'."
-            # )
             return "cpu"
 
     @property
@@ -153,9 +180,6 @@ class DataStruct:
         elif isinstance(data, DataStruct):
             return data.copy_to(device)
         else:
-            # logger.warning(
-            #     f"Unsupported data type to move to device: {type(data)}, returning the original data."
-            # )
             return data
 
     def copy_to(self, device: str, non_blocking=True):
@@ -170,11 +194,9 @@ class DataStruct:
             data=cls.copy_tensor_to_device_recursive(
                 data=self.data, device=device, non_blocking=non_blocking
             ),
-            include_special=self.include_special,
-            ntt_state=self.ntt_state,
-            montgomery_state=self.montgomery_state,
+            flags=self._flags,
             level=self.level,
-            description=self.description,
+            **self.misc,
         )
 
     def to(self, device: str, non_blocking=True):
@@ -198,7 +220,9 @@ class DataStruct:
         return pickle.loads(data)
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(data={self.data}, include_special={self.include_special}, ntt_state={self.ntt_state}, montgomery_state={self.montgomery_state}, level={self.level}, description={self.description})"
+        return (
+            f"{self.__class__.__name__}(flags={self.flags}, level={self.level}, misc={self.misc})"
+        )
 
     def __str__(self):
         return self.__repr__()  # todo for better readability
@@ -214,7 +238,6 @@ class Ciphertext(DataStruct):
 
 
 class CiphertextTriplet(DataStruct):
-    # todo does CiphertextTriplet even exits ntt_state and montgomery_state?
     pass
 
 
@@ -241,17 +264,23 @@ class KeySwitchKey(DataStruct):
 
 
 class RotationKey(KeySwitchKey):
-    delta: int = None
-    pass
+    @property
+    def delta(self):
+        return self.misc.get("delta")
 
-    def copy_to(self, device, non_blocking=True) -> "RotationKey":
-        new_instance = super().copy_to(device, non_blocking)
-        new_instance.delta = self.delta
-        return new_instance
+    @delta.setter
+    def delta(self, value):
+        self.misc["delta"] = value
 
 
 class GaloisKey(DataStruct):
-    pass
+    def __init__(self, data, *, flags=None, level, **kwargs):
+        super().__init__(data, flags=flags, level=level, **kwargs)
+        logger.warning(
+            DeprecationWarning(
+                "GaloisKey is deprecated, methods that uses GaloisKey will be removed in future versions."
+            )
+        )
 
 
 class ConjugationKey(DataStruct):
