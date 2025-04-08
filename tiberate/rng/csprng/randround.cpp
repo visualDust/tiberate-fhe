@@ -19,7 +19,7 @@ void randround_cuda(torch::Tensor input, torch::Tensor rand_bytes);
 void randround(std::vector<torch::Tensor> inputs,
                std::vector<torch::Tensor> rand_bytes) {
 
-    for (auto i=0; i<inputs.size(); i++){
+    for (size_t i=0; i<inputs.size(); i++){
         CHECK_INPUT(rand_bytes[i]);
 
         // Run in cuda.

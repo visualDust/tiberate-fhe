@@ -22,6 +22,8 @@ This is a variant of [Desilo/liberate-fhe](https://github.com/Desilo/liberate-fh
 pip install tiberate --verbose
 ```
 
+The install process may take long time depending on your machine. Using verbose flag will help you to see the progress.
+
 > [!NOTE]
 > If you encounter the error saying "The detected CUDA version mismatches the version that was used to compile PyTorch.", you can switch cuda version, or manually install pytorch with the same CUDA version as your system, then install this package without dependencies via:
 >

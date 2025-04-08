@@ -119,46 +119,46 @@ torch::Tensor tile_unsigned_cuda(torch::Tensor a,
 
 std::vector<torch::Tensor> mont_mult(
     const std::vector<torch::Tensor> a,
-    const std::vector<torch::Tensor> b, 
+    const std::vector<torch::Tensor> b,
     const std::vector<torch::Tensor> ql,
     const std::vector<torch::Tensor> qh,
     const std::vector<torch::Tensor> kl,
     const std::vector<torch::Tensor> kh) {
-    
+
     std::vector<torch::Tensor> outputs;
-    
-    const auto num_devices = a.size();    
-    for (int i=0; i<num_devices; ++i){
+
+    const auto num_devices = a.size();
+    for (size_t i=0; i<num_devices; ++i){
         auto c = mont_mult_cuda(a[i],
-                                b[i], 
+                                b[i],
                                 ql[i],
                                 qh[i],
                                 kl[i],
                                 kh[i]);
-        
+
         outputs.push_back(c);
-        
+
     }
-    
+
     return outputs;
 }
 
 void mont_enter(
     std::vector<torch::Tensor> a,
-    const std::vector<torch::Tensor> Rs, 
+    const std::vector<torch::Tensor> Rs,
     const std::vector<torch::Tensor> ql,
     const std::vector<torch::Tensor> qh,
     const std::vector<torch::Tensor> kl,
     const std::vector<torch::Tensor> kh) {
-        
-    const auto num_devices = a.size();    
-    for (int i=0; i<num_devices; ++i){
+
+    const auto num_devices = a.size();
+    for (size_t i=0; i<num_devices; ++i){
         mont_enter_cuda(a[i],
-                        Rs[i], 
+                        Rs[i],
                         ql[i],
                         qh[i],
                         kl[i],
-                        kh[i]);        
+                        kh[i]);
     }
 }
 
@@ -166,25 +166,25 @@ void mont_enter(
 void ntt(
     std::vector<torch::Tensor> a,
     const std::vector<torch::Tensor> even,
-    const std::vector<torch::Tensor> odd, 
+    const std::vector<torch::Tensor> odd,
     const std::vector<torch::Tensor> psi,
     const std::vector<torch::Tensor> _2q,
     const std::vector<torch::Tensor> ql,
     const std::vector<torch::Tensor> qh,
     const std::vector<torch::Tensor> kl,
     const std::vector<torch::Tensor> kh) {
-        
-    const auto num_devices = a.size();    
-    for (int i=0; i<num_devices; ++i){
+
+    const auto num_devices = a.size();
+    for (size_t i=0; i<num_devices; ++i){
         ntt_cuda(a[i],
                 even[i],
-                odd[i], 
+                odd[i],
                 psi[i],
                 _2q[i],
                 ql[i],
                 qh[i],
                 kl[i],
-                kh[i]);        
+                kh[i]);
     }
 }
 
@@ -192,26 +192,26 @@ void enter_ntt(
     std::vector<torch::Tensor> a,
     const std::vector<torch::Tensor> Rs,
     const std::vector<torch::Tensor> even,
-    const std::vector<torch::Tensor> odd, 
+    const std::vector<torch::Tensor> odd,
     const std::vector<torch::Tensor> psi,
     const std::vector<torch::Tensor> _2q,
     const std::vector<torch::Tensor> ql,
     const std::vector<torch::Tensor> qh,
     const std::vector<torch::Tensor> kl,
     const std::vector<torch::Tensor> kh) {
-        
-    const auto num_devices = a.size();    
-    for (int i=0; i<num_devices; ++i){
+
+    const auto num_devices = a.size();
+    for (size_t i=0; i<num_devices; ++i){
         enter_ntt_cuda(a[i],
                 Rs[i],
                 even[i],
-                odd[i], 
+                odd[i],
                 psi[i],
                 _2q[i],
                 ql[i],
                 qh[i],
                 kl[i],
-                kh[i]);        
+                kh[i]);
     }
 }
 
@@ -219,7 +219,7 @@ void enter_ntt(
 void intt(
     std::vector<torch::Tensor> a,
     const std::vector<torch::Tensor> even,
-    const std::vector<torch::Tensor> odd, 
+    const std::vector<torch::Tensor> odd,
     const std::vector<torch::Tensor> psi,
     const std::vector<torch::Tensor> Ninv,
     const std::vector<torch::Tensor> _2q,
@@ -227,19 +227,19 @@ void intt(
     const std::vector<torch::Tensor> qh,
     const std::vector<torch::Tensor> kl,
     const std::vector<torch::Tensor> kh) {
-        
-    const auto num_devices = a.size();    
-    for (int i=0; i<num_devices; ++i){
+
+    const auto num_devices = a.size();
+    for (size_t i=0; i<num_devices; ++i){
         intt_cuda(a[i],
                 even[i],
-                odd[i], 
+                odd[i],
                 psi[i],
                 Ninv[i],
                 _2q[i],
                 ql[i],
                 qh[i],
                 kl[i],
-                kh[i]);        
+                kh[i]);
     }
 }
 
@@ -250,14 +250,14 @@ void mont_redc(
     const std::vector<torch::Tensor> qh,
     const std::vector<torch::Tensor> kl,
     const std::vector<torch::Tensor> kh) {
-        
-    const auto num_devices = a.size();    
-    for (int i=0; i<num_devices; ++i){
+
+    const auto num_devices = a.size();
+    for (size_t i=0; i<num_devices; ++i){
         mont_redc_cuda(a[i],
                         ql[i],
                         qh[i],
                         kl[i],
-                        kh[i]);        
+                        kh[i]);
     }
 }
 
@@ -266,7 +266,7 @@ void mont_redc(
 void intt_exit(
     std::vector<torch::Tensor> a,
     const std::vector<torch::Tensor> even,
-    const std::vector<torch::Tensor> odd, 
+    const std::vector<torch::Tensor> odd,
     const std::vector<torch::Tensor> psi,
     const std::vector<torch::Tensor> Ninv,
     const std::vector<torch::Tensor> _2q,
@@ -274,26 +274,26 @@ void intt_exit(
     const std::vector<torch::Tensor> qh,
     const std::vector<torch::Tensor> kl,
     const std::vector<torch::Tensor> kh) {
-        
-    const auto num_devices = a.size();    
-    for (int i=0; i<num_devices; ++i){
+
+    const auto num_devices = a.size();
+    for (size_t i=0; i<num_devices; ++i){
         intt_exit_cuda(a[i],
                 even[i],
-                odd[i], 
+                odd[i],
                 psi[i],
                 Ninv[i],
                 _2q[i],
                 ql[i],
                 qh[i],
                 kl[i],
-                kh[i]);        
+                kh[i]);
     }
 }
 
 void intt_exit_reduce(
     std::vector<torch::Tensor> a,
     const std::vector<torch::Tensor> even,
-    const std::vector<torch::Tensor> odd, 
+    const std::vector<torch::Tensor> odd,
     const std::vector<torch::Tensor> psi,
     const std::vector<torch::Tensor> Ninv,
     const std::vector<torch::Tensor> _2q,
@@ -301,26 +301,26 @@ void intt_exit_reduce(
     const std::vector<torch::Tensor> qh,
     const std::vector<torch::Tensor> kl,
     const std::vector<torch::Tensor> kh) {
-        
-    const auto num_devices = a.size();    
-    for (int i=0; i<num_devices; ++i){
+
+    const auto num_devices = a.size();
+    for (size_t i=0; i<num_devices; ++i){
         intt_exit_reduce_cuda(a[i],
                 even[i],
-                odd[i], 
+                odd[i],
                 psi[i],
                 Ninv[i],
                 _2q[i],
                 ql[i],
                 qh[i],
                 kl[i],
-                kh[i]);        
+                kh[i]);
     }
 }
 
 void intt_exit_reduce_signed(
     std::vector<torch::Tensor> a,
     const std::vector<torch::Tensor> even,
-    const std::vector<torch::Tensor> odd, 
+    const std::vector<torch::Tensor> odd,
     const std::vector<torch::Tensor> psi,
     const std::vector<torch::Tensor> Ninv,
     const std::vector<torch::Tensor> _2q,
@@ -328,78 +328,78 @@ void intt_exit_reduce_signed(
     const std::vector<torch::Tensor> qh,
     const std::vector<torch::Tensor> kl,
     const std::vector<torch::Tensor> kh) {
-        
-    const auto num_devices = a.size();    
-    for (int i=0; i<num_devices; ++i){
+
+    const auto num_devices = a.size();
+    for (size_t i=0; i<num_devices; ++i){
         intt_exit_reduce_signed_cuda(a[i],
                 even[i],
-                odd[i], 
+                odd[i],
                 psi[i],
                 Ninv[i],
                 _2q[i],
                 ql[i],
                 qh[i],
                 kl[i],
-                kh[i]);        
+                kh[i]);
     }
 }
 
 void reduce_2q(
     std::vector<torch::Tensor> a,
     const std::vector<torch::Tensor> _2q) {
-        
-    const auto num_devices = a.size();    
-    for (int i=0; i<num_devices; ++i){
-        reduce_2q_cuda(a[i], _2q[i]);        
+
+    const auto num_devices = a.size();
+    for (size_t i=0; i<num_devices; ++i){
+        reduce_2q_cuda(a[i], _2q[i]);
     }
 }
 
 void make_signed(
     std::vector<torch::Tensor> a,
     const std::vector<torch::Tensor> _2q) {
-        
-    const auto num_devices = a.size();    
-    for (int i=0; i<num_devices; ++i){
-        make_signed_cuda(a[i], _2q[i]);        
+
+    const auto num_devices = a.size();
+    for (size_t i=0; i<num_devices; ++i){
+        make_signed_cuda(a[i], _2q[i]);
     }
 }
 
 void make_unsigned(
     std::vector<torch::Tensor> a,
     const std::vector<torch::Tensor> _2q) {
-        
-    const auto num_devices = a.size();    
-    for (int i=0; i<num_devices; ++i){
-        make_unsigned_cuda(a[i], _2q[i]);        
+
+    const auto num_devices = a.size();
+    for (size_t i=0; i<num_devices; ++i){
+        make_unsigned_cuda(a[i], _2q[i]);
     }
 }
 
 std::vector<torch::Tensor> mont_add(
     const std::vector<torch::Tensor> a,
-    const std::vector<torch::Tensor> b, 
+    const std::vector<torch::Tensor> b,
     const std::vector<torch::Tensor> _2q) {
-    
+
     std::vector<torch::Tensor> outputs;
-    
-    const auto num_devices = a.size();    
-    for (int i=0; i<num_devices; ++i){
+
+    const auto num_devices = a.size();
+    for (size_t i=0; i<num_devices; ++i){
         auto c = mont_add_cuda(a[i], b[i], _2q[i]);
-        outputs.push_back(c);   
+        outputs.push_back(c);
     }
     return outputs;
 }
 
 std::vector<torch::Tensor> mont_sub(
     const std::vector<torch::Tensor> a,
-    const std::vector<torch::Tensor> b, 
+    const std::vector<torch::Tensor> b,
     const std::vector<torch::Tensor> _2q) {
-    
+
     std::vector<torch::Tensor> outputs;
-    
-    const auto num_devices = a.size();    
-    for (int i=0; i<num_devices; ++i){
+
+    const auto num_devices = a.size();
+    for (size_t i=0; i<num_devices; ++i){
         auto c = mont_sub_cuda(a[i], b[i], _2q[i]);
-        outputs.push_back(c);   
+        outputs.push_back(c);
     }
     return outputs;
 }
@@ -407,11 +407,11 @@ std::vector<torch::Tensor> mont_sub(
 std::vector<torch::Tensor> tile_unsigned(
     std::vector<torch::Tensor> a,
     const std::vector<torch::Tensor> _2q) {
-    
+
     std::vector<torch::Tensor> outputs;
-    
-    const auto num_devices = _2q.size();    
-    for (int i=0; i<num_devices; ++i){
+
+    const auto num_devices = _2q.size();
+    for (size_t i=0; i<num_devices; ++i){
         auto result = tile_unsigned_cuda(a[i], _2q[i]);
         outputs.push_back(result);
     }
