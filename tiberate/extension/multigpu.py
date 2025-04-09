@@ -49,7 +49,7 @@ def init_rpc_once():
     logger.info(f"[rank {rank}] RPC initialized as {name}")
 
 
-IM_SCHEDULER = int(os.environ["RANK"]) == 0
+IM_SCHEDULER = lambda: int(os.environ["RANK"]) == 0
 
 
 def warn_not_on_local_rank(rank: int):

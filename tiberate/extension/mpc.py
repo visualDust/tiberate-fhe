@@ -19,7 +19,7 @@ class CkksEngineMPCExtension(CkksEngine):
     def multiparty_create_public_key(
         self, sk: SecretKey, a=None, include_special=False
     ) -> PublicKey:
-        if include_special and not sk.has(FLAGS.INCLUDE_SPECIAL):
+        if include_special and not sk.has_flag(FLAGS.INCLUDE_SPECIAL):
             raise errors.SecretKeyNotIncludeSpecialPrime()
         mult_type = -2 if include_special else -1
 
@@ -28,7 +28,7 @@ class CkksEngineMPCExtension(CkksEngine):
         e = self.nttCtx.tile_unsigned(e, level, mult_type)
 
         self.nttCtx.enter_ntt(e, level, mult_type)
-        repeats = self.ckksCtx.num_special_primes if sk.has(FLAGS.INCLUDE_SPECIAL) else 0
+        repeats = self.ckksCtx.num_special_primes if sk.has_flag(FLAGS.INCLUDE_SPECIAL) else 0
 
         if a is None:
             a = self.rng.randint(self.nttCtx.q_prepack[mult_type][level][0], repeats=repeats)
@@ -80,13 +80,13 @@ class CkksEngineMPCExtension(CkksEngine):
 
     @strictype
     def multiparty_decrypt_head(self, ct: Ciphertext, sk: SecretKey):
-        if ct.has(FLAGS.NTT_STATE):
+        if ct.has_flag(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=False)
-        if ct.has(FLAGS.MONTGOMERY_STATE):
+        if ct.has_flag(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=False)
-        if not sk.has(FLAGS.NTT_STATE):
+        if not sk.has_flag(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=True)
-        if not sk.has(FLAGS.MONTGOMERY_STATE):
+        if not sk.has_flag(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=True)
 
         level = ct.level
@@ -107,13 +107,13 @@ class CkksEngineMPCExtension(CkksEngine):
 
     @strictype
     def multiparty_decrypt_partial(self, ct: Ciphertext, sk: SecretKey) -> DataStruct:
-        if ct.has(FLAGS.NTT_STATE):
+        if ct.has_flag(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=False)
-        if ct.has(FLAGS.MONTGOMERY_STATE):
+        if ct.has_flag(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=False)
-        if not sk.has(FLAGS.NTT_STATE):
+        if not sk.has_flag(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=True)
-        if not sk.has(FLAGS.MONTGOMERY_STATE):
+        if not sk.has_flag(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=True)
 
         a = ct.data[1][0].clone()
@@ -157,13 +157,13 @@ class CkksEngineMPCExtension(CkksEngine):
     def multiparty_create_key_switching_key(
         self, sk_src: SecretKey, sk_dst: SecretKey, a=None
     ) -> KeySwitchKey:
-        if not sk_src.has(FLAGS.NTT_STATE):
+        if not sk_src.has_flag(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=True)
-        if not sk_src.has(FLAGS.MONTGOMERY_STATE):
+        if not sk_src.has_flag(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=True)
-        if not sk_dst.has(FLAGS.NTT_STATE):
+        if not sk_dst.has_flag(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=True)
-        if not sk_dst.has(FLAGS.MONTGOMERY_STATE):
+        if not sk_dst.has_flag(FLAGS.MONTGOMERY_STATE):
             raise errors.MontgomeryStateError(expected=True)
 
         level = 0

@@ -22,6 +22,26 @@ class FLAGS(Flag):
     NEED_RESCALE = auto()
     NEED_RELINERIZE = auto()
 
+    def dumps(self) -> str:
+        """Serialize the current FLAGS instance to a comma-separated string."""
+        return ",".join(flag.name for flag in FLAGS if self & flag)
+
+    @classmethod
+    def loads(cls, s: str) -> "FLAGS":
+        """Deserialize from a comma-separated string back to a FLAGS instance."""
+        if not s:
+            return cls(0)
+        flags = cls(0)
+        for name in s.split(","):
+            flags |= cls[name]
+        return flags
+
+    def __repr__(self):
+        return self.dumps()
+
+    def __str__(self):
+        return self.dumps()
+
 
 class DataStruct:
     def __init__(
@@ -41,7 +61,7 @@ class DataStruct:
         self.misc = defaultdict(_default_none)
         self.misc.update(kwargs)
 
-    def has(self, flag: FLAGS) -> bool:
+    def has_flag(self, flag: FLAGS) -> bool:
         """Check if a specific flag is set.
         Args:
             flag (FLAGS): The flag to check.
@@ -50,21 +70,21 @@ class DataStruct:
         """
         return bool(self._flags & flag)
 
-    def set(self, flag: FLAGS):
+    def set_flag(self, flag: FLAGS):
         """Set a specific flag.
         Args:
             flag (FLAGS): The flag to set.
         """
         self._flags |= flag
 
-    def remove(self, flag: FLAGS):
+    def rm_flag(self, flag: FLAGS):
         """Clear a specific flag.
         Args:
             flag (FLAGS): The flag to clear.
         """
         self._flags &= ~flag
 
-    def toggle(self, flag: FLAGS):
+    def toggle_flag(self, flag: FLAGS):
         """Toggle a specific flag.
         Args:
             flag (FLAGS): The flag to toggle.
@@ -74,14 +94,14 @@ class DataStruct:
     @property
     def flags(self, only_set: bool = True) -> list[FLAGS]:
         """Returns a list of all flags, optionally only those that are set."""
-        return [flag for flag in FLAGS if not only_set or self.has(flag)]
+        return [flag for flag in FLAGS if not only_set or self.has_flag(flag)]
 
     @flags.setter
     def flags(self, value: list[FLAGS]):
         """Set multiple flags at once."""
         self._flags = FLAGS(0)  # Reset flags to 0
         for flag in value:
-            self.set(flag)
+            self.set_flag(flag)
 
     def clone(self):
         """Clone the data structure.
@@ -203,21 +223,14 @@ class DataStruct:
         # alias for copy_to
         return self.copy_to(device, non_blocking)
 
-    def dump(self, path: str):
+    def save(self, path: str):  # todo migrate to safetensors
         with open(path, "wb") as f:
             pickle.dump(self, f)
 
-    def dumps(self):
-        return pickle.dumps(self)
-
     @classmethod
-    def load(cls, path: str) -> "DataStruct":
+    def load(cls, path: str):
         with open(path, "rb") as f:
             return pickle.load(f)
-
-    @classmethod
-    def loads(cls, data) -> "DataStruct":
-        return pickle.loads(data)
 
     def __repr__(self):
         return (
@@ -225,7 +238,7 @@ class DataStruct:
         )
 
     def __str__(self):
-        return self.__repr__()  # todo for better readability
+        return self.__repr__()
 
 
 # ================== #
@@ -300,6 +313,7 @@ class Plaintext(DataStruct):
         cache: Dict[int, Dict[str, Any]] = None,  # level: {what_cache: cache_data}
         padding=True,  # todo remove padding flag in legacy code
         scale=None,  # by default None, which means use engine's parameter
+        **kwargs,
     ):
         if not isinstance(src, torch.Tensor):
             src = torch.tensor(src)
@@ -310,8 +324,18 @@ class Plaintext(DataStruct):
         )
         self.src = src
         self.data = cache or defaultdict(dict)  # cache is alias of data
-        self.padding = padding
-        self.scale = scale
+        self.misc = defaultdict(_default_none)
+        self.misc.update(kwargs)
+        self.misc["padding"] = padding
+        self.misc["scale"] = scale
+
+    @property
+    def padding(self):
+        return self.misc.get("padding")
+
+    @property
+    def scale(self):
+        return self.misc.get("scale")
 
     @property
     def cache(self):
