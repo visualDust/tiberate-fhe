@@ -5,13 +5,13 @@
 
 import math
 from collections import deque
-from typing import Any, Union
+from typing import TYPE_CHECKING, Any, Union
 
 import numpy as np
 import torch
 from loguru import logger
 
-from tiberate.typing import *  # assuming DataStruct is defined here
+from tiberate.typing import *
 
 
 def copy_some_datastruct(src):

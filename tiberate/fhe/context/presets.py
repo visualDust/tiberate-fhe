@@ -29,3 +29,10 @@ logN14 = _PRESETS["bronze"]
 logN15 = _PRESETS["silver"]
 logN16 = _PRESETS["gold"]
 logN17 = _PRESETS["platinum"]
+
+logN2preset = {
+    14: logN14,
+    15: logN15,
+    16: logN16,
+    17: logN17,
+}

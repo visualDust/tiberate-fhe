@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING, List, Union
+
 from vdtoys.mvc import strictype
 
 from tiberate.fhe.encdec import rotate

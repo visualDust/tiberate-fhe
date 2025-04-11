@@ -2,6 +2,8 @@ import functools
 import math
 import warnings
 from hashlib import sha256
+from typing import TYPE_CHECKING, Dict, List, Union
+from uuid import uuid4
 
 import numpy as np
 import nvtx
@@ -9,6 +11,7 @@ import torch
 from loguru import logger
 from vdtoys.cache import CachedDict
 from vdtoys.mvc import initonly, strictype
+from vdtoys.registry import Registry
 
 from tiberate.fhe.context import presets
 from tiberate.fhe.context.ckks_context import CkksContext
@@ -23,9 +26,12 @@ from tiberate.utils.massive import decompose_rot_offsets
 
 from . import errors
 
+engClsRegistry = Registry("ENGINE_CLASS")
 
+
+@engClsRegistry.register(name="CkksEngine")
 class CkksEngine:
-    default = None
+    __default: Dict[str, "CkksEngine"] = {}
 
     def __init__(
         self,
@@ -72,6 +78,9 @@ class CkksEngine:
         self.leveled_devices()
         self.rescale_scales = self.create_rescale_scales()
 
+        # id
+        self.id = str(uuid4())  # unique id for this engine at runtime
+
         # by default, do not create any keys
         self.allow_sk_gen = allow_sk_gen
         self.__sk = None
@@ -81,9 +90,26 @@ class CkksEngine:
         self.__rotk = {}
 
         # if there is no default engine, set this as default
-        if self.__class__.default is None:
-            logger.info("Setting this engine as default.")
-            self.__class__.default = self
+        if self.ckksCtx.logN not in self.__class__.__default:
+            logger.info(f"Setting engine {self.id} as default for logN {self.ckksCtx.logN}.")
+            self.__class__.__default[self.ckksCtx.logN] = self
+
+    @classmethod
+    def get_default_for_logN(cls, logN):
+        if logN not in cls.__default:
+            raise RuntimeError(
+                f"No default engine for logN {logN}. Please create an engine for this logN before call this function."
+            )
+        return cls.__default[logN]
+
+    def set_as_default(self):
+        logN = self.ckksCtx.logN
+        if logN in self.__class__.__default:
+            logger.warning(
+                f"Engine for logN {logN} already exists({self.__class__.__default[logN].id}). Overwriting."
+            )
+        self.__class__.__default[logN] = self
+        logger.info(f"Setting engine {self.id} as default for logN {logN}.")
 
     @property
     def sk(self) -> SecretKey:
@@ -175,7 +201,8 @@ class CkksEngine:
         self.__rotk = new_rotk
 
     def __str__(self):
-        what_is_this = f"{self.__class__}"
+        what_is_this = f"{self.__class__}\n"
+        what_is_this += f"Runtime ID: {self.id}"
         what_is_this += f"""
         Using NTT Context:
         {str(self.nttCtx).replace('\n', '\n\t')}
@@ -1294,8 +1321,11 @@ class CkksEngine:
 
     @strictype
     def rotate_single(
-        self, ct: Ciphertext, rotk: RotationKey, post_key_switching=True
+        self, ct: Ciphertext, rotk: RotationKey, post_key_switching=True, inplace: bool = True
     ) -> Ciphertext:
+        if not inplace:
+            ct = ct.clone()
+
         level = ct.level
 
         rotated_ct_data = [[codec_rotate(d, rotk.delta) for d in ct_data] for ct_data in ct.data]
@@ -1380,8 +1410,10 @@ class CkksEngine:
 
     @strictype
     def rotate_offset(
-        self, ct: Ciphertext, offset: int, return_decomposed_offsets=False
+        self, ct: Ciphertext, offset: int, inplace: bool = True, return_decomposed_offsets=False
     ) -> Ciphertext:
+        if not inplace:
+            ct = ct.clone()
         if offset == 0:
             return ct
         if offset in self.rotk:
@@ -1880,15 +1912,16 @@ class CkksEngine:
         return conj_ct
 
     @strictype
-    def negate(self, ct: Ciphertext) -> Ciphertext:
-        neg_ct = ct.clone()
+    def negate(self, ct: Ciphertext, inplace: bool = False) -> Ciphertext:
+        if not inplace:
+            ct = ct.clone()
 
-        for part in neg_ct.data:
+        for part in ct.data:
             for d in part:
                 d *= -1
             self.nttCtx.make_signed(part, ct.level)
 
-        return neg_ct
+        return ct
 
     # -------------------------------------------------------------------------------------------
     # scalar ops.
@@ -1899,7 +1932,7 @@ class CkksEngine:
         self,
         pt: Plaintext,
         ct: Ciphertext,
-        inplace=False,
+        inplace: bool = False,
     ):
         # process cache
         if not str(self.pc_add) in pt.cache[ct.level]:
@@ -1928,7 +1961,7 @@ class CkksEngine:
         self,
         pt: Plaintext,
         ct: Ciphertext,
-        inplace=False,  # actually is fake inplace, its not inplace in inderlaying conputations
+        inplace: bool = False,
         post_rescale=True,
     ):
         # process cache
@@ -1944,7 +1977,7 @@ class CkksEngine:
 
         # process ct
 
-        new_ct = ct.clone() if not inplace else ct
+        new_ct = ct if inplace else ct.clone()
 
         self.nttCtx.enter_ntt(new_ct.data[0], ct.level)
         self.nttCtx.enter_ntt(new_ct.data[1], ct.level)
@@ -1990,7 +2023,9 @@ class CkksEngine:
         return new_ct
 
     @strictype
-    def mult_scalar(self, ct: Ciphertext, scalar) -> Ciphertext:
+    def mult_scalar(
+        self, ct: Ciphertext, scalar: ScalarMessageType, inplace: bool = False
+    ) -> Ciphertext:
         device_len = len(ct.data[0])
 
         scaled_scalar = int(scalar * self.scale * np.sqrt(self.deviations[ct.level + 1]) + 0.5)
@@ -2009,9 +2044,7 @@ class CkksEngine:
             )
             tensorized_scalar.append(scal_tensor)
 
-        # todo encode scalar should be done in encode function and produce a Plaintext
-
-        new_ct = ct.clone()
+        new_ct = ct if inplace else ct.clone()
         new_data = new_ct.data
 
         for i in [0, 1]:
@@ -2021,7 +2054,9 @@ class CkksEngine:
         return self.rescale(new_ct)
 
     @strictype
-    def add_scalar(self, ct: Ciphertext, scalar) -> Ciphertext:
+    def add_scalar(
+        self, ct: Ciphertext, scalar: ScalarMessageType, inplace: bool = False
+    ) -> Ciphertext:
         device_len = len(ct.data[0])
 
         scaled_scalar = int(scalar * self.scale * self.deviations[ct.level] + 0.5)
@@ -2045,7 +2080,7 @@ class CkksEngine:
             )
             tensorized_scalar.append(scal_tensor)
 
-        new_ct = ct.clone()
+        new_ct = ct if inplace else ct.clone()
         new_data = new_ct.data
 
         dc = [d[:, 0] for d in new_data[0]]
@@ -2061,19 +2096,16 @@ class CkksEngine:
     # -------------------------------------------------------------------------------------------
 
     @strictype
-    def mc_mult(self, m, ct: Ciphertext, inplace=False, post_rescale=True) -> Ciphertext:
+    def mc_mult(self, m, ct: Ciphertext, inplace: bool = False, post_rescale=True) -> Ciphertext:
         return self.pc_mult(
             pt=Plaintext(m),
             ct=ct,
             inplace=inplace,
             post_rescale=post_rescale,
-            # following is metadata (not required args)
-            logN=self.ckksCtx.logN,
-            creator_hash=self.hash,
         )
 
     @strictype
-    def mc_add(self, m, ct: Ciphertext, inplace=False) -> Ciphertext:
+    def mc_add(self, m, ct: Ciphertext, inplace: bool = False) -> Ciphertext:
         return self.pc_add(pt=Plaintext(m), ct=ct, inplace=inplace)
 
     # -------------------------------------------------------------------------------------------
