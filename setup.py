@@ -39,29 +39,29 @@ ext_modules_csprng = [
     CUDAExtension(
         name="randint_cuda",
         sources=[
-            "tiberate/rng/csprng/randint.cpp",
-            "tiberate/rng/csprng/randint_cuda_kernel.cu",
+            "csrc/csprng/randint.cpp",
+            "csrc/csprng/randint_cuda_kernel.cu",
         ],
     ),
     CUDAExtension(
         name="randround_cuda",
         sources=[
-            "tiberate/rng/csprng/randround.cpp",
-            "tiberate/rng/csprng/randround_cuda_kernel.cu",
+            "csrc/csprng/randround.cpp",
+            "csrc/csprng/randround_cuda_kernel.cu",
         ],
     ),
     CUDAExtension(
         name="discrete_gaussian_cuda",
         sources=[
-            "tiberate/rng/csprng/discrete_gaussian.cpp",
-            "tiberate/rng/csprng/discrete_gaussian_cuda_kernel.cu",
+            "csrc/csprng/discrete_gaussian.cpp",
+            "csrc/csprng/discrete_gaussian_cuda_kernel.cu",
         ],
     ),
     CUDAExtension(
         name="chacha20_cuda",
         sources=[
-            "tiberate/rng/csprng/chacha20.cpp",
-            "tiberate/rng/csprng/chacha20_cuda_kernel.cu",
+            "csrc/csprng/chacha20.cpp",
+            "csrc/csprng/chacha20_cuda_kernel.cu",
         ],
     ),
 ]
@@ -70,8 +70,8 @@ ext_modules_ntt = [
     CUDAExtension(
         name="ntt_cuda",
         sources=[
-            "tiberate/ntt/ntt.cpp",
-            "tiberate/ntt/ntt_cuda_kernel.cu",
+            "csrc/ntt/ntt.cpp",
+            "csrc/ntt/ntt_cuda_kernel.cu",
         ],
     )
 ]

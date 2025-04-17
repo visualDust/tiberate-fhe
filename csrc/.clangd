@@ -1,0 +1,17 @@
+CompileFlags:
+  Remove:
+    - "--expt-extended-lambda"
+    - '-gencode=arch=compute_60,code="sm_60,compute_60"'
+    - "-rdc=true"
+    - "-forward-unknown-to-host-compiler"
+    - "--expt-relaxed-constexpr"
+    - "--generate-code=arch=compute_52,code=[compute_52,sm_52]"
+    - "-arch=native"
+    - "--options-file"
+    - "-Xcompiler=-fPIC"
+  Add:
+    - "-x"
+    - "cuda"
+    - "--cuda-gpu-arch=sm_80"
+    - "-std=c++17"
+  Compiler: clang++

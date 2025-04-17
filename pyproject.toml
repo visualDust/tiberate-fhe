@@ -9,6 +9,9 @@ authors = [
 ]
 maintainers = ["Gavin Gong <gavin@gong.host>"]
 readme = ["README.md"]
+
+include = ["csrc/*"]
+
 build = "setup.py"
 
 repository = "https://github.com/VisualDust/tiberate-fhe"

@@ -1243,7 +1243,7 @@ class CkksEngine:
 
         ct_mult = CiphertextTriplet(
             data=[d0, d1, d2],
-            flags=FLAGS.NTT_STATE | FLAGS.MONTGOMERY_STATE,
+            flags=FLAGS.NTT_STATE | FLAGS.MONTGOMERY_STATE | FLAGS.NEED_RELINERIZE,
             level=level,
             # following is metadata (not required args)
             logN=self.ckksCtx.logN,
@@ -1479,7 +1479,7 @@ class CkksEngine:
 
         return CiphertextTriplet(
             data=data,
-            flags=FLAGS.MONTGOMERY_STATE | FLAGS.NTT_STATE,
+            flags=FLAGS.MONTGOMERY_STATE | FLAGS.NTT_STATE | FLAGS.NEED_RELINERIZE,
             level=level,
             # following is metadata (not required args)
             logN=self.ckksCtx.logN,
@@ -1552,7 +1552,7 @@ class CkksEngine:
 
         return CiphertextTriplet(
             data=data,
-            flags=FLAGS.MONTGOMERY_STATE | FLAGS.NTT_STATE,
+            flags=FLAGS.MONTGOMERY_STATE | FLAGS.NTT_STATE | FLAGS.NEED_RELINERIZE,
             level=level,
             # following is metadata (not required args)
             logN=self.ckksCtx.logN,

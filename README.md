@@ -19,6 +19,9 @@ This is a variant of [Desilo/liberate-fhe](https://github.com/Desilo/liberate-fh
 ![PyPI - Version](https://img.shields.io/pypi/v/tiberate) ![PyPI - Downloads](https://img.shields.io/pypi/dw/tiberate)
 
 ```bash
+conda create -n tiberate python=3.12
+conda activate tiberate
+
 pip install tiberate --verbose
 ```
 
@@ -39,7 +42,15 @@ For dev or edible installation, you can install from source.
 # clone the repository
 git clone https://github.com/wens-lab/tiberate-fhe.git
 cd tiberate-fhe
-# install the dependencies
+
+# create conda env
+conda create -n tiberate python=3.12
+conda activate tiberate
+
+# install poetry
+pip install poetry
+
+# install package
 poetry install # this will also install the package itself into current environment
 ```
 
@@ -122,3 +133,7 @@ Output:
 Plaintext(data=tensor([ 2.8118,  0.2544, -0.7268,  ..., -0.6502, -0.7935,  1.5616]), cached levels=[0, 1])
 Mean: 5.629096068239243e-06, Std: 2.091297532980721e-05
 ```
+
+## Dev
+
+See [csrc/readme.md](csrc/readme.md) for cpp configuration and build instructions.
