@@ -3,7 +3,6 @@ import pathlib
 import shutil
 
 from setuptools import setup
-from setuptools.command.install import install
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 logger = logging.getLogger(__name__)
