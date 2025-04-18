@@ -1,17 +1,28 @@
 cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
 project(tiberate-csrc)
 
-# ```bash
-# ln -s $(python -c "import torch; import os; print(os.path.abspath(os.path.join(torch.utils.cmake_prefix_path, '../../')))") ./libtorch
-# ```
+execute_process(
+    COMMAND ${Python_EXECUTABLE} -c "import torch; print(torch.utils.cmake_perfix_path)"
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    OUTPUT_VARIABLE TORCH_CMAKE_PATH
+)
 
-list(APPEND CMAKE_PREFIX_PATH "libtorch")
+list(APPEND CMAKE_PREFIX_PATH ${TORCH_CMAKE_PATH})
 
-find_package(Python 3 COMPONENTS Interpreter Development REQUIRED)
+find_package(Python COMPONENTS Interpreter Development REQUIRED)
 find_package(Torch REQUIRED)
 find_package(CUDA REQUIRED)
 find_package(pybind11 REQUIRED)
 
+include_directories(
+    ${Python_INCLUDE_DIRS}
+    ${TORCH_INCLUDE_DIRS}
+)
+
+message(STATUS "Python include dirs: ${Python_INCLUDE_DIRS}")
+message(STATUS "Torch include dirs: ${TORCH_INCLUDE_DIRS}")
+
+set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_INCLUDES OFF)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
 add_library(randint_cuda SHARED
