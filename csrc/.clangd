@@ -1,17 +1,29 @@
 CompileFlags:
-  Remove:
-    - "--expt-extended-lambda"
-    - '-gencode=arch=compute_60,code="sm_60,compute_60"'
-    - "-rdc=true"
-    - "-forward-unknown-to-host-compiler"
-    - "--expt-relaxed-constexpr"
-    - "--generate-code=arch=compute_52,code=[compute_52,sm_52]"
-    - "-arch=native"
-    - "--options-file"
-    - "-Xcompiler=-fPIC"
-  Add:
-    - "-x"
-    - "cuda"
-    - "--cuda-gpu-arch=sm_80"
-    - "-std=c++17"
   Compiler: clang++
+  CompilationDatabase: .
+  Add:
+    - -x
+    - cuda
+    - "-std=c++17"
+    - "--cuda-gpu-arch=sm_86"
+  Remove:
+    # strip CUDA fatbin args
+    - "-Xfatbin*"
+    - "-Xcompiler*"
+    - "-Xcudafe*"
+    - "-rdc=*"
+    - "-gpu=*"
+    - "--diag_suppress*"
+    # strip CUDA arch flags
+    - "-gencode*"
+    - "--generate-code*"
+    # strip gcc's -fcoroutines
+    - -fcoroutines
+    # strip CUDA flags unknown to clang
+    - "-rdc=true"
+    - "-ccbin*"
+    - "--compiler-options*"
+    - "--expt-extended-lambda"
+    - "--expt-relaxed-constexpr"
+    - "-forward-unknown-to-host-compiler"
+    - "-Werror=cross-execution-space-call"
