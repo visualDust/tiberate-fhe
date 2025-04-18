@@ -1,15 +1,21 @@
 cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
 project(tiberate-csrc)
 
+find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+include_directories(${Python3_INCLUDE_DIRS})
+
 execute_process(
-    COMMAND ${Python_EXECUTABLE} -c "import torch; print(torch.utils.cmake_perfix_path)"
-    OUTPUT_STRIP_TRAILING_WHITESPACE
+    COMMAND ${Python3_EXECUTABLE} -c "import torch; print(torch.utils.cmake_prefix_path)"
     OUTPUT_VARIABLE TORCH_CMAKE_PATH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
 )
+
+message(STATUS "Python Executable: ${Python3_EXECUTABLE}")
+message(STATUS "Python Include Dirs: ${Python3_INCLUDE_DIRS}")
+message(STATUS "Torch cmake path: ${TORCH_CMAKE_PATH}")
 
 list(APPEND CMAKE_PREFIX_PATH ${TORCH_CMAKE_PATH})
 
-find_package(Python COMPONENTS Interpreter Development REQUIRED)
 find_package(Torch REQUIRED)
 find_package(CUDA REQUIRED)
 find_package(pybind11 REQUIRED)
