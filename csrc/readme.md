@@ -11,12 +11,6 @@ conda activate <your_env>
 conda install cmake
 ```
 
-## softlink torch include dir
-
-```bash
-ln -s $(python -c "import torch; import os; print(os.path.abspath(os.path.join(torch.utils.cmake_prefix_path, '../../')))") ./libtorch
-```
-
 ## generate compile_commands.json
 
 ```bash
