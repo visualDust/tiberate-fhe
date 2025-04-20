@@ -52,6 +52,7 @@ scipy = "^1.15.2"
 nvtx = "^0.2.11"
 torch = "^2.6.0"
 vdtoys = "^0.1.4"
+pybind11-stubgen = "^2.5.3"
 
 [build-system]
 requires = ["poetry-core", "torch", "setuptools"]

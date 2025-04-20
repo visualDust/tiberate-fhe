@@ -2,6 +2,7 @@
 .ignored
 csrc/libtorch
 csrc/build
+*.pyi
 
 # poetry
 poetry.lock
