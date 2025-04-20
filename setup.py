@@ -1,4 +1,5 @@
 import logging
+import os
 import pathlib
 import shutil
 
@@ -69,25 +70,19 @@ ext_modules_ntt = [
     CUDAExtension(
         name="ntt_cuda",
         sources=[
+            # "csrc/ntt/ntt.h"
             "csrc/ntt/ntt.cpp",
+            # "csrc/ntt/mont_op_cuda_kernel.cu",
             "csrc/ntt/ntt_cuda_kernel.cu",
         ],
-    )
+    ),
 ]
 
 if __name__ == "__main__":
     clean_built()
-    setup(
-        name="csprng",
-        ext_modules=ext_modules_csprng,
-        cmdclass={"build_ext": BuildExtension},
-        script_args=["build_ext"],
-        options={
-            "build": {
-                "build_lib": "tiberate/rng/csprng",
-            }
-        },
-    )
+
+    num_cores_os = os.cpu_count() // 2
+    os.environ["MAX_JOBS"] = str(num_cores_os)
 
     setup(
         name="ntt",
@@ -97,6 +92,18 @@ if __name__ == "__main__":
         options={
             "build": {
                 "build_lib": "tiberate/ntt",
+            }
+        },
+    )
+
+    setup(
+        name="csprng",
+        ext_modules=ext_modules_csprng,
+        cmdclass={"build_ext": BuildExtension},
+        script_args=["build_ext"],
+        options={
+            "build": {
+                "build_lib": "tiberate/rng/csprng",
             }
         },
     )

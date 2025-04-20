@@ -72,7 +72,7 @@ ct = engine.encodecrypt(data)
 # Some plaintext with cache
 pt = Plaintext(data)
 # Save and load ciphertext
-ct.dump("./ct.pt")
+ct.save("./ct.pt")
 ct = Ciphertext.load("./ct.pt")
 # Operations with plaintext
 ct = engine.pc_mult(pt, ct)  # Multiplication

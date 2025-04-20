@@ -1,5 +1,7 @@
+# from vdtoys.plot import diff_distribution
+import os
+
 import torch
-from vdtoys.plot import diff_distribution
 
 from tiberate import CkksEngine
 from tiberate.typing import Ciphertext, Plaintext
@@ -14,8 +16,8 @@ ct = engine.encodecrypt(data)
 # Some plaintext with cache
 pt = Plaintext(data)
 # Save and load ciphertext
-ct.dump("./ct.pt")
-ct = Ciphertext.load("./ct.pt")
+ct.save("./ct.pkl")
+ct = Ciphertext.load("./ct.pkl")
 # Operations with plaintext
 ct = engine.pc_mult(pt, ct)  # Multiplication
 ct = engine.pc_add(pt, ct)  # Addition
@@ -33,5 +35,5 @@ data *= data
 data += data
 diff = data - whatever[:8192]
 print(f"Mean: {diff.mean()}, Std: {diff.std()}")
-plt = diff_distribution(diff)
-plt.show()
+# plt = diff_distribution(diff)
+# plt.show()

@@ -569,7 +569,7 @@ class CkksEngine:
 
         pt_tiled = self.nttCtx.tile_unsigned(pt, level, mult_type)
         self.nttCtx.mont_enter_scale(pt_tiled, level, mult_type)
-        self.nttCtx.mont_redc(pt_tiled, level, mult_type)
+        self.nttCtx.mont_reduce(pt_tiled, level, mult_type)
         pte0 = self.nttCtx.mont_add(pt_tiled, e0_tiled, level, mult_type)
 
         start = self.nttCtx.starts[level]
@@ -1042,8 +1042,8 @@ class CkksEngine:
         c1 = [d[: -self.nttCtx.num_special_primes] for d in d1]
 
         # Exit the montgomery.
-        self.nttCtx.mont_redc(c0, level, -1)
-        self.nttCtx.mont_redc(c1, level, -1)
+        self.nttCtx.mont_reduce(c0, level, -1)
+        self.nttCtx.mont_reduce(c1, level, -1)
 
         self.nttCtx.reduce_2q(c0, level, -1)
         self.nttCtx.reduce_2q(c1, level, -1)
@@ -1696,7 +1696,7 @@ class CkksEngine:
                 pti[:, 0] += dc_rns[device_id]
 
         self.nttCtx.mont_enter_scale(pt_tiled, level, mult_type)
-        self.nttCtx.mont_redc(pt_tiled, level, mult_type)
+        self.nttCtx.mont_reduce(pt_tiled, level, mult_type)
         pte0 = self.nttCtx.mont_add(pt_tiled, e0_tiled, level, mult_type)
 
         start = self.nttCtx.starts[level]
@@ -1951,7 +1951,7 @@ class CkksEngine:
 
         self.nttCtx.mont_enter(new_ct.data[0], ct.level)
         new_d0 = self.nttCtx.mont_add(pt_, new_ct.data[0], ct.level)
-        self.nttCtx.mont_redc(new_d0, ct.level)
+        self.nttCtx.mont_reduce(new_d0, ct.level)
         self.nttCtx.reduce_2q(new_d0, ct.level)
         new_ct.data[0] = new_d0
         return new_ct

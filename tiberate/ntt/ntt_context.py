@@ -41,9 +41,7 @@ class NTTContext:
 
         self.qlists = [qi.tolist() for qi in self.q]
 
-        astop_special = [
-            len(d) for d in self.rnsPart.destination_arrays_with_special[0]
-        ]
+        astop_special = [len(d) for d in self.rnsPart.destination_arrays_with_special[0]]
         astop_ordinary = [len(d) for d in self.rnsPart.destination_arrays[0]]
         self.starts = self.rnsPart.diff
 
@@ -68,16 +66,13 @@ class NTTContext:
         for dev_id in range(self.num_devices):
             d = dest[dev_id]
             parted_v = np_v[d]
-            v_special.append(
-                torch.from_numpy(parted_v).to(self.devices[dev_id])
-            )
+            v_special.append(torch.from_numpy(parted_v).to(self.devices[dev_id]))
 
         return v_special
 
     def copy_to_devices(self, variable):
         return [
-            torch.tensor(variable, dtype=self.index_type, device=device)
-            for device in self.devices
+            torch.tensor(variable, dtype=self.index_type, device=device) for device in self.devices
         ]
 
     def psi_enter(self):
@@ -106,10 +101,7 @@ class NTTContext:
     def prepare_parameters(self):
         scale = 2**self.ckksCtx.scale_bits
         self.Rs_scale = self.partition_variable(
-            [
-                (Rs * scale) % q
-                for Rs, q in zip(self.ckksCtx.R_square, self.ckksCtx.q)
-            ]
+            [(Rs * scale) % q for Rs, q in zip(self.ckksCtx.R_square, self.ckksCtx.q)]
         )
 
         self.Rs = self.partition_variable(self.ckksCtx.R_square)
@@ -160,10 +152,7 @@ class NTTContext:
         ]
 
     def param_pack(self, param, astart, astop, remove_empty=True):
-        pack = [
-            param[dev_id][astart[dev_id] : astop[dev_id]]
-            for dev_id in range(self.num_devices)
-        ]
+        pack = [param[dev_id][astart[dev_id] : astop[dev_id]] for dev_id in range(self.num_devices)]
 
         remove_empty_f = lambda x: [xi for xi in x if len(xi) > 0]
         if remove_empty:
@@ -171,17 +160,12 @@ class NTTContext:
         return pack
 
     def mont_pack(self, astart, astop, remove_empty=True):
-        return [
-            self.param_pack(param, astart, astop, remove_empty)
-            for param in self.mont_pack0
-        ]
+        return [self.param_pack(param, astart, astop, remove_empty) for param in self.mont_pack0]
 
     def ntt_pack(self, astart, astop, remove_empty=True):
         remove_empty_f_x = lambda x: [xi for xi in x if len(xi) > 0]
 
-        remove_empty_f_xy = lambda x, y: [
-            xi for xi, yi in zip(x, y) if len(yi) > 0
-        ]
+        remove_empty_f_xy = lambda x, y: [xi for xi, yi in zip(x, y) if len(yi) > 0]
 
         even_odd = self.ntt_pack0[:2]
         rest = [
@@ -198,9 +182,7 @@ class NTTContext:
     def intt_pack(self, astart, astop, remove_empty=True):
         remove_empty_f_x = lambda x: [xi for xi in x if len(xi) > 0]
 
-        remove_empty_f_xy = lambda x, y: [
-            xi for xi, yi in zip(x, y) if len(yi) > 0
-        ]
+        remove_empty_f_xy = lambda x, y: [xi for xi, yi in zip(x, y) if len(yi) > 0]
 
         even_odd = self.intt_pack0[:2]
         rest = [
@@ -250,12 +232,8 @@ class NTTContext:
         for device_id in range(self.num_devices):
             self.parts_pack.append({})
 
-            for i in range(
-                len(self.rnsPart.destination_arrays_with_special[0][device_id])
-            ):
-                self.parts_pack[device_id][i,] = self.params_pack_device(
-                    device_id, i, i
-                )
+            for i in range(len(self.rnsPart.destination_arrays_with_special[0][device_id])):
+                self.parts_pack[device_id][i,] = self.params_pack_device(device_id, i, i)
 
             for level in range(self.num_levels):
                 for mult_type in [-1, -2]:
@@ -268,9 +246,7 @@ class NTTContext:
 
                     if len(key) > 0:
                         if key not in self.parts_pack[device_id]:
-                            self.parts_pack[device_id][
-                                key
-                            ] = self.params_pack_device(
+                            self.parts_pack[device_id][key] = self.params_pack_device(
                                 device_id, astart, astop
                             )
 
@@ -279,23 +255,18 @@ class NTTContext:
                     if key not in self.parts_pack[device_id].keys():
                         astart = p[0]
                         astop = p[-1]
-                        self.parts_pack[device_id][
-                            key
-                        ] = self.params_pack_device(device_id, astart, astop)
+                        self.parts_pack[device_id][key] = self.params_pack_device(
+                            device_id, astart, astop
+                        )
 
         for device_id in range(self.num_devices):
             for level in range(self.num_levels):
                 # We do basis extension for only ordinary parts.
-                for part_index, part in enumerate(
-                    self.rnsPart.destination_parts[level][device_id]
-                ):
+                for part_index, part in enumerate(self.rnsPart.destination_parts[level][device_id]):
                     key = tuple(self.rnsPart.p[level][device_id][part_index])
 
                     # Check if Y and L are already calculated for this part.
-                    if (
-                        "Y_scalar"
-                        not in self.parts_pack[device_id][key].keys()
-                    ):
+                    if "Y_scalar" not in self.parts_pack[device_id][key].keys():
                         alpha = len(part)
                         m = [self.ckksCtx.q[idx] for idx in part]
                         L = [m[0]]
@@ -313,17 +284,11 @@ class NTTContext:
                             if (i + 2) < alpha:
                                 L_scalar.append([])
                                 for j in range(i + 2, alpha):
-                                    L_scalar[i].append(
-                                        (L[i] * self.ckksCtx.R) % m[j]
-                                    )
+                                    L_scalar[i].append((L[i] * self.ckksCtx.R) % m[j])
 
                         L_enter_devices = []
                         for target_device_id in range(self.num_devices):
-                            dest = (
-                                self.rnsPart.destination_arrays_with_special[
-                                    0
-                                ][target_device_id]
-                            )
+                            dest = self.rnsPart.destination_arrays_with_special[0][target_device_id]
                             q = [self.ckksCtx.q[idx] for idx in dest]
                             Rs = [self.ckksCtx.R_square[idx] for idx in dest]
 
@@ -343,9 +308,7 @@ class NTTContext:
                                 dtype=self.ckksCtx.torch_dtype,
                                 device=device,
                             )
-                            self.parts_pack[device_id][key][
-                                "Y_scalar"
-                            ] = Y_scalar
+                            self.parts_pack[device_id][key]["Y_scalar"] = Y_scalar
 
                             for target_device_id in range(self.num_devices):
                                 target_device = self.devices[target_device_id]
@@ -359,15 +322,11 @@ class NTTContext:
                                     for Li in L_enter_devices[target_device_id]
                                 ]
 
-                            self.parts_pack[device_id][key][
-                                "L_enter"
-                            ] = L_enter_devices
+                            self.parts_pack[device_id][key]["L_enter"] = L_enter_devices
 
                         else:
                             self.parts_pack[device_id][key]["Y_scalar"] = None
-                            self.parts_pack[device_id][key][
-                                "L_enter"
-                            ] = blank_L_enter
+                            self.parts_pack[device_id][key]["L_enter"] = blank_L_enter
 
                         if len(L_scalar) > 0:
                             L_scalar = [
@@ -378,9 +337,7 @@ class NTTContext:
                                 )
                                 for Li in L_scalar
                             ]
-                            self.parts_pack[device_id][key][
-                                "L_scalar"
-                            ] = L_scalar
+                            self.parts_pack[device_id][key]["L_scalar"] = L_scalar
                         else:
                             self.parts_pack[device_id][key]["L_scalar"] = None
 
@@ -485,9 +442,7 @@ class NTTContext:
                 ntt_prepack.append([self.ntt_pack(*stst)])
                 intt_prepack.append([self.intt_pack(*stst)])
                 Rs_prepack.append([self.param_pack(self.Rs, *stst)])
-                Rs_scale_prepack.append(
-                    [self.param_pack(self.Rs_scale, *stst)]
-                )
+                Rs_scale_prepack.append([self.param_pack(self.Rs_scale, *stst)])
                 _2q_prepack.append([self.param_pack(self._2q, *stst)])
                 q_prepack.append([self.param_pack(self.qlists, *stst)])
             self.mont_prepack.append(mont_prepack)
@@ -520,9 +475,7 @@ class NTTContext:
         ntt_cuda.mont_enter(a, b, *self.mont_prepack[mult_type][lvl][part])
 
     def mont_mult(self, a, b, lvl=0, mult_type=-1, part=0):
-        return ntt_cuda.mont_mult(
-            a, b, *self.mont_prepack[mult_type][lvl][part]
-        )
+        return ntt_cuda.mont_mult(a, b, *self.mont_prepack[mult_type][lvl][part])
 
     def ntt(self, a, lvl=0, mult_type=-1, part=0):
         ntt_cuda.ntt(a, *self.ntt_prepack[mult_type][lvl][part])
@@ -537,8 +490,8 @@ class NTTContext:
     def intt(self, a, lvl=0, mult_type=-1, part=0):
         ntt_cuda.intt(a, *self.intt_prepack[mult_type][lvl][part])
 
-    def mont_redc(self, a, lvl=0, mult_type=-1, part=0):
-        ntt_cuda.mont_redc(a, *self.mont_prepack[mult_type][lvl][part])
+    def mont_reduce(self, a, lvl=0, mult_type=-1, part=0):
+        ntt_cuda.mont_reduce(a, *self.mont_prepack[mult_type][lvl][part])
 
     def intt_exit(self, a, lvl=0, mult_type=-1, part=0):
         ntt_cuda.intt_exit(a, *self.intt_prepack[mult_type][lvl][part])
@@ -547,9 +500,7 @@ class NTTContext:
         ntt_cuda.intt_exit_reduce(a, *self.intt_prepack[mult_type][lvl][part])
 
     def intt_exit_reduce_signed(self, a, lvl=0, mult_type=-1, part=0):
-        ntt_cuda.intt_exit_reduce_signed(
-            a, *self.intt_prepack[mult_type][lvl][part]
-        )
+        ntt_cuda.intt_exit_reduce_signed(a, *self.intt_prepack[mult_type][lvl][part])
 
     def reduce_2q(self, a, lvl=0, mult_type=-1, part=0):
         ntt_cuda.reduce_2q(a, self._2q_prepack[mult_type][lvl][part])
@@ -567,9 +518,7 @@ class NTTContext:
         return ntt_cuda.mont_sub(a, b, self._2q_prepack[mult_type][lvl][part])
 
     def tile_unsigned(self, a, lvl=0, mult_type=-1, part=0):
-        return ntt_cuda.tile_unsigned(
-            a, self._2q_prepack[mult_type][lvl][part]
-        )
+        return ntt_cuda.tile_unsigned(a, self._2q_prepack[mult_type][lvl][part])
 
     def __repr__(self):
         pass

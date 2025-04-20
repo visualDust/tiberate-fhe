@@ -53,6 +53,7 @@ add_library(chacha20_cuda  SHARED
 
 add_library(ntt_cuda SHARED
     ntt/ntt.cpp
+    ntt/mont_op_cuda_kernel.cu
     ntt/ntt_cuda_kernel.cu
 )
 
