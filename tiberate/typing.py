@@ -194,11 +194,7 @@ class DataStruct:
         """
         # Recursively move tensors in the data structure to the specified device
         if isinstance(data, Tensor):
-            return (
-                data.clone()
-                if data.device == device
-                else data.to(device=device, non_blocking=non_blocking)
-            )
+            return data.to(device=device, non_blocking=non_blocking, copy=True)
         elif isinstance(data, list):
             return [cls.copy_tensor_to_device_recursive(item, device) for item in data]
         elif isinstance(data, tuple):  # legacy datastruct uses tuple

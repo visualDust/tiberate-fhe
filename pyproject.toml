@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "tiberate"
-version = "0.9.8"
+version = "0.9.9"
 description = "T(yped-l)iberate-fhe: a variant of Liberate-fhe with better typing"
 authors = [
     "Juwhan Kim <juwhan.kim@desilo.ai>",
