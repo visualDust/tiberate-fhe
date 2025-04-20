@@ -18,7 +18,7 @@ IndentWidth: 2
 TabWidth: 2
 ContinuationIndentWidth: 4
 AccessModifierOffset: -1 # The private/protected/public has no indent in class
-Standard: Cpp17
+Standard: Cpp11
 AllowAllParametersOfDeclarationOnNextLine: true
 BinPackParameters: false
 BinPackArguments: false

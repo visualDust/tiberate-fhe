@@ -1961,7 +1961,7 @@ class CkksEngine:
         self,
         pt: Plaintext,
         ct: Ciphertext,
-        inplace: bool = False,
+        inplace: bool = False,  # its always inplace if this function is a atomic op, this flag will only control if do ntt/intt on original data
         post_rescale=True,
     ):
         # process cache
