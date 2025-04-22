@@ -1,5 +1,6 @@
 import functools
 import math
+import textwrap
 import warnings
 from hashlib import sha256
 from typing import TYPE_CHECKING, Dict, List, Union
@@ -203,10 +204,7 @@ class CkksEngine:
     def __str__(self):
         what_is_this = f"{self.__class__}\n"
         what_is_this += f"Runtime ID: {self.id}"
-        what_is_this += f"""
-        Using NTT Context:
-        {str(self.nttCtx).replace('\n', '\n\t')}
-        """
+        what_is_this += f"{textwrap.indent(str(self.nttCtx), '    ')}"
         return what_is_this
 
     @property
@@ -1321,7 +1319,11 @@ class CkksEngine:
 
     @strictype
     def rotate_single(
-        self, ct: Ciphertext, rotk: RotationKey, post_key_switching=True, inplace: bool = True
+        self,
+        ct: Ciphertext,
+        rotk: RotationKey,
+        post_key_switching=True,
+        inplace: bool = True,
     ) -> Ciphertext:
         if not inplace:
             ct = ct.clone()
@@ -1410,7 +1412,11 @@ class CkksEngine:
 
     @strictype
     def rotate_offset(
-        self, ct: Ciphertext, offset: int, inplace: bool = True, return_decomposed_offsets=False
+        self,
+        ct: Ciphertext,
+        offset: int,
+        inplace: bool = True,
+        return_decomposed_offsets=False,
     ) -> Ciphertext:
         if not inplace:
             ct = ct.clone()

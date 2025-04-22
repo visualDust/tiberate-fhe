@@ -1,9 +1,6 @@
+#include "randint_cuda.h"
 #include <c10/cuda/CUDAStream.h>
-#include <cuda.h>
-#include <cuda_runtime.h>
-#include <torch/extension.h>
-
-#include "chacha20.h"
+#include "chacha20_cuda.h"
 
 #define COMBINE_TWO(high, low) \
   ((static_cast<uint64_t>(high) << 32) | static_cast<uint64_t>(low))

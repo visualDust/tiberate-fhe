@@ -1,15 +1,12 @@
 {
-	"folders": [
-		{
-			"path": "." // python src folder
-		},
-		{
-			"path": "csrc" // csrc folder
-		}
-	],
-	"settings": {
-		"clangd.arguments": [
-			"--compile-commands-dir=${workspaceFolder}/csrc/build"
-		]
-	}
+    "folders": [
+        {
+            "path": "."
+        }
+    ],
+    "settings": {
+        "clangd.arguments": [
+            "--compile-commands-dir=${workspaceFolder}/csrc/build"
+        ]
+    }
 }

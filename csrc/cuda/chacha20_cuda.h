@@ -1,3 +1,9 @@
+#pragma once
+
+#include "../extensions.h"
+
+void chacha20_cuda(torch::Tensor input, torch::Tensor dest, size_t step);
+
 #define MASK 0xffffffff
 
 #define ROLL16(x) x = (((x) << 16) | ((x) >> 16)) & MASK

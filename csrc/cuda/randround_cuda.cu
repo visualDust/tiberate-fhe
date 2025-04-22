@@ -1,7 +1,5 @@
+#include "randround_cuda.h"
 #include <c10/cuda/CUDAStream.h>
-#include <cuda.h>
-#include <cuda_runtime.h>
-#include <torch/extension.h>
 
 #define BLOCK_SIZE 256
 

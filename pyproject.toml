@@ -1,23 +1,20 @@
-[tool.poetry]
+[build-system]
+requires = ["scikit-build-core >=0.4.3", "torch"]
+build-backend = "scikit_build_core.build"
+
+[project]
 name = "tiberate"
 version = "0.9.9"
 description = "T(yped-l)iberate-fhe: a variant of Liberate-fhe with better typing"
 authors = [
-    "Juwhan Kim <juwhan.kim@desilo.ai>",
-    "Hanyul Ryu <hanyul.ryu@desilo.ai>",
-    "Gavin Gong <gavin@gong.host>"
+    { name = "Juwhan Kim", email = "juwhan.kim@desilo.ai" },
+    { name = "Hanyul Ryu", email = "hanyul.ryu@desilo.ai" },
+    { name = "Gavin Gong", email = "gavin@gong.host" },
 ]
-maintainers = ["Gavin Gong <gavin@gong.host>"]
-readme = ["README.md"]
-
-include = ["csrc/*"]
-
-build = "setup.py"
-
-repository = "https://github.com/VisualDust/tiberate-fhe"
-
+requires-python = ">=3.10"
+maintainers = [{ name = "Gavin Gong", email = "gavin@gong.host>" }]
+readme = "README.md"
 license = "BSD-3-Clause-Clear"
-
 keywords = [
     "DESILO",
     "python",
@@ -33,27 +30,25 @@ keywords = [
 ]
 classifiers = [
     "Environment :: GPU :: NVIDIA CUDA",
-    "License :: OSI Approved :: BSD License",
     "Programming Language :: Python",
     "Topic :: Software Development :: Libraries",
 ]
+dependencies = [
+    "joblib>=1.4.2",
+    "loguru>=0.7.3",
+    "matplotlib>=3.10.1",
+    "mpmath>=1.3.0",
+    "numpy>=2.2.5",
+    "nvtx>=0.2.11",
+    "scipy>=1.15.2",
+    "torch>=2.6.0",
+    "vdtoys>=0.1.4",
+]
+[project.urls]
+Repository = "https://github.com/VisualDust/tiberate-fhe"
 
-[tool.poetry.dependencies]
-python = "^3.10"
-mpmath = ">=1.3.0"
-pytest = "^8.3.0"
-pre-commit = "^4.1.0"
-loguru = "^0.7.3"
-numpy = "^2.2.3"
-joblib = "^1.4.2"
-tqdm = "^4.67.1"
-matplotlib = "^3.10.1"
-scipy = "^1.15.2"
-nvtx = "^0.2.11"
-torch = "^2.6.0"
-vdtoys = "^0.1.4"
-pybind11-stubgen = "^2.5.3"
-
-[build-system]
-requires = ["poetry-core", "torch", "setuptools"]
-build-backend = "poetry.core.masonry.api"
+[tool.scikit-build]
+build-dir = "build"
+cmake.args = ["-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"]
+wheel.install-dir = "tiberate"
+wheel.packages = ["tiberate"]
