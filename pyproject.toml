@@ -12,7 +12,10 @@ authors = [
     { name = "Gavin Gong", email = "gavin@gong.host" },
 ]
 requires-python = ">=3.10"
-maintainers = [{ name = "Gavin Gong", email = "gavin@gong.host>" }]
+maintainers = [
+    { name = "Gavin Gong", email = "gavin@gong.host>" },
+    { name = "PuQing", email = "me@puqing.work" },
+]
 readme = "README.md"
 license = "BSD-3-Clause-Clear"
 keywords = [
@@ -34,6 +37,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
 ]
 dependencies = [
+    "importlib>=1.0.4",
     "joblib>=1.4.2",
     "loguru>=0.7.3",
     "matplotlib>=3.10.1",
@@ -42,6 +46,7 @@ dependencies = [
     "nvtx>=0.2.11",
     "scikit-build-core>=0.11.1",
     "scipy>=1.15.2",
+    "textual[syntax]>=3.1.1",
     "torch>=2.6.0",
     "vdtoys>=0.1.4",
 ]
@@ -54,3 +59,6 @@ cmake.args = ["-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"]
 cmake.verbose = true
 wheel.install-dir = "tiberate"
 wheel.packages = ["tiberate"]
+
+[project.scripts]
+tiberate = "tiberate._cli:main"

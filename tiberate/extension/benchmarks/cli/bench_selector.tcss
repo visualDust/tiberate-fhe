@@ -1,0 +1,46 @@
+#main_area {
+    layout: horizontal;
+}
+
+#right_container,
+#left_container {
+    layout: vertical;
+    height: 100%;
+    width: 50%;
+    padding: 1;
+    border: solid white 50%;
+}
+
+#left_container:focus-within,
+#right_container:focus-within {
+    border: heavy $accent 50%;
+}
+
+#bench_list,
+#option_list {
+    height: 1fr; /* Take remaining space */
+    border: solid white 50%;
+}
+
+#bench_list:focus-within,
+#option_list:focus-within {
+    border: heavy $accent 50%;
+}
+
+#bench_description {
+    height: auto;
+    max-height: 50%;
+    padding: 1;
+    border: solid white 50%;
+}
+
+#option_description {
+    height: auto;
+    max-height: 25%;
+    padding: 1;
+    border: solid white 50%;
+}
+
+.highlight {
+    border: $accent-darken-1;
+}

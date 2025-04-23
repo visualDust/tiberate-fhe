@@ -477,6 +477,15 @@ class NTTContext:
 
     def ntt(self, a, lvl=0, mult_type=-1, part=0):
         torch.ops.tiberate_ntt_ops.ntt(a, *self.ntt_prepack[mult_type][lvl][part])
+        # self.ntt_prepack[mult_type][lvl][part] structure is:
+        # - 0: even [duplicated]
+        # - 1: odd [duplicated]
+        # - 2: psi [nth root of unity]
+        # - 3: _2q [2 * q]
+        # - 4: ql [lower bits of q]
+        # - 5: qh [higher bits of q]
+        # - 6: kl [lower bits of k]
+        # - 7: kh [higher bits of k]
 
     def enter_ntt(self, a, lvl=0, mult_type=-1, part=0):
         torch.ops.tiberate_ntt_ops.enter_ntt(

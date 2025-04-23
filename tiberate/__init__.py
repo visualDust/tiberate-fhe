@@ -1,5 +1,6 @@
 import importlib
 import os.path as osp
+from importlib.metadata import version
 
 import torch
 
@@ -16,5 +17,7 @@ for library in ["chacha20", "discrete_gaussian", "mont", "ntt", "randint", "rand
 
 from tiberate.fhe.context import presets  # noqa
 from tiberate.fhe.engine import CkksEngine  # noqa
+
+__version__ = version("tiberate")
 
 __all__ = ["CkksEngine", "presets"]
