@@ -5,10 +5,10 @@ option(WITH_CUDA "Enable CUDA support" OFF)
 option(WITH_DEVELOP "Enable development mode" OFF)
 
 if(WITH_CUDA)
-  enable_language(CUDA)
-  add_definitions(-D__CUDA_NO_HALF_OPERATORS__)
-  add_definitions(-DWITH_CUDA)
-  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr")
+    enable_language(CUDA)
+    add_definitions(-D__CUDA_NO_HALF_OPERATORS__)
+    add_definitions(-DWITH_CUDA)
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr")
 endif()
 
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
@@ -64,7 +64,15 @@ foreach(name IN LISTS MODULE_NAMES)
         OUTPUT_NAME "${name}${PYTHON_MODULE_SUFFIX}"
     )
 
-    install(TARGETS ${name}
-        LIBRARY DESTINATION .
-    )
+    # if SKBUILD_STATE is editable, set the output directory ./tiberate
+    if(SKBUILD_STATE STREQUAL "editable")
+        install(TARGETS ${name}
+            LIBRARY DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/tiberate
+        )
+    else()
+        install(TARGETS ${name}
+            LIBRARY DESTINATION .
+        )
+    endif()
+
 endforeach()
