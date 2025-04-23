@@ -1,15 +1,6 @@
+#include "discrete_gaussian_cuda.h"
 #include <c10/cuda/CUDAStream.h>
-#include <cuda.h>
-#include <cuda_runtime.h>
-#include <torch/extension.h>
-
-#include "chacha20.h"
-
-#define GE(x_high, x_low, y_high, y_low) \
-  (((x_high) > (y_high)) | (((x_high) == (y_high)) & ((x_low) >= (y_low))))
-
-#define COMBINE_TWO(high, low) \
-  ((static_cast<uint64_t>(high) << 32) | static_cast<uint64_t>(low))
+#include "chacha20_cuda.h"
 
 // Use 256 BLOCK_SIZE. 64 * 4 = 256.
 #define BLOCK_SIZE 64

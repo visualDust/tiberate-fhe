@@ -1,12 +1,12 @@
 import functools
 import math
+import textwrap
 import warnings
 from hashlib import sha256
-from typing import TYPE_CHECKING, Dict, List, Union
+from typing import Dict, List, Union
 from uuid import uuid4
 
 import numpy as np
-import nvtx
 import torch
 from loguru import logger
 from vdtoys.cache import CachedDict
@@ -19,12 +19,11 @@ from tiberate.fhe.encdec import conjugate as codec_conjugate
 from tiberate.fhe.encdec import decode as codec_decode
 from tiberate.fhe.encdec import encode as codec_encode
 from tiberate.fhe.encdec import rotate as codec_rotate
-from tiberate.ntt import NTTContext, ntt_cuda
+from tiberate.fhe.engine import errors
+from tiberate.ntt import NTTContext
 from tiberate.rng import Csprng, RandNumGen, SimpleRNG
-from tiberate.typing import *
+from tiberate.typing import *  # noqa
 from tiberate.utils.massive import decompose_rot_offsets
-
-from . import errors
 
 engClsRegistry = Registry("ENGINE_CLASS")
 
@@ -203,10 +202,7 @@ class CkksEngine:
     def __str__(self):
         what_is_this = f"{self.__class__}\n"
         what_is_this += f"Runtime ID: {self.id}"
-        what_is_this += f"""
-        Using NTT Context:
-        {str(self.nttCtx).replace('\n', '\n\t')}
-        """
+        what_is_this += f"{textwrap.indent(str(self.nttCtx), '    ')}"
         return what_is_this
 
     @property
@@ -788,7 +784,7 @@ class CkksEngine:
                 pk_data = pk.data[0][device_id][astart:astop]
 
                 _2q = self.nttCtx.parts_pack[device_id][key]["_2q"]
-                update_part = ntt_cuda.mont_add([pk_data], [shard], _2q)[0]
+                update_part = torch.ops.tiberate_ntt_ops.mont_add([pk_data], [shard], _2q)[0]
                 pk_data.copy_(update_part, non_blocking=True)
 
                 pk.misc[
@@ -841,7 +837,7 @@ class CkksEngine:
 
             # mont_enter will take care of signedness.
             # ntt_cuda.make_unsigned([Y], _2q)
-            ntt_cuda.mont_enter([Y], [Y_scalar], *mont_pack)
+            torch.ops.tiberate_ntt_ops.mont_enter([Y], [Y_scalar], *mont_pack)
             # ntt_cuda.reduce_2q([Y], _2q)
 
             state[i + 1] = Y
@@ -853,7 +849,7 @@ class CkksEngine:
                 L_scalar = self.nttCtx.parts_pack[device_id][key]["L_scalar"][i]
                 new_state_len = alpha - (i + 2)
                 new_state = Y.repeat(new_state_len, 1)
-                ntt_cuda.mont_enter([new_state], [L_scalar], *state_mont_pack)
+                torch.ops.tiberate_ntt_ops.mont_enter([new_state], [L_scalar], *state_mont_pack)
                 state[i + 2 :] += new_state
 
         # Returned state is in plain integer format.
@@ -1321,7 +1317,11 @@ class CkksEngine:
 
     @strictype
     def rotate_single(
-        self, ct: Ciphertext, rotk: RotationKey, post_key_switching=True, inplace: bool = True
+        self,
+        ct: Ciphertext,
+        rotk: RotationKey,
+        post_key_switching=True,
+        inplace: bool = True,
     ) -> Ciphertext:
         if not inplace:
             ct = ct.clone()
@@ -1410,7 +1410,11 @@ class CkksEngine:
 
     @strictype
     def rotate_offset(
-        self, ct: Ciphertext, offset: int, inplace: bool = True, return_decomposed_offsets=False
+        self,
+        ct: Ciphertext,
+        offset: int,
+        inplace: bool = True,
+        return_decomposed_offsets=False,
     ) -> Ciphertext:
         if not inplace:
             ct = ct.clone()

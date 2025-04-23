@@ -1,8 +1,7 @@
 # Manually ignored
 .ignored
-csrc/libtorch
-csrc/build
 *.pyi
+uv.lock
 
 # poetry
 poetry.lock

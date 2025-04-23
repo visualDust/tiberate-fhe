@@ -5,9 +5,6 @@ import mpmath as mpm
 import numpy as np
 import torch
 
-#  import discrete_gaussian_cuda
-from . import discrete_gaussian_cuda
-
 
 def build_CDT_binary_search_tree(security_bits=128, sigma=3.2):
     """Currently, ONLY the discrete gaussian sampling at the default input values

@@ -60,20 +60,20 @@ def benchmark_command(file: str | None = None):
     bench_selector()
 
 
-@main.command(name="rebuild", context_settings={"max_content_width": 120})
-def rebuild_command():
-    """Rebuild CSRC with setup.py after you modified CUDA or PyTorch version, or when you change the csrc code."""
-    # Ask for confirmation before rebuilding
-    if click.confirm("Are you sure you want to rebuild the NTT backend?", default=False):
-        # the setup.py is in the root directory of tiberate/..
-        # so we need to change the working directory to the root directory
-        from tiberate import __file__ as tiberate_path
+# @main.command(name="rebuild", context_settings={"max_content_width": 120})
+# def rebuild_command():
+#     """Rebuild CSRC with setup.py after you modified CUDA or PyTorch version, or when you change the csrc code."""
+#     # Ask for confirmation before rebuilding
+#     if click.confirm("Are you sure you want to rebuild the NTT backend?", default=False):
+#         # the setup.py is in the root directory of tiberate/..
+#         # so we need to change the working directory to the root directory
+#         from tiberate import __file__ as tiberate_path
 
-        tiberate_dir = os.path.dirname(os.path.dirname(tiberate_path))
-        os.chdir(tiberate_dir)
-        os.system("python setup.py build")
-    else:
-        console.print("[red]Rebuild canceled.[/red]")
+#         tiberate_dir = os.path.dirname(os.path.dirname(tiberate_path))
+#         os.chdir(tiberate_dir)
+#         os.system("python setup.py build")
+#     else:
+#         console.print("[red]Rebuild canceled.[/red]")
 
 
 if __name__ == "__main__":

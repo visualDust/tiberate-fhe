@@ -7,11 +7,12 @@ import numpy as np
 import torch
 from loguru import logger
 
-from tiberate.fhe.context.cache import cache
-
-from . import errors
-from .generate_primes import generate_message_primes, generate_scale_primes
-from .security_parameters import maximum_qbits
+from tiberate.fhe.context import cache, errors
+from tiberate.fhe.context.generate_primes import (
+    generate_message_primes,
+    generate_scale_primes,
+)
+from tiberate.fhe.context.security_parameters import maximum_qbits
 
 # ------------------------------------------------------------------------------------------
 # NTT parameter pre-calculation.
@@ -217,7 +218,7 @@ class CkksContext:
             message_special_primes = generate_message_primes(cache_folder=cache_folder)[
                 self.message_bits
             ][self.N]
-        except KeyError as e:
+        except KeyError:
             raise errors.NotFoundMessageSpecialPrimes(message_bit=self.message_bits, N=self.N)
 
         # For logN > 16, we need significantly more primes.
@@ -226,7 +227,7 @@ class CkksContext:
             scale_primes = generate_scale_primes(cache_folder=cache_folder, how_many=how_many)[
                 self.scale_bits, self.N
             ]
-        except KeyError as e:
+        except KeyError:
             raise errors.NotFoundScalePrimes(scale_bits=self.scale_bits, N=self.N)
 
         # Compose the primes pack.
@@ -249,7 +250,7 @@ class CkksContext:
 
             self.num_scales = num_scales
             self.q = scale_primes[:num_scales] + base_special_primes
-        except IndexError as e:
+        except IndexError:
             raise errors.NotEnoughPrimes(scale_bits=self.scale_bits, N=self.N)
 
         # Check if security requirements are met.
