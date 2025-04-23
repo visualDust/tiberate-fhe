@@ -117,6 +117,13 @@ class LinearFeatureWiseBenchmark(BenchmarkBase):
         max_diff = diff.max()
         mean_diff = diff.mean()
 
-    def run_linear_feature_wise(self):
-        # Run the linear feature-wise benchmark
-        pass
+        logger.info(
+            f"Max diff: {max_diff}, Mean diff: {mean_diff}, "
+            f"Input shape: {input_shape}, Weight shape: {weight_shape}"
+        )
+        logger.info(f"Benchmark {config['description']} completed successfully.")
+
+
+if __name__ == "__main__":
+    benchmark = LinearFeatureWiseBenchmark()
+    benchmark.run("(64,256)-logN14")

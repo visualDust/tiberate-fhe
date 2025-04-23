@@ -12,7 +12,6 @@ This is a variant of [Desilo/liberate-fhe](https://github.com/Desilo/liberate-fh
 - Python 3.10 or later.
 - CUDA 11 or later, CUDA 12+ is recommended. `nvcc` is required for compiling.
 - [PyTorch](https://pytorch.org/) 2.0 or later installed.
-- Optionally, [Poetry](https://python-poetry.org/) for development.
 
 ## Install
 
@@ -34,7 +33,7 @@ The install process may take long time depending on your machine. Using verbose 
 > pip install tiberate --no-deps --verbose
 > ```
 
-## Install from source
+## Dev
 
 For dev or edible installation, you can install from source.
 
@@ -47,11 +46,8 @@ cd tiberate-fhe
 conda create -n tiberate python=3.12
 conda activate tiberate
 
-# install poetry
-pip install poetry
-
-# install package
-poetry install # this will also install the package itself into current environment
+# build and install
+pip install --editable . --verbose --no-build-isolation
 ```
 
 ## Usage
@@ -95,45 +91,6 @@ plt = diff_distribution(diff)
 plt.show()
 ```
 
-Output:
-
-```
-2025-03-18 11:33:35.410 | INFO     | tiberate.fhe.engine.ckks_engine:__init__:56 - CKKS parameters not specified. Using silver preset.
-2025-03-18 11:33:35.443 | INFO     | tiberate.ntt.ntt_context:__init__:24 - Device not specified. Using default ['cuda:0'].
-2025-03-18 11:33:35.636 | DEBUG    | tiberate.fhe.engine.ckks_engine:sk:87 - Created a new secret key.
-2025-03-18 11:33:35.637 | DEBUG    | tiberate.fhe.engine.ckks_engine:pk:101 - Created a new public key.
-2025-03-18 11:33:35.657 | DEBUG    | tiberate.fhe.engine.ckks_engine:evk:112 - Created a new evaluation key.
-2025-03-18 11:33:35.666 | DEBUG    | tiberate.fhe.engine.ckks_engine:_create_rotation_key:1359 - Rotation key created for delta 1
-2025-03-18 11:33:35.674 | DEBUG    | tiberate.fhe.engine.ckks_engine:_create_rotation_key:1359 - Rotation key created for delta -1
-<class 'tiberate.fhe.engine.ckks_engine.CkksEngine'>
-        Using NTT Context:
-        <class 'tiberate.ntt.ntt_context.NTTContext'>
-	        Using CKKS Context:
-	        <class 'tiberate.fhe.context.ckks_context.CkksContext'>
-		        buffer_bit_length = 62
-		        scale_bits = 40
-		        logN = 15
-		        N = 32,768
-		        Number of special primes = 2
-		        Number of scales = 16
-		        Cache folder = '/home/zgong6/repos/tiberate/tiberate/fhe/cache/resources'
-		        Security bits = 128
-		        Quantum security model = post_quantum
-		        Security sampling distribution = uniform
-		        Number of message bits = 60
-		        Using '821' bits out of available maximum '829' bits.
-		        Is Secured = True
-		        RNS primes = [1099510054913, 1099515691009, 1099507695617, 1099516280833, 1099506515969, 1099520606209, 1099504549889, 1099523555329, 1099503894529, 1099527946241, 1099503370241, 1099529060353, 1099498258433, 1099531223041, 1099469684737, 1099532009473, 1152921504606584833, 1152921504598720513, 1152921504597016577].
-	        Using devices = ['cuda:0']
-	        Available levels = 17
-	        Ordinary primes = 17
-	        Special primes = 2
-
-
-Plaintext(data=tensor([ 2.8118,  0.2544, -0.7268,  ..., -0.6502, -0.7935,  1.5616]), cached levels=[0, 1])
-Mean: 5.629096068239243e-06, Std: 2.091297532980721e-05
-```
-
 ## Run benchmarks
 
 To run benchmarks, you can use the `tiberate benchmark` command:
@@ -147,15 +104,3 @@ This will list all available benchmarks and their options. You can run a specifi
 ```bash
 tiberate benchmark --file path/to/your_benchmark.py
 ```
-
-## Rebuild
-
-If you have modified CUDA or PyTorch versions, you may need to rebuild the package. You can do this by running:
-
-```bash
-tiberate rebuild
-```
-
-## Dev
-
-See [csrc/readme.md](csrc/readme.md) for cpp configuration and build instructions.

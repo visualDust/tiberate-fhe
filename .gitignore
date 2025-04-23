@@ -1,6 +1,7 @@
 # Manually ignored
 .ignored
 *.pyi
+uv.lock
 
 # poetry
 poetry.lock
