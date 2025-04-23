@@ -114,16 +114,16 @@ TORCH_LIBRARY_FRAGMENT(tiberate_ntt_ops, m) {
       "mont_mult(Tensor[] a, Tensor[] b, Tensor[] ql, Tensor[] qh, "
       "Tensor[] kl, Tensor[] kh) -> Tensor[]");
   m.def(
-      "mont_enter(Tensor[] a, Tensor[] Rs, Tensor[] ql, Tensor[] qh, "
+      "mont_enter(Tensor[](a!) a, Tensor[] Rs, Tensor[] ql, Tensor[] qh, "
       "Tensor[] kl, Tensor[] kh) -> ()");
   m.def(
-      "mont_reduce(Tensor[] a, Tensor[] ql, Tensor[] qh, "
+      "mont_reduce(Tensor[](a!) a, Tensor[] ql, Tensor[] qh, "
       "Tensor[] kl, Tensor[] kh) -> ()");
   m.def("mont_add(Tensor[] a, Tensor[] b, Tensor[] _2q) -> Tensor[]");
   m.def("mont_sub(Tensor[] a, Tensor[] b, Tensor[] _2q) -> Tensor[]");
-  m.def("reduce_2q(Tensor[] a, Tensor[] _2q) -> ()");
-  m.def("make_signed(Tensor[] a, Tensor[] _2q) -> ()");
-  m.def("make_unsigned(Tensor[] a, Tensor[] _2q) -> ()");
+  m.def("reduce_2q(Tensor[](a!) a, Tensor[] _2q) -> ()");
+  m.def("make_signed(Tensor[](a!) a, Tensor[] _2q) -> ()");
+  m.def("make_unsigned(Tensor[](a!) a, Tensor[] _2q) -> ()");
   m.def("tile_unsigned(Tensor[] a, Tensor[] _2q) -> Tensor[]");
 }
 TORCH_LIBRARY_IMPL(tiberate_ntt_ops, CUDA, m) {

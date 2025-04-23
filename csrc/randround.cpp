@@ -6,7 +6,7 @@
 // rand_bytes are N 1D uint64_t tensors.
 // Inputs are N 1D double tensors.
 // The output will be returned in rand_bytes.
-void randround(std::vector<torch::Tensor> inputs,
+void randround(const std::vector<torch::Tensor> inputs,
                std::vector<torch::Tensor> rand_bytes) {
   for (size_t i = 0; i < inputs.size(); i++) {
     CHECK_INPUT(rand_bytes[i]);
@@ -17,7 +17,7 @@ void randround(std::vector<torch::Tensor> inputs,
 }
 
 TORCH_LIBRARY_FRAGMENT(tiberate_csprng_ops, m) {
-  m.def("randround(Tensor[] input, Tensor[] rand_bytes) -> ()");
+  m.def("randround(Tensor[] input, Tensor[](a!) rand_bytes) -> ()");
 }
 
 TORCH_LIBRARY_IMPL(tiberate_csprng_ops, CUDA, m) {

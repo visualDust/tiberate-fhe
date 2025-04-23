@@ -9,7 +9,8 @@ for library in ["chacha20", "discrete_gaussian", "mont", "ntt", "randint", "rand
         torch.ops.load_library(spec.origin)
     else:  # pragma: no cover
         raise ImportError(
-            f"Could not find the library {library}. Please ensure it is installed correctly."
+            f"Failed to load {library} library on {osp.dirname(__file__)}. "
+            "Please make sure you have built the library correctly."
         )
 
 

@@ -148,27 +148,27 @@ void intt_exit_reduce_signed(std::vector<torch::Tensor> a,
 
 TORCH_LIBRARY_FRAGMENT(tiberate_ntt_ops, m) {
   m.def(
-      "ntt(Tensor[] a, Tensor[] even, Tensor[] odd, Tensor[] psi, "
+      "ntt(Tensor[](a!) a, Tensor[] even, Tensor[] odd, Tensor[] psi, "
       "Tensor[] _2q, Tensor[] ql, Tensor[] qh, Tensor[] kl, "
       "Tensor[] kh) -> ()");
   m.def(
-      "enter_ntt(Tensor[] a, Tensor[] Rs, Tensor[] even, Tensor[] odd, "
+      "enter_ntt(Tensor[](a!) a, Tensor[] Rs, Tensor[] even, Tensor[] odd, "
       "Tensor[] psi, Tensor[] _2q, Tensor[] ql, Tensor[] qh, "
       "Tensor[] kl, Tensor[] kh) -> ()");
   m.def(
-      "intt(Tensor[] a, Tensor[] even, Tensor[] odd, Tensor[] psi, "
+      "intt(Tensor[](a!) a, Tensor[] even, Tensor[] odd, Tensor[] psi, "
       "Tensor[] Ninv, Tensor[] _2q, Tensor[] ql, Tensor[] qh, "
       "Tensor[] kl, Tensor[] kh) -> ()");
   m.def(
-      "intt_exit(Tensor[] a, Tensor[] even, Tensor[] odd, Tensor[] psi, "
+      "intt_exit(Tensor[](a!) a, Tensor[] even, Tensor[] odd, Tensor[] psi, "
       "Tensor[] Ninv, Tensor[] _2q, Tensor[] ql, Tensor[] qh, "
       "Tensor[] kl, Tensor[] kh) -> ()");
   m.def(
-      "intt_exit_reduce(Tensor[] a, Tensor[] even, Tensor[] odd, "
+      "intt_exit_reduce(Tensor[](a!) a, Tensor[] even, Tensor[] odd, "
       "Tensor[] psi, Tensor[] Ninv, Tensor[] _2q, Tensor[] ql, "
       "Tensor[] qh, Tensor[] kl, Tensor[] kh) -> ()");
   m.def(
-      "intt_exit_reduce_signed(Tensor[] a, Tensor[] even, Tensor[] odd, "
+      "intt_exit_reduce_signed(Tensor[](a!) a, Tensor[] even, Tensor[] odd, "
       "Tensor[] psi, Tensor[] Ninv, Tensor[] _2q, Tensor[] ql, "
       "Tensor[] qh, Tensor[] kl, Tensor[] kh) -> ()");
 }

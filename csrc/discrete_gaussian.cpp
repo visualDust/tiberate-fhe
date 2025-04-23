@@ -45,7 +45,7 @@ std::vector<torch::Tensor> discrete_gaussian_fast(
 
 TORCH_LIBRARY_FRAGMENT(tiberate_csprng_ops, m) {
   m.def(
-      "discrete_gaussian(Tensor[] input, int btree_ptr, int btree_size, "
+      "discrete_gaussian(Tensor[](a!) input, int btree_ptr, int btree_size, "
       "int depth) -> ()");
   m.def(
       "discrete_gaussian_fast(Tensor[] input, int btree_ptr, int btree_size, "

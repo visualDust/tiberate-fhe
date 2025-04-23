@@ -4,7 +4,7 @@
 #define BLOCK_SIZE 256
 
 __global__ void randint_cuda_kernel(
-    torch::PackedTensorAccessor32<double, 1> input,
+    const torch::PackedTensorAccessor32<double, 1> input,
     torch::PackedTensorAccessor32<int64_t, 1> rand_bytes) {
   // Where am I?
   const int index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -35,7 +35,7 @@ __global__ void randint_cuda_kernel(
 }
 
 // The wrapper.
-void randround_cuda(torch::Tensor input, torch::Tensor rand_bytes) {
+void randround_cuda(const torch::Tensor input, torch::Tensor rand_bytes) {
   // rand_bytes has the dim C x N x 16.
   const int dim_block = BLOCK_SIZE;
   const int dim_grid = rand_bytes.size(0) / dim_block;
