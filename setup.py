@@ -8,8 +8,8 @@ from setuptools import setup
 from setuptools.command.build_ext import build_ext as build_ext_orig
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
-logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 
 def clean_built():

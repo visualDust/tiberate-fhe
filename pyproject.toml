@@ -5,9 +5,10 @@ description = "T(yped-l)iberate-fhe: a variant of Liberate-fhe with better typin
 authors = [
     "Juwhan Kim <juwhan.kim@desilo.ai>",
     "Hanyul Ryu <hanyul.ryu@desilo.ai>",
-    "Gavin Gong <gavin@gong.host>"
+    "Gavin Gong <gavin@gong.host>",
 ]
-maintainers = ["Gavin Gong <gavin@gong.host>"]
+maintainers = ["Gavin Gong <gavin@gong.host>", "PuQing <me@puqing.work>"]
+
 readme = ["README.md"]
 
 include = ["csrc/*"]
@@ -53,7 +54,12 @@ nvtx = "^0.2.11"
 torch = "^2.6.0"
 vdtoys = "^0.1.4"
 pybind11-stubgen = "^2.5.3"
+textual = {extras = ["syntax"], version = "^3.1.1"}
+importlib = "^1.0.4"
 
 [build-system]
 requires = ["poetry-core", "torch", "setuptools"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+tiberate = "tiberate._cli:main"

@@ -134,6 +134,28 @@ Plaintext(data=tensor([ 2.8118,  0.2544, -0.7268,  ..., -0.6502, -0.7935,  1.561
 Mean: 5.629096068239243e-06, Std: 2.091297532980721e-05
 ```
 
+## Run benchmarks
+
+To run benchmarks, you can use the `tiberate benchmark` command:
+
+```bash
+tiberate benchmark
+```
+
+This will list all available benchmarks and their options. You can run a specific benchmark by providing its file path:
+
+```bash
+tiberate benchmark --file path/to/your_benchmark.py
+```
+
+## Rebuild
+
+If you have modified CUDA or PyTorch versions, you may need to rebuild the package. You can do this by running:
+
+```bash
+tiberate rebuild
+```
+
 ## Dev
 
 See [csrc/readme.md](csrc/readme.md) for cpp configuration and build instructions.

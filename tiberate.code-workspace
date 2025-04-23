@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "csrc" // csrc folder
+		},
+		{
+			"path": "tiberate/extension/benchmarks" // benchmarks folder
 		}
 	],
 	"settings": {
