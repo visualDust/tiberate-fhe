@@ -1,7 +1,5 @@
 # Manually ignored
 .ignored
-csrc/libtorch
-csrc/build
 *.pyi
 
 # poetry
@@ -183,6 +181,3 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
-
-# skbuild files
-_skbuild/
