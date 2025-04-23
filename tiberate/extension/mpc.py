@@ -1,10 +1,10 @@
 from typing import TYPE_CHECKING, List, Union
 
+import torch
 from vdtoys.mvc import strictype
 
 from tiberate.fhe.encdec import rotate
 from tiberate.fhe.engine import CkksEngine, errors
-from tiberate.ntt import ntt_cuda
 from tiberate.typing import *
 
 
@@ -189,7 +189,7 @@ class CkksEngineMPCExtension(CkksEngine):
                 pk_data = pk.data[0][device_id][astart:astop]
 
                 _2q = self.nttCtx.parts_pack[device_id][key]["_2q"]
-                update_part = ntt_cuda.mont_add([pk_data], [shard], _2q)[0]
+                update_part = torch.ops.tiberate_ntt_ops.mont_add([pk_data], [shard], _2q)[0]
                 pk_data.copy_(update_part, non_blocking=True)
 
                 # Name the pk.

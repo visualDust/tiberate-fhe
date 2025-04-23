@@ -146,58 +146,38 @@ void intt_exit_reduce_signed(std::vector<torch::Tensor> a,
   }
 }
 
-static auto registry =
-    torch::RegisterOperators()
-        .op("torch_tiberate::ntt",
-            &ntt,
-            torch::RegisterOperators::options().schema(
-                "torch_tiberate::ntt(Tensor[] a, "
-                "Tensor[] even, Tensor[] odd, "
-                "Tensor[] psi, Tensor[] _2q, "
-                "Tensor[] ql, Tensor[] qh, "
-                "Tensor[] kl, Tensor[] kh) -> ()"))
-        .op("torch_tiberate::enter_ntt",
-            &enter_ntt,
-            torch::RegisterOperators::options().schema(
-                "torch_tiberate::enter_ntt(Tensor[] a, "
-                "Tensor[] Rs, Tensor[] even, "
-                "Tensor[] odd, Tensor[] psi, "
-                "Tensor[] _2q, Tensor[] ql, "
-                "Tensor[] qh, Tensor[] kl, "
-                "Tensor[] kh) -> ()"))
-        .op("torch_tiberate::intt",
-            &intt,
-            torch::RegisterOperators::options().schema(
-                "torch_tiberate::intt(Tensor[] a, "
-                "Tensor[] even, Tensor[] odd, "
-                "Tensor[] psi, Tensor[] Ninv, "
-                "Tensor[] _2q, Tensor[] ql, "
-                "Tensor[] qh, Tensor[] kl, "
-                "Tensor[] kh) -> ()"))
-        .op("torch_tiberate::intt_exit",
-            &intt_exit,
-            torch::RegisterOperators::options().schema(
-                "torch_tiberate::intt_exit(Tensor[] a, "
-                "Tensor[] even, Tensor[] odd, "
-                "Tensor[] psi, Tensor[] Ninv, "
-                "Tensor[] _2q, Tensor[] ql, "
-                "Tensor[] qh, Tensor[] kl, "
-                "Tensor[] kh) -> ()"))
-        .op("torch_tiberate::intt_exit_reduce",
-            &intt_exit_reduce,
-            torch::RegisterOperators::options().schema(
-                "torch_tiberate::intt_exit_reduce(Tensor[] a, "
-                "Tensor[] even, Tensor[] odd, "
-                "Tensor[] psi, Tensor[] Ninv, "
-                "Tensor[] _2q, Tensor[] ql, "
-                "Tensor[] qh, Tensor[] kl, "
-                "Tensor[] kh) -> ()"))
-        .op("torch_tiberate::intt_exit_reduce_signed",
-            &intt_exit_reduce_signed,
-            torch::RegisterOperators::options().schema(
-                "torch_tiberate::intt_exit_reduce_signed(Tensor[] a, "
-                "Tensor[] even, Tensor[] odd, "
-                "Tensor[] psi, Tensor[] Ninv, "
-                "Tensor[] _2q, Tensor[] ql, "
-                "Tensor[] qh, Tensor[] kl, "
-                "Tensor[] kh) -> ()"));
+TORCH_LIBRARY_FRAGMENT(tiberate_ntt_ops, m) {
+  m.def(
+      "ntt(Tensor[] a, Tensor[] even, Tensor[] odd, Tensor[] psi, "
+      "Tensor[] _2q, Tensor[] ql, Tensor[] qh, Tensor[] kl, "
+      "Tensor[] kh) -> ()");
+  m.def(
+      "enter_ntt(Tensor[] a, Tensor[] Rs, Tensor[] even, Tensor[] odd, "
+      "Tensor[] psi, Tensor[] _2q, Tensor[] ql, Tensor[] qh, "
+      "Tensor[] kl, Tensor[] kh) -> ()");
+  m.def(
+      "intt(Tensor[] a, Tensor[] even, Tensor[] odd, Tensor[] psi, "
+      "Tensor[] Ninv, Tensor[] _2q, Tensor[] ql, Tensor[] qh, "
+      "Tensor[] kl, Tensor[] kh) -> ()");
+  m.def(
+      "intt_exit(Tensor[] a, Tensor[] even, Tensor[] odd, Tensor[] psi, "
+      "Tensor[] Ninv, Tensor[] _2q, Tensor[] ql, Tensor[] qh, "
+      "Tensor[] kl, Tensor[] kh) -> ()");
+  m.def(
+      "intt_exit_reduce(Tensor[] a, Tensor[] even, Tensor[] odd, "
+      "Tensor[] psi, Tensor[] Ninv, Tensor[] _2q, Tensor[] ql, "
+      "Tensor[] qh, Tensor[] kl, Tensor[] kh) -> ()");
+  m.def(
+      "intt_exit_reduce_signed(Tensor[] a, Tensor[] even, Tensor[] odd, "
+      "Tensor[] psi, Tensor[] Ninv, Tensor[] _2q, Tensor[] ql, "
+      "Tensor[] qh, Tensor[] kl, Tensor[] kh) -> ()");
+}
+
+TORCH_LIBRARY_IMPL(tiberate_ntt_ops, CUDA, m) {
+  m.impl("ntt", &ntt);
+  m.impl("enter_ntt", &enter_ntt);
+  m.impl("intt", &intt);
+  m.impl("intt_exit", &intt_exit);
+  m.impl("intt_exit_reduce", &intt_exit_reduce);
+  m.impl("intt_exit_reduce_signed", &intt_exit_reduce_signed);
+}

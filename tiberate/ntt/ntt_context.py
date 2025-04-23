@@ -1,5 +1,4 @@
-import datetime
-import time
+import textwrap
 
 import numpy as np
 import torch
@@ -7,7 +6,6 @@ from loguru import logger
 
 from tiberate.fhe.context.ckks_context import CkksContext
 
-from . import ntt_cuda
 from .rns_partition import RnsPartition
 
 
@@ -86,11 +84,11 @@ class NTTContext:
 
         a = [psi.view(psi.size(0), -1) for psi in p]
 
-        ntt_cuda.mont_enter(a, Rs, ql, qh, kl, kh)
+        torch.ops.tiberate_ntt_ops.mont_enter(a, Rs, ql, qh, kl, kh)
 
         p = self.ipsi
         a = [psi.view(psi.size(0), -1) for psi in p]
-        ntt_cuda.mont_enter(a, Rs, ql, qh, kl, kh)
+        torch.ops.tiberate_ntt_ops.mont_enter(a, Rs, ql, qh, kl, kh)
 
     def Ninv_enter(self):
         self.Ninv = [
@@ -458,67 +456,69 @@ class NTTContext:
     # -------------------------------------------------------------------------------------------------
 
     def mont_enter(self, a, lvl=0, mult_type=-1, part=0):
-        ntt_cuda.mont_enter(
+        torch.ops.tiberate_ntt_ops.mont_enter(
             a,
             self.Rs_prepack[mult_type][lvl][part],
             *self.mont_prepack[mult_type][lvl][part],
         )
 
     def mont_enter_scale(self, a, lvl=0, mult_type=-1, part=0):
-        ntt_cuda.mont_enter(
+        torch.ops.tiberate_ntt_ops.mont_enter(
             a,
             self.Rs_scale_prepack[mult_type][lvl][part],
             *self.mont_prepack[mult_type][lvl][part],
         )
 
     def mont_enter_scalar(self, a, b, lvl=0, mult_type=-1, part=0):
-        ntt_cuda.mont_enter(a, b, *self.mont_prepack[mult_type][lvl][part])
+        torch.ops.tiberate_ntt_ops.mont_enter(a, b, *self.mont_prepack[mult_type][lvl][part])
 
     def mont_mult(self, a, b, lvl=0, mult_type=-1, part=0):
-        return ntt_cuda.mont_mult(a, b, *self.mont_prepack[mult_type][lvl][part])
+        return torch.ops.tiberate_ntt_ops.mont_mult(a, b, *self.mont_prepack[mult_type][lvl][part])
 
     def ntt(self, a, lvl=0, mult_type=-1, part=0):
-        ntt_cuda.ntt(a, *self.ntt_prepack[mult_type][lvl][part])
+        torch.ops.tiberate_ntt_ops.ntt(a, *self.ntt_prepack[mult_type][lvl][part])
 
     def enter_ntt(self, a, lvl=0, mult_type=-1, part=0):
-        ntt_cuda.enter_ntt(
+        torch.ops.tiberate_ntt_ops.enter_ntt(
             a,
             self.Rs_prepack[mult_type][lvl][part],
             *self.ntt_prepack[mult_type][lvl][part],
         )
 
     def intt(self, a, lvl=0, mult_type=-1, part=0):
-        ntt_cuda.intt(a, *self.intt_prepack[mult_type][lvl][part])
+        torch.ops.tiberate_ntt_ops.intt(a, *self.intt_prepack[mult_type][lvl][part])
 
     def mont_reduce(self, a, lvl=0, mult_type=-1, part=0):
-        ntt_cuda.mont_reduce(a, *self.mont_prepack[mult_type][lvl][part])
+        torch.ops.tiberate_ntt_ops.mont_reduce(a, *self.mont_prepack[mult_type][lvl][part])
 
     def intt_exit(self, a, lvl=0, mult_type=-1, part=0):
-        ntt_cuda.intt_exit(a, *self.intt_prepack[mult_type][lvl][part])
+        torch.ops.tiberate_ntt_ops.intt_exit(a, *self.intt_prepack[mult_type][lvl][part])
 
     def intt_exit_reduce(self, a, lvl=0, mult_type=-1, part=0):
-        ntt_cuda.intt_exit_reduce(a, *self.intt_prepack[mult_type][lvl][part])
+        torch.ops.tiberate_ntt_ops.intt_exit_reduce(a, *self.intt_prepack[mult_type][lvl][part])
 
     def intt_exit_reduce_signed(self, a, lvl=0, mult_type=-1, part=0):
-        ntt_cuda.intt_exit_reduce_signed(a, *self.intt_prepack[mult_type][lvl][part])
+        torch.ops.tiberate_ntt_ops.intt_exit_reduce_signed(
+            a, *self.intt_prepack[mult_type][lvl][part]
+        )
 
     def reduce_2q(self, a, lvl=0, mult_type=-1, part=0):
-        ntt_cuda.reduce_2q(a, self._2q_prepack[mult_type][lvl][part])
+        torch.ops.tiberate_ntt_ops.reduce_2q(a, self._2q_prepack[mult_type][lvl][part])
 
     def make_signed(self, a, lvl=0, mult_type=-1, part=0):
-        ntt_cuda.make_signed(a, self._2q_prepack[mult_type][lvl][part])
+        torch.ops.tiberate_ntt_ops.make_signed(a, self._2q_prepack[mult_type][lvl][part])
 
     def make_unsigned(self, a, lvl=0, mult_type=-1, part=0):
-        ntt_cuda.make_unsigned(a, self._2q_prepack[mult_type][lvl][part])
+        torch.ops.tiberate_ntt_ops.make_unsigned(a, self._2q_prepack[mult_type][lvl][part])
 
     def mont_add(self, a, b, lvl=0, mult_type=-1, part=0):
-        return ntt_cuda.mont_add(a, b, self._2q_prepack[mult_type][lvl][part])
+        return torch.ops.tiberate_ntt_ops.mont_add(a, b, self._2q_prepack[mult_type][lvl][part])
 
     def mont_sub(self, a, b, lvl=0, mult_type=-1, part=0):
-        return ntt_cuda.mont_sub(a, b, self._2q_prepack[mult_type][lvl][part])
+        return torch.ops.tiberate_ntt_ops.mont_sub(a, b, self._2q_prepack[mult_type][lvl][part])
 
     def tile_unsigned(self, a, lvl=0, mult_type=-1, part=0):
-        return ntt_cuda.tile_unsigned(a, self._2q_prepack[mult_type][lvl][part])
+        return torch.ops.tiberate_ntt_ops.tile_unsigned(a, self._2q_prepack[mult_type][lvl][part])
 
     def __repr__(self):
         pass
@@ -527,7 +527,7 @@ class NTTContext:
         what_is_this = f"{self.__class__}"
         what_is_this += f"""
         Using CKKS Context:
-        {str(self.ckksCtx).replace('\n', '\n\t')}
+        {textwrap.indent(str(self.ckksCtx), ' '*8)}
         Using devices = {self.devices}
         Available levels = {self.num_levels}
         Ordinary primes = {self.num_ordinary_primes}

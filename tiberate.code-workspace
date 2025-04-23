@@ -6,7 +6,7 @@
     ],
     "settings": {
         "clangd.arguments": [
-            "--compile-commands-dir=${workspaceFolder}/csrc/build"
+            "--compile-commands-dir=${workspaceFolder}/build"
         ]
     }
 }

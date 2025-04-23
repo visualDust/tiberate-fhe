@@ -1,3 +1,4 @@
+#include <torch/library.h>
 #include <vector>
 #include "cuda/mont_cuda.h"
 #include "extensions.h"
@@ -108,17 +109,31 @@ std::vector<torch::Tensor> tile_unsigned(std::vector<torch::Tensor> a,
   return outputs;
 }
 
-static auto registry =
-    torch::RegisterOperators()
-        .op("torch_tiberate::mont_mult",
-            &mont_mult,
-            torch::RegisterOperators::options().aliasAnalysis(
-                torch::AliasAnalysisKind::FROM_SCHEMA))
-        .op("torch_tiberate::mont_enter", &mont_enter)
-        .op("torch_tiberate::mont_reduce", &mont_reduce)
-        .op("torch_tiberate::mont_add", &mont_add)
-        .op("torch_tiberate::mont_sub", &mont_sub)
-        .op("torch_tiberate::reduce_2q", &reduce_2q)
-        .op("torch_tiberate::make_signed", &make_signed)
-        .op("torch_tiberate::make_unsigned", &make_unsigned)
-        .op("torch_tiberate::tile_unsigned", &tile_unsigned);
+TORCH_LIBRARY_FRAGMENT(tiberate_ntt_ops, m) {
+  m.def(
+      "mont_mult(Tensor[] a, Tensor[] b, Tensor[] ql, Tensor[] qh, "
+      "Tensor[] kl, Tensor[] kh) -> Tensor[]");
+  m.def(
+      "mont_enter(Tensor[] a, Tensor[] Rs, Tensor[] ql, Tensor[] qh, "
+      "Tensor[] kl, Tensor[] kh) -> ()");
+  m.def(
+      "mont_reduce(Tensor[] a, Tensor[] ql, Tensor[] qh, "
+      "Tensor[] kl, Tensor[] kh) -> ()");
+  m.def("mont_add(Tensor[] a, Tensor[] b, Tensor[] _2q) -> Tensor[]");
+  m.def("mont_sub(Tensor[] a, Tensor[] b, Tensor[] _2q) -> Tensor[]");
+  m.def("reduce_2q(Tensor[] a, Tensor[] _2q) -> ()");
+  m.def("make_signed(Tensor[] a, Tensor[] _2q) -> ()");
+  m.def("make_unsigned(Tensor[] a, Tensor[] _2q) -> ()");
+  m.def("tile_unsigned(Tensor[] a, Tensor[] _2q) -> Tensor[]");
+}
+TORCH_LIBRARY_IMPL(tiberate_ntt_ops, CUDA, m) {
+  m.impl("mont_mult", &mont_mult);
+  m.impl("mont_enter", &mont_enter);
+  m.impl("mont_reduce", &mont_reduce);
+  m.impl("mont_add", &mont_add);
+  m.impl("mont_sub", &mont_sub);
+  m.impl("reduce_2q", &reduce_2q);
+  m.impl("make_signed", &make_signed);
+  m.impl("make_unsigned", &make_unsigned);
+  m.impl("tile_unsigned", &tile_unsigned);
+}

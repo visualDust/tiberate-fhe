@@ -40,6 +40,7 @@ dependencies = [
     "mpmath>=1.3.0",
     "numpy>=2.2.5",
     "nvtx>=0.2.11",
+    "scikit-build-core>=0.11.1",
     "scipy>=1.15.2",
     "torch>=2.6.0",
     "vdtoys>=0.1.4",
@@ -50,5 +51,6 @@ Repository = "https://github.com/VisualDust/tiberate-fhe"
 [tool.scikit-build]
 build-dir = "build"
 cmake.args = ["-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"]
+cmake.verbose = true
 wheel.install-dir = "tiberate"
 wheel.packages = ["tiberate"]

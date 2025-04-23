@@ -33,15 +33,14 @@ std::vector<torch::Tensor> randint_fast(std::vector<torch::Tensor> states,
   return outputs;
 }
 
-static auto registry =
-    torch::RegisterOperators()
-        .op("torch_tiberate::randint",
-            &randint,
-            torch::RegisterOperators::options().schema(
-                "torch_tiberate::randint(Tensor[] rand_bytes, "
-                "int64_t[] q_ptrs) -> ()"))
-        .op("torch_tiberate::randint_fast",
-            &randint_fast,
-            torch::RegisterOperators::options().schema(
-                "torch_tiberate::randint_fast(Tensor[] states, "
-                "int64_t[] q_ptrs, int64_t shift, int64_t step) -> Tensor[]"));
+TORCH_LIBRARY_FRAGMENT(tiberate_csprng_ops, m) {
+  m.def("randint(Tensor[] input, int[] q_ptrs) -> ()");
+  m.def(
+      "randint_fast(Tensor[] input, int[] q_ptrs, int shift, int step) -> "
+      "Tensor[]");
+}
+
+TORCH_LIBRARY_IMPL(tiberate_csprng_ops, CUDA, m) {
+  m.impl("randint", &randint);
+  m.impl("randint_fast", &randint_fast);
+}

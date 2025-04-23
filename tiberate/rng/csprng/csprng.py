@@ -3,12 +3,6 @@ import os
 
 import numpy as np
 import torch
-from torch.ops.torch_tiberate import (
-    chacha20_cuda,
-    discrete_gaussian_cuda,
-    randint_cuda,
-    randround_cuda,
-)
 
 from tiberate.rng.csprng.discrete_gaussian_sampler import build_CDT_binary_search_tree
 from tiberate.rng.interface import RandNumGen
@@ -69,9 +63,7 @@ class Csprng(RandNumGen):
             self.shares = self.num_channels
         else:
             # User input was contradicting.
-            raise Exception(
-                "There was a contradicting mismatch between " "num_channels, and devices."
-            )
+            raise Exception("There was a contradicting mismatch between num_channels, and devices.")
 
         # How many channels in total?
         self.total_num_channels = sum(self.shares)
@@ -216,7 +208,7 @@ class Csprng(RandNumGen):
             target_states.append(device_states.view(-1, 16))
 
         # Derive random bytes.
-        random_bytes = chacha20_cuda.chacha20(target_states, self.inc)
+        random_bytes = torch.ops.tiberate_csprng_ops.chacha20(target_states, self.inc)
 
         # If not reshape, flatten.
         if reshape:
@@ -249,7 +241,7 @@ class Csprng(RandNumGen):
             target_states.append(device_states)
 
         # Generate the randint.
-        rand_int = randint_cuda.randint_fast(target_states, q_ptr, shift, self.inc)
+        rand_int = torch.ops.tiberate_csprng_ops.randint_fast(target_states, q_ptr, shift, self.inc)
 
         return rand_int
 
@@ -268,7 +260,7 @@ class Csprng(RandNumGen):
             target_states.append(device_states.view(-1, 16))
 
         # Generate the randint.
-        rand_int = discrete_gaussian_cuda.discrete_gaussian_fast(
+        rand_int = torch.ops.tiberate_csprng_ops.discrete_gaussian_fast(
             target_states,
             self.btree_ptr,
             self.btree_size,
@@ -288,7 +280,9 @@ class Csprng(RandNumGen):
         # contiguous stream of states.
         # It will not make the target state strided.
         L = self.num_coefs // 16
-        rand_bytes = chacha20_cuda.chacha20((self.states[0][:L],), self.inc)[0].ravel()
+        rand_bytes = torch.ops.tiberate_csprng_ops.chacha20((self.states[0][:L],), self.inc)[
+            0
+        ].ravel()
 
-        randround_cuda.randround([coef], [rand_bytes])
+        torch.ops.tiberate_csprng_ops.randround([coef], [rand_bytes])
         return rand_bytes

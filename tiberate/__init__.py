@@ -1,11 +1,19 @@
 import importlib
+import os.path as osp
 
 import torch
 
-torch.ops.load_library("libchacha20.so")
-import os.path as osp
+for library in ["chacha20", "discrete_gaussian", "mont", "ntt", "randint", "randround"]:
+    spec = importlib.machinery.PathFinder().find_spec(f"lib{library}", [osp.dirname(__file__)])
+    if spec is not None:
+        torch.ops.load_library(spec.origin)
+    else:  # pragma: no cover
+        raise ImportError(
+            f"Could not find the library {library}. Please ensure it is installed correctly."
+        )
 
-from .fhe.context import presets
-from .fhe.engine import CkksEngine
+
+from tiberate.fhe.context import presets  # noqa
+from tiberate.fhe.engine import CkksEngine  # noqa
 
 __all__ = ["CkksEngine", "presets"]

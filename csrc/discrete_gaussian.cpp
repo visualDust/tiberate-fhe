@@ -43,17 +43,16 @@ std::vector<torch::Tensor> discrete_gaussian_fast(
   return outputs;
 }
 
-static auto registry =
-    torch::RegisterOperators()
-        .op("torch_tiberate::discrete_gaussian",
-            &discrete_gaussian,
-            torch::RegisterOperators::options().schema(
-                "torch_tiberate::discrete_gaussian(Tensor[] rand_bytes, "
-                "int64_t btree_ptr, int64_t btree_size, int64_t depth) -> ()"))
-        .op("torch_tiberate::discrete_gaussian_fast",
-            &discrete_gaussian_fast,
-            torch::RegisterOperators::options().schema(
-                "torch_tiberate::discrete_gaussian_fast(Tensor[] states, "
-                "int64_t "
-                "btree_ptr, int64_t btree_size, int64_t depth, int64_t step) "
-                "-> Tensor[]"));
+TORCH_LIBRARY_FRAGMENT(tiberate_csprng_ops, m) {
+  m.def(
+      "discrete_gaussian(Tensor[] input, int btree_ptr, int btree_size, "
+      "int depth) -> ()");
+  m.def(
+      "discrete_gaussian_fast(Tensor[] input, int btree_ptr, int btree_size, "
+      "int depth, int step) -> Tensor[]");
+}
+
+TORCH_LIBRARY_IMPL(tiberate_csprng_ops, CUDA, m) {
+  m.impl("discrete_gaussian", &discrete_gaussian);
+  m.impl("discrete_gaussian_fast", &discrete_gaussian_fast);
+}

@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.15...3.26)
-project(tiberate-csrc)
+project(tiberate-csrc LANGUAGES CXX CUDA)
+
+option(WITH_CUDA "Enable CUDA support" OFF)
+option(WITH_DEVELOP "Enable development mode" OFF)
 
 if(WITH_CUDA)
   enable_language(CUDA)
@@ -20,7 +23,9 @@ execute_process(
 message(STATUS "Python Executable: ${Python3_EXECUTABLE}")
 message(STATUS "Python Include Dirs: ${Python3_INCLUDE_DIRS}")
 message(STATUS "Torch cmake path: ${TORCH_CMAKE_PATH}")
+message(STATUS "Detected Python SOABI: ${Python3_SOABI}")
 
+set(PYTHON_MODULE_SUFFIX ".${Python3_SOABI}")
 list(APPEND CMAKE_PREFIX_PATH ${TORCH_CMAKE_PATH})
 
 find_package(Torch REQUIRED)
@@ -37,31 +42,29 @@ message(STATUS "Torch include dirs: ${TORCH_INCLUDE_DIRS}")
 set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_INCLUDES OFF)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
-function(add_cuda_library name)
-    add_library(${name} SHARED ${ARGN})
+set(MODULE_NAMES
+    chacha20
+    discrete_gaussian
+    mont
+    ntt
+    randint
+    randround
+)
 
-    target_link_libraries(${name} "${TORCH_LIBRARIES}")
+foreach(name IN LISTS MODULE_NAMES)
+    add_library(${name} MODULE
+        csrc/${name}.cpp
+        csrc/cuda/${name}_cuda.cu
+    )
 
+    target_link_libraries(${name} ${TORCH_LIBRARIES})
     set_target_properties(${name} PROPERTIES
+        PREFIX "lib"
         CXX_STANDARD 17
-        CUDA_SEPARABLE_COMPILATION ON
+        OUTPUT_NAME "${name}${PYTHON_MODULE_SUFFIX}"
     )
 
-    install(
-        TARGETS ${name}
-        DESTINATION .
+    install(TARGETS ${name}
+        LIBRARY DESTINATION .
     )
-endfunction()
-
-add_cuda_library(chacha20
-    csrc/chacha20.cpp
-    csrc/cuda/chacha20_cuda.cu
-)
-add_cuda_library(randint
-    csrc/randint.cpp
-    csrc/cuda/randint_cuda.cu
-)
-add_cuda_library(randround
-    csrc/randround.cpp
-    csrc/cuda/randround_cuda.cu
-)
+endforeach()
