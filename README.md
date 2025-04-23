@@ -10,8 +10,8 @@ This is a variant of [Desilo/liberate-fhe](https://github.com/Desilo/liberate-fh
 ## Pre-requisites
 
 - Python 3.10 or later.
-- CUDA 11 or later, CUDA 12+ is recommended. `nvcc` is required for compiling.
-- [PyTorch](https://pytorch.org/) 2.0 or later installed.
+- CUDA 11 or later, CUDA 12+ is recommended. `nvcc` is required for compiling, please make sure it is in your `PATH`.
+- [PyTorch](https://pytorch.org/) 2.0 or later is required.
 
 ## Install
 
@@ -39,7 +39,7 @@ For dev or edible installation, you can install from source.
 
 ```bash
 # clone the repository
-git clone https://github.com/wens-lab/tiberate-fhe.git
+git clone https://github.com/visualDust/tiberate-fhe.git
 cd tiberate-fhe
 
 # create conda env
@@ -47,7 +47,7 @@ conda create -n tiberate python=3.12
 conda activate tiberate
 
 # build and install
-pip install --editable . --verbose --no-build-isolation
+pip install --editable . --verbose
 ```
 
 ## Usage

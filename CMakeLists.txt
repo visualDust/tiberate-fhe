@@ -28,13 +28,11 @@ message(STATUS "Detected Python SOABI: ${Python3_SOABI}")
 set(PYTHON_MODULE_SUFFIX ".${Python3_SOABI}")
 list(APPEND CMAKE_PREFIX_PATH ${TORCH_CMAKE_PATH})
 
-find_package(Torch REQUIRED)
-find_package(CUDA REQUIRED)
+include_directories(${Python_INCLUDE_DIRS})
 find_package(pybind11 REQUIRED)
-include_directories(
-    ${Python_INCLUDE_DIRS}
-    ${TORCH_INCLUDE_DIRS}
-)
+find_package(Torch REQUIRED)
+include_directories(${TORCH_INCLUDE_DIRS})
+find_package(CUDA REQUIRED)
 
 message(STATUS "Python include dirs: ${Python_INCLUDE_DIRS}")
 message(STATUS "Torch include dirs: ${TORCH_INCLUDE_DIRS}")
@@ -64,14 +62,15 @@ foreach(name IN LISTS MODULE_NAMES)
         OUTPUT_NAME "${name}${PYTHON_MODULE_SUFFIX}"
     )
 
-    # if SKBUILD_STATE is editable, set the output directory ./tiberate
+    # if SKBUILD_STATE is editable, set the output directory ./tiberate/libs
+    # else set the output directory to ./libs
     if(SKBUILD_STATE STREQUAL "editable")
         install(TARGETS ${name}
-            LIBRARY DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/tiberate
+            LIBRARY DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/tiberate/libs
         )
     else()
         install(TARGETS ${name}
-            LIBRARY DESTINATION .
+            LIBRARY DESTINATION ./libs
         )
     endif()
 

@@ -1,15 +1,16 @@
 [build-system]
-requires = ["scikit-build-core >=0.4.3", "torch"]
+requires = ["scikit-build-core", "torch"]
 build-backend = "scikit_build_core.build"
 
 [project]
 name = "tiberate"
-version = "0.9.9"
+version = "0.9.10"
 description = "T(yped-l)iberate-fhe: a variant of Liberate-fhe with better typing"
 authors = [
     { name = "Juwhan Kim", email = "juwhan.kim@desilo.ai" },
     { name = "Hanyul Ryu", email = "hanyul.ryu@desilo.ai" },
     { name = "Gavin Gong", email = "gavin@gong.host" },
+    { name = "PuQing", email = "me@puqing.work" },
 ]
 requires-python = ">=3.10"
 maintainers = [
@@ -37,13 +38,14 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
 ]
 dependencies = [
-    "importlib>=1.0.4",
+    "click>=8.1.8",
     "joblib>=1.4.2",
     "loguru>=0.7.3",
     "matplotlib>=3.10.1",
     "mpmath>=1.3.0",
     "numpy>=2.2.5",
     "nvtx>=0.2.11",
+    "pybind11>=2.13.6",
     "scikit-build-core>=0.11.1",
     "scipy>=1.15.2",
     "textual[syntax]>=3.1.1",
