@@ -1,4 +1,6 @@
 import numpy as np
+import functools
+import operator
 
 
 class RnsPartition:
@@ -41,7 +43,10 @@ class RnsPartition:
         ]
         prime_allocations = [expand_alloc(i) for i in range(num_devices)]
 
-        flat_prime_allocations = [sum(alloc, []) for alloc in prime_allocations]
+        flat_prime_allocations = [
+            functools.reduce(operator.iadd, alloc, [])
+            for alloc in prime_allocations
+        ]
 
         self.num_ordinary_primes = num_ordinary_primes
         self.num_special_primes = num_special_primes
