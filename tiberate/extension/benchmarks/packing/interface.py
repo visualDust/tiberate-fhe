@@ -170,11 +170,11 @@ class PackedCT:
     ):
         if isinstance(x, list):
             return cls._get_ct_shape_of_any_depth(
-                x[0], current_shape_tuple + (len(x),)
+                x[0], (*current_shape_tuple, len(x))
             )
         elif isinstance(x, dict):
             return cls._get_ct_shape_of_any_depth(
-                next(iter(x.values())), current_shape_tuple + (len(x),)
+                next(iter(x.values())), (*current_shape_tuple, len(x))
             )
         else:
             return current_shape_tuple

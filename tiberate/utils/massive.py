@@ -140,7 +140,7 @@ def decompose_rot_offsets(offset: int, num_slots: int, rotks: dict) -> list:
             next_sum = curr_sum + coin
             if -bound <= next_sum <= bound and next_sum not in visited:
                 visited.add(next_sum)
-                queue.append((next_sum, path + [coin]))
+                queue.append((next_sum, [*path, coin]))
 
     # If no solution found, return solution given by decompose_with_power_of_2
     return best_possible_decomp
