@@ -37,12 +37,12 @@ def ckks_engine(
     return engine
 
 
-scales = [x for x in range(20, 50, 5)]
-logNs = [x for x in range(14, 17)]
+scales = list(range(20, 50, 5))
+logNs = list(range(14, 17))
 test_cases = [
     (logN, scale, True)
-    for logN in [x for x in range(14, 17)]  # logNs
-    for scale in [x for x in range(20, 50, 5)]  # scales
+    for logN in list(range(14, 17))  # logNs
+    for scale in list(range(20, 50, 5))  # scales
 ]
 
 
