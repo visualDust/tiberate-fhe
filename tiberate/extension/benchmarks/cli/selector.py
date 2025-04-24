@@ -198,7 +198,7 @@ def main():
         try:
             bench_instance = benchCls()
             available_bench_instances[name] = bench_instance
-            logger.success(f"Created benchmark instance {name}")
+            logger.info(f"Created benchmark instance {name}")
         except Exception as e:
             logger.error(f"Failed to initialize benchmark {name}: {e}")
             continue

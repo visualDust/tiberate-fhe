@@ -84,11 +84,11 @@ class PackedCT:
     debug = False  # class variable
 
     metadata: PackingMetadata
-    cts: list[Ciphertext] | Dict[Any, list[Ciphertext]]
+    cts: list[Ciphertext] | dict[Any, list[Ciphertext]]
 
     def __init__(
         self,
-        cts: list | Dict,  # ciphertext or list of ciphertexts
+        cts: list | dict,  # ciphertext or list of ciphertexts
         metadata: PackingMetadata,
     ):
         self.metadata = metadata
