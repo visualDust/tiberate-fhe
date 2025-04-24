@@ -1,6 +1,7 @@
-import numpy as np
 import functools
 import operator
+
+import numpy as np
 
 
 class RnsPartition:

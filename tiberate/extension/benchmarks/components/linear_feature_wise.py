@@ -37,10 +37,7 @@ class HELinear_FeatureWiseCTInput_ColMajorPTSquareWeight_FeatureWiseCTOutput(
                 f"Please use class methods .fromTorch or .fromWeight to create an instance of {self.__class__.__name__}, DO NOT USE THIS init METHOD DIRECTLY, unless you know what you are doing."
             )
 
-        super(
-            HELinear_FeatureWiseCTInput_ColMajorPTSquareWeight_FeatureWiseCTOutput,
-            self,
-        ).__init__()
+        super().__init__()
 
         # encode weight and bias
 
