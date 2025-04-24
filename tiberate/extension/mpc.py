@@ -20,7 +20,7 @@ class CkksEngineMPCExtension(CkksEngine):
         self, sk: SecretKey, a=None, include_special=False
     ) -> PublicKey:
         if include_special and not sk.has_flag(FLAGS.INCLUDE_SPECIAL):
-            raise errors.SecretKeyNotIncludeSpecialPrime()
+            raise errors.SecretKeyNotIncludeSpecialPrime
         mult_type = -2 if include_special else -1
 
         level = 0

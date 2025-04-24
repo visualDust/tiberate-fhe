@@ -548,7 +548,7 @@ class CkksEngine:
         sk = sk or self.sk
 
         if include_special and not sk.has_flag(FLAGS.INCLUDE_SPECIAL):
-            raise errors.SecretKeyNotIncludeSpecialPrime()
+            raise errors.SecretKeyNotIncludeSpecialPrime
 
         # Set the mult_type
         mult_type = -2 if include_special else -1

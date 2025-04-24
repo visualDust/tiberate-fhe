@@ -40,7 +40,7 @@ def benchmark_command(file: str | None = None):
         file_path = os.path.abspath(file)
         if not os.path.isfile(file_path):
             click.echo(f"[Error] File not found: {file_path}", err=True)
-            raise click.Abort()
+            raise click.Abort
         click.echo(f"[Info] Running benchmark file: {file_path}")
         # import the benchmark file dynamically and then launch benchselector
         import importlib.util
@@ -50,7 +50,7 @@ def benchmark_command(file: str | None = None):
             click.echo(
                 f"[Error] Could not load benchmark file: {file_path}", err=True
             )
-            raise click.Abort()
+            raise click.Abort
         benchmark_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(benchmark_module)
 
