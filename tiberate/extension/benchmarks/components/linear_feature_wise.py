@@ -12,7 +12,7 @@ from vdtoys.framing import get_caller_info_traceback
 from vdtoys.registry import Registry
 
 from tiberate import CkksEngine
-from tiberate.typing import *
+from tiberate.typing import *  # noqa: F403
 
 from ..packing.feature_wise_compact import (
     FeatureWise_PackedCT,

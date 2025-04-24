@@ -103,7 +103,7 @@ class DataStruct:
         self._flags ^= flag
 
     @property
-    def flags(self, only_set: bool = True) -> list[FLAGS]:
+    def flags(self, only_set: bool = True) -> list[FLAGS]:  # noqa: PLR0206
         """Returns a list of all flags, optionally only those that are set."""
         return [flag for flag in FLAGS if not only_set or self.has_flag(flag)]
 

@@ -3,22 +3,23 @@
 # Github: github.com/visualDust
 
 import math
-from typing import TYPE_CHECKING
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from loguru import logger
 from vdtoys.registry import Registry
 
 from tiberate import CkksEngine
-from tiberate.typing import *
+from tiberate.typing import *  # noqa: F403
 from tiberate.utils.massive import next_power_of_2
 
-from ..packing.interface import PackedCT, PTPacking
-from .interface import CTEncoding, PackedCT, PackingMetadata
-
-if TYPE_CHECKING:
-    import numpy as np
+from .interface import (
+    CTEncoding,
+    PackedCT,
+    PackingMetadata,
+    PTPacking,
+)
 
 
 class FeatureWise_PTPacking(PTPacking):

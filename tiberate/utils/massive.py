@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from loguru import logger
 
-from tiberate.typing import *
+from tiberate.typing import *  # noqa: F403
 
 
 def copy_some_datastruct(src):

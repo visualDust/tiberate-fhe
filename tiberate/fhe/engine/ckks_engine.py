@@ -23,7 +23,7 @@ from tiberate.fhe.encdec import (
 from tiberate.fhe.engine import errors
 from tiberate.ntt import NTTContext
 from tiberate.rng import Csprng, RandNumGen, SimpleRNG
-from tiberate.typing import *  # noqa
+from tiberate.typing import *  # noqa: F403
 from tiberate.utils.massive import decompose_rot_offsets
 
 engClsRegistry = Registry("ENGINE_CLASS")
@@ -246,7 +246,7 @@ class CkksEngine:
         return self.nttCtx.devices[0]
 
     @property
-    @functools.cache  # >= python 3.9
+    @functools.cache  # >= python 3.9  # noqa: B019
     def hash(self) -> str:
         qstr = ",".join([str(qi) for qi in self.ckksCtx.q])
         hashstr = (self.ckksCtx.generation_string + "_" + qstr).encode("utf-8")

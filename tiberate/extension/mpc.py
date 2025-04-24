@@ -3,7 +3,7 @@ from vdtoys.mvc import strictype
 
 from tiberate.fhe.encdec import rotate
 from tiberate.fhe.engine import CkksEngine, errors
-from tiberate.typing import *
+from tiberate.typing import *  # noqa: F403
 
 
 class CkksEngineMPCExtension(CkksEngine):
