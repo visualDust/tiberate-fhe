@@ -269,9 +269,9 @@ class DataStruct:
 # Message Type Alias #
 # ================== #
 
-VectorMessageType = Union[numpy.ndarray, torch.Tensor, list]
-ScalarMessageType = Union[int, float]
-MessageType = Union[VectorMessageType, ScalarMessageType]
+VectorMessageType = numpy.ndarray | torch.Tensor | list
+ScalarMessageType = int | float
+MessageType = VectorMessageType | ScalarMessageType
 
 
 # ================== #
@@ -551,7 +551,7 @@ class CiphertextTriplet(DataStruct):
         engine = self._default_engine
         if isinstance(other, CiphertextTriplet):
             return engine.cc_add_triplet(self, other)
-        elif isinstance(other, Union[Ciphertext, Plaintext, MessageType]):
+        elif isinstance(other, Ciphertext | Plaintext | MessageType):
             self_relin = engine.relinearize(self)
             return other + self_relin
 
@@ -559,7 +559,7 @@ class CiphertextTriplet(DataStruct):
         engine = self._default_engine
         if isinstance(other, CiphertextTriplet):
             return engine.cc_sub_triplet(self, other)
-        elif isinstance(other, Union[Ciphertext, Plaintext, MessageType]):
+        elif isinstance(other, Ciphertext | Plaintext | MessageType):
             self_relin = engine.relinearize(self)
             return other - self_relin
 
