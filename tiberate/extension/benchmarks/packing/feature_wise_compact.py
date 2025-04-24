@@ -103,7 +103,7 @@ class FeatureWise_PTPacking(PTPacking):
 
     @classmethod
     def undo_pad_tensor_to_align_logical_num_slots_on_last_dim(
-        cls, x: torch.Tensor, original_shape: Union[List[int], tuple[int]]
+        cls, x: torch.Tensor, original_shape: Union[list[int], tuple[int]]
     ):
         """
         This is the inverse operation of @pad_tensor_to_align_logical_num_slots_on_last_dim,
@@ -113,7 +113,7 @@ class FeatureWise_PTPacking(PTPacking):
 
         Parameters:
         - tensor (torch.Tensor): The input tensor.
-        - original_shape (List[int]): The original shape of the tensor before padding.
+        - original_shape (list[int]): The original shape of the tensor before padding.
 
         Returns:
         - torch.Tensor: The restored tensor in shape of original_shape.
