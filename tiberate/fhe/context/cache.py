@@ -19,7 +19,6 @@ def clean_cache(path=None):
         except Exception as e:
             print(e)
             pass
-    return
 
 
 def generate_cache(path=None):
@@ -30,4 +29,3 @@ def generate_cache(path=None):
 
     _ = generate_primes.generate_message_primes(cache_folder=path)
     _ = generate_primes.generate_scale_primes(cache_folder=path)
-    return

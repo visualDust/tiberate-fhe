@@ -1,16 +1,13 @@
-# -*- coding: utf-8 -*-
 #
 # Author: GavinGong aka VisualDust
 # Github: github.com/visualDust
-
-import torch
 
 
 class HEModule:
     debug = False
 
     def forward(self, *args, **kwargs):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
@@ -21,7 +18,7 @@ class HELinear(HEModule):
 
     @classmethod
     def fromTorch(cls, *args, **kwargs):
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class HELayerNorm(HEModule):
@@ -29,4 +26,4 @@ class HELayerNorm(HEModule):
 
     @classmethod
     def fromTorch(cls, *args, **kwargs):
-        raise NotImplementedError()
+        raise NotImplementedError

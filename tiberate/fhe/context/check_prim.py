@@ -37,7 +37,9 @@ def MillerRabinPrimalityTest(number, rounds=10):
         randomNumberWithPower = pow(randomNumber, oddPartOfNumber, number)
 
         # If random number is not 1 and not -1 ( in mod n )
-        if (randomNumberWithPower != 1) and (randomNumberWithPower != number - 1):
+        if (randomNumberWithPower != 1) and (
+            randomNumberWithPower != number - 1
+        ):
             # number of iteration
             iterationNumber = 1
 

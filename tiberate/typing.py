@@ -1,9 +1,7 @@
-import functools
 import pickle
 from collections import defaultdict
 from enum import Flag, auto
-from logging import warning
-from typing import TYPE_CHECKING, Any, Dict, List, Union
+from typing import TYPE_CHECKING, Any, Union
 
 import numpy
 import torch
@@ -56,7 +54,7 @@ class DataStruct:
         self,
         data,
         *,
-        flags: Union[FLAGS, List[FLAGS], None] = None,
+        flags: FLAGS | list[FLAGS] | None = None,
         level: int,
         **kwargs,
     ):
@@ -105,7 +103,7 @@ class DataStruct:
         self._flags ^= flag
 
     @property
-    def flags(self, only_set: bool = True) -> list[FLAGS]:
+    def flags(self, only_set: bool = True) -> list[FLAGS]:  # noqa: PLR0206
         """Returns a list of all flags, optionally only those that are set."""
         return [flag for flag in FLAGS if not only_set or self.has_flag(flag)]
 
@@ -166,7 +164,7 @@ class DataStruct:
             return cls.get_device_of_tensor(data[0]) if data else "cpu"
         elif isinstance(data, dict):  # plaintext cache
             return (
-                cls.get_device_of_tensor(list(data.values())[0])
+                cls.get_device_of_tensor(next(iter(data.values())))
                 if data
                 else "cpu"  # if data is empty, return cpu
             )
@@ -184,7 +182,9 @@ class DataStruct:
         return self.get_device_of_tensor(self.data)
 
     @classmethod
-    def copy_tensor_to_device_recursive(cls, data, device: str, non_blocking=True):
+    def copy_tensor_to_device_recursive(
+        cls, data, device: str, non_blocking=True
+    ):
         """Recursively move tensors in the data structure to a specified device.
         Args:
             data: The data structure to move.
@@ -196,9 +196,15 @@ class DataStruct:
         if isinstance(data, Tensor):
             return data.to(device=device, non_blocking=non_blocking, copy=True)
         elif isinstance(data, list):
-            return [cls.copy_tensor_to_device_recursive(item, device) for item in data]
+            return [
+                cls.copy_tensor_to_device_recursive(item, device)
+                for item in data
+            ]
         elif isinstance(data, tuple):  # legacy datastruct uses tuple
-            return tuple(cls.copy_tensor_to_device_recursive(item, device) for item in data)
+            return tuple(
+                cls.copy_tensor_to_device_recursive(item, device)
+                for item in data
+            )
         elif isinstance(data, dict):  # plaintext cache
             return {
                 cls.copy_tensor_to_device_recursive(
@@ -208,7 +214,9 @@ class DataStruct:
             }
         elif isinstance(data, CachedDict):
             new_instance = data.__class__(data.generator_func)
-            new_instance._cache = cls.copy_tensor_to_device_recursive(data._cache, device)
+            new_instance._cache = cls.copy_tensor_to_device_recursive(
+                data._cache, device
+            )
             return new_instance
         elif isinstance(data, DataStruct):
             return data.copy_to(device)
@@ -246,9 +254,7 @@ class DataStruct:
             return pickle.load(f)
 
     def __repr__(self):
-        return (
-            f"{self.__class__.__name__}(flags={self.flags}, level={self.level}, misc={self.misc})"
-        )
+        return f"{self.__class__.__name__}(flags={self.flags}, level={self.level}, misc={self.misc})"
 
     def __str__(self):
         return self.__repr__()
@@ -263,9 +269,9 @@ class DataStruct:
 # Message Type Alias #
 # ================== #
 
-VectorMessageType = Union[numpy.ndarray, torch.Tensor, list]
-ScalarMessageType = Union[int, float]
-MessageType = Union[VectorMessageType, ScalarMessageType]
+VectorMessageType = numpy.ndarray | torch.Tensor | list
+ScalarMessageType = int | float
+MessageType = VectorMessageType | ScalarMessageType
 
 
 # ================== #
@@ -291,7 +297,9 @@ class Plaintext(DataStruct):
         self,
         m: MessageType,
         *,
-        cache: Dict[int, Dict[str, Any]] = None,  # level: {what_cache: cache_data}
+        cache: (
+            dict[int, dict[str, Any]] | None
+        ) = None,  # level: {what_cache: cache_data}
         padding=True,  # todo remove padding flag in legacy code
         scale=None,  # by default None, which means use engine's parameter
         **kwargs,
@@ -358,9 +366,7 @@ class Plaintext(DataStruct):
         return cls(self.src, cache=cache)
 
     def __repr__(self):
-        return (
-            f"{self.__class__.__name__}(data={self.src}, cached levels={list(self.cache.keys())})"
-        )
+        return f"{self.__class__.__name__}(data={self.src}, cached levels={list(self.cache.keys())})"
 
     @property
     def level(self):
@@ -399,12 +405,14 @@ class Ciphertext(DataStruct):
         else:
             raise TypeError(f"Unsupported type for addition: {type(other)}")
 
-    def __radd__(self, other: Union[Plaintext, MessageType]):
+    def __radd__(self, other: Plaintext | MessageType):
         # m + ct
         # pt + ct
         return self + other
 
-    def __sub__(self, other: Union["Ciphertext", "CiphertextTriplet", Plaintext]):
+    def __sub__(
+        self, other: Union["Ciphertext", "CiphertextTriplet", Plaintext]
+    ):
         engine = self._default_engine
         if isinstance(other, Ciphertext):  # ct - ct
             return engine.cc_sub_double(self, other)
@@ -412,23 +420,31 @@ class Ciphertext(DataStruct):
             other_relin = engine.relinearize(other)
             return engine.cc_sub_double(self, other_relin)
         elif isinstance(other, ScalarMessageType):  # ct - m
-            return engine.add_scalar(self, -other, inplace=self.__class__.DEFAULT_MCOP_INPLACE)
+            return engine.add_scalar(
+                self, -other, inplace=self.__class__.DEFAULT_MCOP_INPLACE
+            )
         elif isinstance(other, VectorMessageType):  # ct - <m>
             other_pt = Plaintext(-other)
-            return engine.pc_add(other_pt, self, inplace=self.__class__.DEFAULT_MCOP_INPLACE)
+            return engine.pc_add(
+                other_pt, self, inplace=self.__class__.DEFAULT_MCOP_INPLACE
+            )
         elif isinstance(other, Plaintext):  # ct - pt
-            return engine.pc_add(-other, self, inplace=self.__class__.DEFAULT_PCOP_INPLACE)
+            return engine.pc_add(
+                -other, self, inplace=self.__class__.DEFAULT_PCOP_INPLACE
+            )
         else:
             raise TypeError(f"Unsupported type for subtraction: {type(other)}")
 
-    def __rsub__(self, other: Union[Plaintext, MessageType]):
+    def __rsub__(self, other: Plaintext | MessageType):
         # m - ct
         # pt - ct
         engine = self._default_engine
         neg_ct = engine.negate(self, inplace=self.__class__.DEFAULT_NEG_INPLACE)
         return neg_ct + other
 
-    def __mul__(self, other: Union["Ciphertext", "CiphertextTriplet", Plaintext]):
+    def __mul__(
+        self, other: Union["Ciphertext", "CiphertextTriplet", Plaintext]
+    ):
         engine = self._default_engine
         if isinstance(other, Ciphertext):  # ct * ct
             return engine.cc_mult(self, other)
@@ -436,15 +452,23 @@ class Ciphertext(DataStruct):
             other_relin = engine.relinearize(other)
             return engine.cc_mult(self, other_relin)
         elif isinstance(other, ScalarMessageType):  # ct * m
-            return engine.mult_scalar(self, other, inplace=self.__class__.DEFAULT_MCOP_INPLACE)
+            return engine.mult_scalar(
+                self, other, inplace=self.__class__.DEFAULT_MCOP_INPLACE
+            )
         elif isinstance(other, VectorMessageType):  # ct * <m>
-            return engine.mc_mult(other, self, inplace=self.__class__.DEFAULT_MCOP_INPLACE)
+            return engine.mc_mult(
+                other, self, inplace=self.__class__.DEFAULT_MCOP_INPLACE
+            )
         elif isinstance(other, Plaintext):  # ct * pt
-            return engine.pc_mult(other, self, inplace=self.__class__.DEFAULT_PCOP_INPLACE)
+            return engine.pc_mult(
+                other, self, inplace=self.__class__.DEFAULT_PCOP_INPLACE
+            )
         else:
-            raise TypeError(f"Unsupported type for multiplication: {type(other)}")
+            raise TypeError(
+                f"Unsupported type for multiplication: {type(other)}"
+            )
 
-    def __rmul__(self, other: Union[Plaintext, MessageType]):
+    def __rmul__(self, other: Plaintext | MessageType):
         # m * ct
         # pt * ct
         return self * other
@@ -497,9 +521,13 @@ class Ciphertext(DataStruct):
         engine = self._default_engine
         return engine.level_up(self, dst_level=dst_level, **kwargs)
 
-    def decryptcode(self, sk: "SecretKey" = None, is_real=False, final_round=True, **kwargs):
+    def decryptcode(
+        self, sk: "SecretKey" = None, is_real=False, final_round=True, **kwargs
+    ):
         engine = self._default_engine
-        return engine.decryptcode(self, sk=sk, is_real=is_real, final_round=final_round, **kwargs)
+        return engine.decryptcode(
+            self, sk=sk, is_real=is_real, final_round=final_round, **kwargs
+        )
 
     @property
     def plain(self):
@@ -523,7 +551,7 @@ class CiphertextTriplet(DataStruct):
         engine = self._default_engine
         if isinstance(other, CiphertextTriplet):
             return engine.cc_add_triplet(self, other)
-        elif isinstance(other, Union[Ciphertext, Plaintext, MessageType]):
+        elif isinstance(other, Ciphertext | Plaintext | MessageType):
             self_relin = engine.relinearize(self)
             return other + self_relin
 
@@ -531,7 +559,7 @@ class CiphertextTriplet(DataStruct):
         engine = self._default_engine
         if isinstance(other, CiphertextTriplet):
             return engine.cc_sub_triplet(self, other)
-        elif isinstance(other, Union[Ciphertext, Plaintext, MessageType]):
+        elif isinstance(other, Ciphertext | Plaintext | MessageType):
             self_relin = engine.relinearize(self)
             return other - self_relin
 
@@ -562,14 +590,18 @@ class CiphertextTriplet(DataStruct):
     def rescale(self, exact_rounding=True, **kwargs):
         engine = self._default_engine
         self_relin = engine.relinearize(self)
-        return engine.rescale(self_relin, exact_rounding=exact_rounding, **kwargs)
+        return engine.rescale(
+            self_relin, exact_rounding=exact_rounding, **kwargs
+        )
 
     def level_up(self, dst_level: int, **kwargs):
         engine = self._default_engine
         self_relin = engine.relinearize(self)
         return engine.level_up(self_relin, dst_level=dst_level, **kwargs)
 
-    def decryptcode(self, sk: "SecretKey" = None, is_real=False, final_round=True, **kwargs):
+    def decryptcode(
+        self, sk: "SecretKey" = None, is_real=False, final_round=True, **kwargs
+    ):
         engine = self._default_engine
         self_relin = engine.relinearize(self)
         return engine.decryptcode(

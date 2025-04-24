@@ -1,10 +1,8 @@
 import os
-from random import randint
 
 import click
 from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
 
 console = Console()
 
@@ -42,20 +40,24 @@ def benchmark_command(file: str | None = None):
         file_path = os.path.abspath(file)
         if not os.path.isfile(file_path):
             click.echo(f"[Error] File not found: {file_path}", err=True)
-            raise click.Abort()
+            raise click.Abort
         click.echo(f"[Info] Running benchmark file: {file_path}")
         # import the benchmark file dynamically and then launch benchselector
         import importlib.util
 
         spec = importlib.util.spec_from_file_location("benchmark", file_path)
         if spec is None:
-            click.echo(f"[Error] Could not load benchmark file: {file_path}", err=True)
-            raise click.Abort()
+            click.echo(
+                f"[Error] Could not load benchmark file: {file_path}", err=True
+            )
+            raise click.Abort
         benchmark_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(benchmark_module)
 
     # Run the benchmark selector
-    from tiberate.extension.benchmarks.cli.selector import main as bench_selector
+    from tiberate.extension.benchmarks.cli.selector import (
+        main as bench_selector,
+    )
 
     bench_selector()
 

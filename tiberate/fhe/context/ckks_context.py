@@ -204,7 +204,9 @@ class CkksContext:
             self.secret_key_sampling_method = "sparse ternary"
 
         # dtypes.
-        self.torch_dtype = {30: torch.int32, 62: torch.int64}[self.buffer_bit_length]
+        self.torch_dtype = {30: torch.int32, 62: torch.int64}[
+            self.buffer_bit_length
+        ]
         self.numpy_dtype = {30: np.int32, 62: np.int64}[self.buffer_bit_length]
 
         # Polynomial length.
@@ -215,32 +217,42 @@ class CkksContext:
 
         # Read in pre-calculated high-quality primes.
         try:
-            message_special_primes = generate_message_primes(cache_folder=cache_folder)[
-                self.message_bits
-            ][self.N]
+            message_special_primes = generate_message_primes(
+                cache_folder=cache_folder
+            )[self.message_bits][self.N]
         except KeyError:
-            raise errors.NotFoundMessageSpecialPrimes(message_bit=self.message_bits, N=self.N)
+            raise errors.NotFoundMessageSpecialPrimes(
+                message_bit=self.message_bits, N=self.N
+            )
 
         # For logN > 16, we need significantly more primes.
         how_many = 64 if self.logN < 16 else 128
         try:
-            scale_primes = generate_scale_primes(cache_folder=cache_folder, how_many=how_many)[
-                self.scale_bits, self.N
-            ]
+            scale_primes = generate_scale_primes(
+                cache_folder=cache_folder, how_many=how_many
+            )[self.scale_bits, self.N]
         except KeyError:
-            raise errors.NotFoundScalePrimes(scale_bits=self.scale_bits, N=self.N)
+            raise errors.NotFoundScalePrimes(
+                scale_bits=self.scale_bits, N=self.N
+            )
 
         # Compose the primes pack.
         # Rescaling drops off primes in --> direction.
         # Key switching drops off primes in <-- direction.
         # Hence, [scale primes, base message prime, special primes]
-        self.max_qbits = int(maximum_qbits(self.N, security_bits, quantum, distribution))
-        base_special_primes = message_special_primes[: 1 + self.num_special_primes]
+        self.max_qbits = int(
+            maximum_qbits(self.N, security_bits, quantum, distribution)
+        )
+        base_special_primes = message_special_primes[
+            : 1 + self.num_special_primes
+        ]
 
         # If num_scales is None, generate the maximal number of levels.
         try:
             if num_scales is None:
-                base_special_bits = sum([math.log2(p) for p in base_special_primes])
+                base_special_bits = sum(
+                    [math.log2(p) for p in base_special_primes]
+                )
                 available_bits = self.max_qbits - base_special_bits
                 num_scales = 0
                 available_bits -= math.log2(scale_primes[num_scales])
@@ -290,13 +302,20 @@ class CkksContext:
         self.full_bits_mask = (1 << self.buffer_bit_length) - 1
 
         self.q_lower_bits = [qi & self.lower_bits_mask for qi in self.q]
-        self.q_higher_bits = [qi >> self.half_buffer_bit_length for qi in self.q]
+        self.q_higher_bits = [
+            qi >> self.half_buffer_bit_length for qi in self.q
+        ]
         self.q_double = [qi << 1 for qi in self.q]
 
         self.R_inv = [pow(self.R, -1, qi) for qi in self.q]
-        self.k = [(self.R * R_invi - 1) // qi for R_invi, qi in zip(self.R_inv, self.q)]
+        self.k = [
+            (self.R * R_invi - 1) // qi
+            for R_invi, qi in zip(self.R_inv, self.q)
+        ]
         self.k_lower_bits = [ki & self.lower_bits_mask for ki in self.k]
-        self.k_higher_bits = [ki >> self.half_buffer_bit_length for ki in self.k]
+        self.k_higher_bits = [
+            ki >> self.half_buffer_bit_length for ki in self.k
+        ]
 
     def generate_paints(self):
         self.N_inv = [pow(self.N, -1, qi) for qi in self.q]
@@ -317,10 +336,12 @@ class CkksContext:
         ) = paint_butterfly_backward(self.logN)
 
         # Pre-painted psi and ipsi.
-        self.forward_psi = psi[..., forward_psi_paint.ravel()].reshape(-1, *forward_psi_paint.shape)
-        self.backward_psi_inv = psi_inv[..., backward_psi_paint.ravel()].reshape(
-            -1, *backward_psi_paint.shape
+        self.forward_psi = psi[..., forward_psi_paint.ravel()].reshape(
+            -1, *forward_psi_paint.shape
         )
+        self.backward_psi_inv = psi_inv[
+            ..., backward_psi_paint.ravel()
+        ].reshape(-1, *backward_psi_paint.shape)
 
     def __str__(self):
         what_is_this = f"{self.__class__}"

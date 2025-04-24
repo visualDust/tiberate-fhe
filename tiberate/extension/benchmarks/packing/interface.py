@@ -1,22 +1,25 @@
-# -*- coding: utf-8 -*-
 #
 # Author: GavinGong aka VisualDust
 # Github: github.com/visualDust
 
-from typing import Any, List, Tuple, Union
+from typing import Any
 
 import torch
 
 from tiberate import CkksEngine
-from tiberate.typing import *
+from tiberate.typing import *  # noqa: F403
 from tiberate.utils.massive import copy_some_datastruct, next_power_of_2
 
 
 class PackingMetadata:
     def __init__(
         self,
-        original_shape: List[int] = None,  # B,C,H,W or B,C,N or H,W or N, or any other shape
-        logical_num_slots: int = None,  # todo remove this from must-have properties
+        original_shape: (
+            list[int] | None
+        ) = None,  # B,C,H,W or B,C,N or H,W or N, or any other shape
+        logical_num_slots: (
+            int | None
+        ) = None,  # todo remove this from must-have properties
         packed_by: Any = None,
         encoded_by: Any = None,
         misc: dict = {},
@@ -36,15 +39,15 @@ class PTPacking:
 
     @classmethod
     def pack(cls, **kwargs) -> "PackedCT":
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @classmethod
     def unpack(cls, **kwargs) -> torch.Tensor:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @classmethod
     def pad_to_next_power_of_2_on_dims(
-        cls, x: torch.Tensor, dims: Union[int, Tuple[int], List[int]]
+        cls, x: torch.Tensor, dims: int | tuple[int] | list[int]
     ) -> torch.Tensor:
         if isinstance(dims, int):
             dims = (dims,)
@@ -61,8 +64,10 @@ class PTPacking:
 class CTEncoding:
     debug = False
 
-    def encodecrypt(cls, *, src: torch.Tensor, engine: CkksEngine) -> "PackedCT":
-        raise NotImplementedError()
+    def encodecrypt(
+        cls, *, src: torch.Tensor, engine: CkksEngine
+    ) -> "PackedCT":
+        raise NotImplementedError
 
     @classmethod
     def decryptcode(
@@ -72,18 +77,18 @@ class CTEncoding:
         engine: CkksEngine,
         sk: SecretKey,
     ) -> torch.Tensor:
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class PackedCT:
     debug = False  # class variable
 
     metadata: PackingMetadata
-    cts: Union[List[Ciphertext], Dict[Any, List[Ciphertext]]]
+    cts: list[Ciphertext] | Dict[Any, list[Ciphertext]]
 
     def __init__(
         self,
-        cts: Union[List, Dict],  # ciphertext or list of ciphertexts
+        cts: list | Dict,  # ciphertext or list of ciphertexts
         metadata: PackingMetadata,
     ):
         self.metadata = metadata
@@ -96,42 +101,44 @@ class PackedCT:
 
     def to(self, device: str):
         return self.__class__(
-            cts=DataStruct.copy_tensor_to_device_recursive(data=self.cts, device=device),
+            cts=DataStruct.copy_tensor_to_device_recursive(
+                data=self.cts, device=device
+            ),
             metadata=self.metadata,
         )
 
     def __add__(self, other):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def __iadd__(self, other):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def __sub__(self, other):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def __isub__(self, other):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def __mul__(self, other):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def __imul__(self, other):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def __matmul__(self, other):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def __imatmul__(self, other):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def __truediv__(self, other):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def __itruediv__(self, other):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def __neg__(self):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     # def __floordiv__(self, other):
     #     raise NotImplementedError()
@@ -140,30 +147,34 @@ class PackedCT:
     #     raise NotImplementedError()
 
     def __pow__(self, other):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def __ipow__(self, other):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def __lshift__(self, other):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def __ilshift__(self, other):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def __rshift__(self, other):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def __irshift__(self, other):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @classmethod
-    def _get_ct_shape_of_any_depth(cls, x, current_shape_tuple: Tuple[int, ...] = ()):
+    def _get_ct_shape_of_any_depth(
+        cls, x, current_shape_tuple: tuple[int, ...] = ()
+    ):
         if isinstance(x, list):
-            return cls._get_ct_shape_of_any_depth(x[0], current_shape_tuple + (len(x),))
+            return cls._get_ct_shape_of_any_depth(
+                x[0], (*current_shape_tuple, len(x))
+            )
         elif isinstance(x, dict):
             return cls._get_ct_shape_of_any_depth(
-                list(x.values())[0], current_shape_tuple + (len(x),)
+                next(iter(x.values())), (*current_shape_tuple, len(x))
             )
         else:
             return current_shape_tuple
@@ -205,7 +216,9 @@ class PackedCT:
         if isinstance(idx, (slice, int)):
             return self.cts[idx]
         elif isinstance(idx, str):
-            return self.metadata.get(idx, None) or self.metadata.misc.get(idx, None)
+            return self.metadata.get(idx, None) or self.metadata.misc.get(
+                idx, None
+            )
         else:
             raise ValueError(f"Invalid index type {type(idx)} to read value")
 

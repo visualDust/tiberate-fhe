@@ -26,8 +26,8 @@ def load_pytorch_ops():
 # Load the PyTorch ops
 load_pytorch_ops()
 
-from tiberate.fhe.context import presets  # noqa
-from tiberate.fhe.engine import CkksEngine  # noqa
+from tiberate.fhe.context import presets
+from tiberate.fhe.engine import CkksEngine
 
 __version__ = version("tiberate")
 

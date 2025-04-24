@@ -1,13 +1,11 @@
 import time
-from typing import Dict
 
 from loguru import logger
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container, Horizontal
 from textual.events import Key
 from textual.reactive import reactive
 from textual.widgets import (
-    Button,
     Footer,
     Header,
     Label,
@@ -30,12 +28,12 @@ class BenchSelector(App):
 
     focus_on_bench = reactive(True)
 
-    def __init__(self, benches: Dict[str, BenchmarkBase], **kwargs):
+    def __init__(self, benches: dict[str, BenchmarkBase], **kwargs):
         super().__init__(**kwargs)
         self.benches = benches
         self.bench_names = list(self.benches.keys())
         self.current_bench: BenchmarkBase | None = None
-        self.current_options: Dict[str, str] = {}
+        self.current_options: dict[str, str] = {}
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -94,7 +92,9 @@ class BenchSelector(App):
 
             selected_name = self.bench_names[0]
             description = self.benches[selected_name].description
-            self.query_one("#bench_description", Markdown).update(str(description))
+            self.query_one("#bench_description", Markdown).update(
+                str(description)
+            )
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         if event.list_view.id == "bench_list":
@@ -134,7 +134,9 @@ class BenchSelector(App):
 
             # Update left description
             description = self.benches[name].description
-            self.query_one("#bench_description", Markdown).update(str(description))
+            self.query_one("#bench_description", Markdown).update(
+                str(description)
+            )
 
     def select_bench_options(self) -> None:
         list_view = self.query_one("#option_list", ListView)
@@ -181,7 +183,9 @@ class BenchSelector(App):
         self._selected_option = (
             "default"
             if not self.current_options
-            else list(self.current_options.keys())[self.query_one("#option_list", ListView).index]
+            else list(self.current_options.keys())[
+                self.query_one("#option_list", ListView).index
+            ]
         )
 
         self.exit()
