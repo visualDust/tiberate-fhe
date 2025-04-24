@@ -297,9 +297,9 @@ class Plaintext(DataStruct):
         self,
         m: MessageType,
         *,
-        cache: dict[
-            int, dict[str, Any]
-        ] = None,  # level: {what_cache: cache_data}
+        cache: (
+            dict[int, dict[str, Any]] | None
+        ) = None,  # level: {what_cache: cache_data}
         padding=True,  # todo remove padding flag in legacy code
         scale=None,  # by default None, which means use engine's parameter
         **kwargs,

@@ -4,7 +4,10 @@ from abc import ABC, abstractmethod
 class RandNumGen(ABC):
     @abstractmethod
     def randbytes(
-        self, shares: list[int] = None, repeats: int = 0, reshape: bool = False
+        self,
+        shares: list[int] | None = None,
+        repeats: int = 0,
+        reshape: bool = False,
     ):
         """
         Generate random bytes.

@@ -54,7 +54,10 @@ class SimpleRNG(RandNumGen):
             self.generators.append(gen)
 
     def randbytes(
-        self, shares: list[int] = None, repeats: int = 0, reshape: bool = False
+        self,
+        shares: list[int] | None = None,
+        repeats: int = 0,
+        reshape: bool = False,
     ):
         if shares is None:
             shares = self.shares

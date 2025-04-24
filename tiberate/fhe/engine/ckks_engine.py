@@ -37,7 +37,9 @@ class CkksEngine:
         self,
         ckks_params={},
         *,
-        devices: list[int] = None,  # if device is None, will use default cuda:0
+        devices: (
+            list[int] | None
+        ) = None,  # if device is None, will use default cuda:0
         allow_sk_gen: bool = True,  # if True, will allow sk generation
         bias_guard: bool = True,
         norm: str = "forward",
@@ -536,7 +538,7 @@ class CkksEngine:
         sk: SecretKey = None,
         *,
         include_special: bool = False,
-        a: list[torch.Tensor] = None,
+        a: list[torch.Tensor] | None = None,
     ) -> PublicKey:
         """
         Generates a public key against the secret key sk.
@@ -1443,7 +1445,10 @@ class CkksEngine:
 
     @strictype
     def _create_rotation_key(
-        self, delta: int, a: list[torch.Tensor] = None, sk: SecretKey = None
+        self,
+        delta: int,
+        a: list[torch.Tensor] | None = None,
+        sk: SecretKey = None,
     ) -> RotationKey:
         sk = sk or self.sk
         sk_new_data = [s.clone() for s in sk.data]

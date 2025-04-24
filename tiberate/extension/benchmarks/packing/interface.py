@@ -14,10 +14,12 @@ from tiberate.utils.massive import copy_some_datastruct, next_power_of_2
 class PackingMetadata:
     def __init__(
         self,
-        original_shape: list[
-            int
-        ] = None,  # B,C,H,W or B,C,N or H,W or N, or any other shape
-        logical_num_slots: int = None,  # todo remove this from must-have properties
+        original_shape: (
+            list[int] | None
+        ) = None,  # B,C,H,W or B,C,N or H,W or N, or any other shape
+        logical_num_slots: (
+            int | None
+        ) = None,  # todo remove this from must-have properties
         packed_by: Any = None,
         encoded_by: Any = None,
         misc: dict = {},
