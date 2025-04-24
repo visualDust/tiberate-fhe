@@ -6,16 +6,18 @@ import atexit
 import os
 from collections.abc import Callable
 from functools import wraps
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
 from loguru import logger
 from torch.distributed import rpc
-from torch.distributed.rpc import RRef
 from vdtoys.cache import CachedDict
 
 from tiberate import CkksEngine
 from tiberate.typing import *
+
+if TYPE_CHECKING:
+    from torch.distributed.rpc import RRef
 
 # Global RPC init flag
 _RPC_INITIALIZED = False
