@@ -4,7 +4,9 @@ import os
 import numpy as np
 import torch
 
-from tiberate.rng.csprng.discrete_gaussian_sampler import build_CDT_binary_search_tree
+from tiberate.rng.csprng.discrete_gaussian_sampler import (
+    build_CDT_binary_search_tree,
+)
 from tiberate.rng.interface import RandNumGen
 
 torch.backends.cudnn.benchmark = True
@@ -63,7 +65,9 @@ class Csprng(RandNumGen):
             self.shares = self.num_channels
         else:
             # User input was contradicting.
-            raise Exception("There was a contradicting mismatch between num_channels, and devices.")
+            raise Exception(
+                "There was a contradicting mismatch between num_channels, and devices."
+            )
 
         # How many channels in total?
         self.total_num_channels = sum(self.shares)
@@ -88,10 +92,14 @@ class Csprng(RandNumGen):
         # self.total_num_channels * self.L
         self.start_ind = [0] + [s * self.L for s in self.shares[:-1]]
         self.ind_increments = [s * self.L for s in self.shares]
-        self.end_ind = [s + e for s, e in zip(self.start_ind, self.ind_increments)]
+        self.end_ind = [
+            s + e for s, e in zip(self.start_ind, self.ind_increments)
+        ]
 
         # Total increment to add to counters after each random bytes generation.
-        self.inc = (self.total_num_channels + self.num_repeating_channels) * self.L
+        self.inc = (
+            self.total_num_channels + self.num_repeating_channels
+        ) * self.L
         self.repeating_start = self.total_num_channels * self.L
 
         # expand 32-byte k.
@@ -118,12 +126,16 @@ class Csprng(RandNumGen):
                 (self.shares[dev_id] + self.num_repeating_channels) * self.L,
                 16,
             )
-            state = torch.zeros(state_size, dtype=torch.int64, device=self.devices[dev_id])
+            state = torch.zeros(
+                state_size, dtype=torch.int64, device=self.devices[dev_id]
+            )
             self.states.append(state)
 
         # Prepare a channeled views.
         self.channeled_states = [
-            self.states[i].view(self.shares[i] + self.num_repeating_channels, self.L, -1)
+            self.states[i].view(
+                self.shares[i] + self.num_repeating_channels, self.L, -1
+            )
             for i in range(self.num_devices)
         ]
 
@@ -131,9 +143,14 @@ class Csprng(RandNumGen):
         self.counters = []
         repeating_counter = list(range(self.repeating_start, self.inc))
         for dev_id in range(self.num_devices):
-            counter = list(range(self.start_ind[dev_id], self.end_ind[dev_id])) + repeating_counter
+            counter = (
+                list(range(self.start_ind[dev_id], self.end_ind[dev_id]))
+                + repeating_counter
+            )
 
-            counter_tensor = torch.tensor(counter, dtype=torch.int64, device=self.devices[dev_id])
+            counter_tensor = torch.tensor(
+                counter, dtype=torch.int64, device=self.devices[dev_id]
+            )
             self.counters.append(counter_tensor)
 
         self.refresh(seed, nonce)
@@ -173,14 +190,21 @@ class Csprng(RandNumGen):
         if seed is None:
             n_keys = nbytes // part_bytes
             hex2int = lambda x, nbytes: int(binascii.hexlify(x), 16)
-            seed0 = [hex2int(os.urandom(part_bytes), part_bytes) for _ in range(n_keys)]
+            seed0 = [
+                hex2int(os.urandom(part_bytes), part_bytes)
+                for _ in range(n_keys)
+            ]
             for dev_id in range(self.num_devices):
-                cuda_seed = torch.tensor(seed0, dtype=torch.int64, device=self.devices[dev_id])
+                cuda_seed = torch.tensor(
+                    seed0, dtype=torch.int64, device=self.devices[dev_id]
+                )
                 seeds.append(cuda_seed)
         else:
             seed0 = seed
             for dev_id in range(self.num_devices):
-                cuda_seed = torch.tensor(seed0, dtype=torch.int64, device=self.devices[dev_id])
+                cuda_seed = torch.tensor(
+                    seed0, dtype=torch.int64, device=self.devices[dev_id]
+                )
                 seeds.append(cuda_seed)
         return seeds
 
@@ -204,11 +228,15 @@ class Csprng(RandNumGen):
         for devi in range(self.num_devices):
             start_channel = self.shares[devi] - shares[devi]
             end_channel = self.shares[devi] + repeats
-            device_states = self.channeled_states[devi][start_channel:end_channel, :, :]
+            device_states = self.channeled_states[devi][
+                start_channel:end_channel, :, :
+            ]
             target_states.append(device_states.view(-1, 16))
 
         # Derive random bytes.
-        random_bytes = torch.ops.tiberate_csprng_ops.chacha20(target_states, self.inc)
+        random_bytes = torch.ops.tiberate_csprng_ops.chacha20(
+            target_states, self.inc
+        )
 
         # If not reshape, flatten.
         if reshape:
@@ -237,11 +265,15 @@ class Csprng(RandNumGen):
         for devi in range(self.num_devices):
             start_channel = self.shares[devi] - shares[devi]
             end_channel = self.shares[devi] + repeats
-            device_states = self.channeled_states[devi][start_channel:end_channel, :, :]
+            device_states = self.channeled_states[devi][
+                start_channel:end_channel, :, :
+            ]
             target_states.append(device_states)
 
         # Generate the randint.
-        rand_int = torch.ops.tiberate_csprng_ops.randint_fast(target_states, q_ptr, shift, self.inc)
+        rand_int = torch.ops.tiberate_csprng_ops.randint_fast(
+            target_states, q_ptr, shift, self.inc
+        )
 
         return rand_int
 
@@ -256,7 +288,9 @@ class Csprng(RandNumGen):
         for devi in range(self.num_devices):
             start_channel = self.shares[devi] - shares[devi]
             end_channel = self.shares[devi] + repeats
-            device_states = self.channeled_states[devi][start_channel:end_channel, :, :]
+            device_states = self.channeled_states[devi][
+                start_channel:end_channel, :, :
+            ]
             target_states.append(device_states.view(-1, 16))
 
         # Generate the randint.
@@ -280,9 +314,9 @@ class Csprng(RandNumGen):
         # contiguous stream of states.
         # It will not make the target state strided.
         L = self.num_coefs // 16
-        rand_bytes = torch.ops.tiberate_csprng_ops.chacha20((self.states[0][:L],), self.inc)[
-            0
-        ].ravel()
+        rand_bytes = torch.ops.tiberate_csprng_ops.chacha20(
+            (self.states[0][:L],), self.inc
+        )[0].ravel()
 
         torch.ops.tiberate_csprng_ops.randround([coef], [rand_bytes])
         return rand_bytes

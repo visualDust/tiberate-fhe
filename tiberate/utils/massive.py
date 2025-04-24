@@ -1,11 +1,9 @@
-# -*- coding: utf-8 -*-
 #
 # Author: GavinGong aka VisualDust
 # Github: github.com/visualDust
 
 import math
 from collections import deque
-from typing import TYPE_CHECKING, Any, Union
 
 import numpy as np
 import torch
@@ -26,7 +24,9 @@ def copy_some_datastruct(src):
     if isinstance(src, dict):
         return {k: copy_some_datastruct(v) for k, v in src.items()}
     else:
-        logger.warning(f"Unknown type: {type(src)} on copy. Will return the original.")
+        logger.warning(
+            f"Unknown type: {type(src)} on copy. Will return the original."
+        )
         return src
 
 
@@ -40,13 +40,16 @@ def calculate_tensor_size_in_bytes(tensor: torch.Tensor):
 
 
 def calculate_ckks_cipher_datastruct_size_in_list_recursive(
-    list_or_cipher: Union[tuple, list, torch.Tensor, DataStruct],
+    list_or_cipher: tuple | list | torch.Tensor | DataStruct,
 ):
     if isinstance(list_or_cipher, DataStruct):
-        return calculate_ckks_cipher_datastruct_size_in_list_recursive(list_or_cipher.data)
+        return calculate_ckks_cipher_datastruct_size_in_list_recursive(
+            list_or_cipher.data
+        )
     elif isinstance(list_or_cipher, (list, tuple)):
         return sum(
-            calculate_ckks_cipher_datastruct_size_in_list_recursive(d) for d in list_or_cipher
+            calculate_ckks_cipher_datastruct_size_in_list_recursive(d)
+            for d in list_or_cipher
         )
     elif isinstance(list_or_cipher, torch.Tensor):
         return calculate_tensor_size_in_bytes(list_or_cipher)
@@ -161,7 +164,9 @@ if __name__ == "__main__":
             po2 = decompose_with_power_of_2(offset, num_slots)
             print(f"  Power-of-2 decomposition: {po2}")
             print(f"  Decomposed with rotks:            {result}")
-            assert len(result) <= len(po2), "Decomposition with rotks is longer than power-of-2"
+            assert len(result) <= len(
+                po2
+            ), "Decomposition with rotks is longer than power-of-2"
         except ValueError as e:
             print(f"  Error: {e}")
         print("-" * 50)

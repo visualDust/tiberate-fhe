@@ -13,7 +13,7 @@ class NotFindBufferBitLength(Exception):
 class SecretKeyNotIncludeSpecialPrime(Exception):
     def __init__(self):
         self.message_error = (
-            f"""The input secret key must include special prime channels."""
+            """The input secret key must include special prime channels."""
         )
         super().__init__(self.message_error)
 
@@ -23,17 +23,17 @@ class SecretKeyNotIncludeSpecialPrime(Exception):
     def __str__(self):
         return self.message_error
 
+
 class DifferentTypeError(Exception):
     def __init__(self, a, b):
-        self.message_error = (
-            f"The type of two parameter should be the same, but they are '{a}' and '{b}'."
-        )
+        self.message_error = f"The type of two parameter should be the same, but they are '{a}' and '{b}'."
 
     def __repr__(self):
         return repr(self.message_error)
 
     def __str__(self):
         return self.message_error
+
 
 class NTTStateError(Exception):
     def __init__(self, expected):
@@ -44,7 +44,8 @@ class NTTStateError(Exception):
 
     def __str__(self):
         return self.message_error
-    
+
+
 class MontgomeryStateError(Exception):
     def __init__(self, expected):
         self.message_error = f"""The data_struct montgomery_state should be a '{expected}', but it is '{not expected}'."""
@@ -54,6 +55,7 @@ class MontgomeryStateError(Exception):
 
     def __str__(self):
         return self.message_error
+
 
 class MaximumLevelError(Exception):
     def __init__(self, level, level_max):

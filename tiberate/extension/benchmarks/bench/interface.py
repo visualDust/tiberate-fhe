@@ -57,7 +57,9 @@ It should be decorated with the `@benchreg.register(name="your bench mark name")
         The description can be markedown formatted, but it is not required.
         Those keys are the names that can be passed to the benchmark.
         """
-        raise NotImplementedError("gen_bench_options() must be implemented in subclasses")
+        raise NotImplementedError(
+            "gen_bench_options() must be implemented in subclasses"
+        )
 
     def run(self, option_name: str) -> dict:
         """

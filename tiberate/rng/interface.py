@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
-from typing import List, Union
 
 
 class RandNumGen(ABC):
     @abstractmethod
-    def randbytes(self, shares: List[int] = None, repeats: int = 0, reshape: bool = False):
+    def randbytes(
+        self, shares: list[int] = None, repeats: int = 0, reshape: bool = False
+    ):
         """
         Generate random bytes.
 
@@ -21,7 +22,7 @@ class RandNumGen(ABC):
     @abstractmethod
     def randint(
         self,
-        amax: Union[int, List[List[int]]],
+        amax: int | list[list[int]],
         shift: int = 0,
         repeats: int = 0,
     ):
@@ -39,7 +40,9 @@ class RandNumGen(ABC):
         pass
 
     @abstractmethod
-    def discrete_gaussian(self, non_repeats: Union[int, List[int]] = 0, repeats: int = 1):
+    def discrete_gaussian(
+        self, non_repeats: int | list[int] = 0, repeats: int = 1
+    ):
         """
         Generate discrete Gaussian samples.
 

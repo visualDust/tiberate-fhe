@@ -1,10 +1,9 @@
-# -*- coding: utf-8 -*-
 #
 # Author: GavinGong aka VisualDust
 # Github: github.com/visualDust
 
 import math
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING
 
 import torch
 import torch.nn.functional as F
@@ -31,7 +30,9 @@ class FeatureWise_PTPacking(PTPacking):
         num_slots: int,
         logical_num_slots: int,
     ) -> PackedCT:
-        x = cls.pad_tensor_to_align_logical_num_slots_on_last_dim(x, logical_num_slots)
+        x = cls.pad_tensor_to_align_logical_num_slots_on_last_dim(
+            x, logical_num_slots
+        )
         x = cls.fit_padded_tensor_into_num_slots_on_last_dim(x, num_slots)
         return x
 
@@ -41,10 +42,14 @@ class FeatureWise_PTPacking(PTPacking):
         *,
         x: torch.Tensor,
         logical_num_slots: int,
-        original_shape: Tuple,
+        original_shape: tuple,
     ) -> torch.Tensor:
-        x = cls.undo_fit_padded_tensor_into_num_slots_on_last_dim(x, logical_num_slots)
-        x = cls.undo_pad_tensor_to_align_logical_num_slots_on_last_dim(x, original_shape)
+        x = cls.undo_fit_padded_tensor_into_num_slots_on_last_dim(
+            x, logical_num_slots
+        )
+        x = cls.undo_pad_tensor_to_align_logical_num_slots_on_last_dim(
+            x, original_shape
+        )
         return x
 
     @classmethod
@@ -84,16 +89,20 @@ class FeatureWise_PTPacking(PTPacking):
                 # Create a tensor of zeros to concatenate
                 pad_shape = list(x.shape)
                 pad_shape[-1] = pad_size
-                pad_tensor = torch.zeros(*pad_shape, dtype=x.dtype, device=x.device)
+                pad_tensor = torch.zeros(
+                    *pad_shape, dtype=x.dtype, device=x.device
+                )
                 # Concatenate along the last dimension
                 x = torch.cat((x, pad_tensor), dim=-1)
             else:
-                raise TypeError("Input tensor must be a NumPy array or a PyTorch tensor.")
+                raise TypeError(
+                    "Input tensor must be a NumPy array or a PyTorch tensor."
+                )
         return x
 
     @classmethod
     def undo_pad_tensor_to_align_logical_num_slots_on_last_dim(
-        cls, x: torch.Tensor, original_shape: Union[List[int], Tuple[int]]
+        cls, x: torch.Tensor, original_shape: Union[List[int], tuple[int]]
     ):
         """
         This is the inverse operation of @pad_tensor_to_align_logical_num_slots_on_last_dim,
@@ -116,7 +125,9 @@ class FeatureWise_PTPacking(PTPacking):
         return x
 
     @classmethod
-    def fit_padded_tensor_into_num_slots_on_last_dim(cls, x: torch.Tensor, num_slots: int):
+    def fit_padded_tensor_into_num_slots_on_last_dim(
+        cls, x: torch.Tensor, num_slots: int
+    ):
         """
         This function fits the padded tensor into num_slots. Please make sure the input tensor is the output of @pad_tensor_to_align_logical_num_slots_on_last_dim.
 
@@ -160,7 +171,9 @@ class FeatureWise_PTPacking(PTPacking):
                         value=0,
                     )
             # Combine 'factor' rows into one
-            output = output.reshape(max(num_rows // factor, 1), factor * logical_num_slots)
+            output = output.reshape(
+                max(num_rows // factor, 1), factor * logical_num_slots
+            )
             # Reshape to get the last dimension size num_slots
             output = output.reshape(-1, num_slots)
             # Restore the original batch dimensions
@@ -169,7 +182,9 @@ class FeatureWise_PTPacking(PTPacking):
             return output
 
         else:
-            raise ValueError("The last dimension must be a factor or multiple of num_slots.")
+            raise ValueError(
+                "The last dimension must be a factor or multiple of num_slots."
+            )
 
     @classmethod
     def undo_fit_padded_tensor_into_num_slots_on_last_dim(
@@ -234,15 +249,23 @@ class FeatureWise_PackedCT(PackedCT):
 @Registry(str(CTEncoding)).register()
 class FeatureWise_CTEncoding(CTEncoding):
     @classmethod
-    def encodecrypt(cls, *, src: torch.Tensor, engine: CkksEngine, level=0) -> PackedCT:
+    def encodecrypt(
+        cls, *, src: torch.Tensor, engine: CkksEngine, level=0
+    ) -> PackedCT:
         origional_shape = src.shape
         if cls.debug:
-            logger.debug(f"doing row major packing on last two dims with input shape {src.shape}")
-        assert len(src.shape) > 2, f"input shape must be at least 3D, got {src.shape}"
+            logger.debug(
+                f"doing row major packing on last two dims with input shape {src.shape}"
+            )
+        assert (
+            len(src.shape) > 2
+        ), f"input shape must be at least 3D, got {src.shape}"
         # for example, with input shape B,C,H,W, we pack H,W into N
         # we do packing on each B,C separately
         src = src.view(-1, *src.shape[-2:])
-        src = [src[i] for i in range(src.shape[0])]  # convert to list of tensors
+        src = [
+            src[i] for i in range(src.shape[0])
+        ]  # convert to list of tensors
         num_slots = engine.num_slots
         logical_num_slots = FeatureWise_PTPacking.find_logical_num_slots(
             num_slots, src[0].shape[-1]
@@ -260,7 +283,9 @@ class FeatureWise_CTEncoding(CTEncoding):
             ct_per_bcdim = []
             for pt in src[bc_dim]:
                 ct_per_bcdim.append(
-                    engine.encodecrypt(pt.cpu(), engine.pk, padding=False, level=level)
+                    engine.encodecrypt(
+                        pt.cpu(), engine.pk, padding=False, level=level
+                    )
                 )
             cts.append(ct_per_bcdim)
 
@@ -271,7 +296,10 @@ class FeatureWise_CTEncoding(CTEncoding):
             # every fold_factor element in cts will be put into a list
             # do this for each element in cts
             for i in range(len(cts)):
-                cts[i] = [cts[i][j : j + fold_factor] for j in range(0, len(cts[i]), fold_factor)]
+                cts[i] = [
+                    cts[i][j : j + fold_factor]
+                    for j in range(0, len(cts[i]), fold_factor)
+                ]
         elif (
             num_slots % logical_num_slots == 0
         ):  # check if logical_num_slots is a factor of num_slots

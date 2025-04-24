@@ -101,7 +101,10 @@ class ExampleBenchClass(BenchmarkBase):
         }
 
     def get_bench_option2desc(self):
-        return {name: config["description"] for name, config in self.config_matrix.items()}
+        return {
+            name: config["description"]
+            for name, config in self.config_matrix.items()
+        }
 
     def run(self, option_name):
         logger.info(f"Running benchmark with option: {option_name}")

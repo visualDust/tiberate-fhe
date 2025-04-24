@@ -1,8 +1,5 @@
-import binascii
 import os
-from typing import List, Union
 
-import numpy as np
 import torch
 
 from tiberate.rng.interface import RandNumGen  # Keep as per your structure
@@ -26,7 +23,9 @@ class SimpleRNG(RandNumGen):
 
         # Set devices
         if devices is None:
-            self.devices = [f"cuda:{i}" for i in range(torch.cuda.device_count())] or ["cpu"]
+            self.devices = [
+                f"cuda:{i}" for i in range(torch.cuda.device_count())
+            ] or ["cpu"]
         else:
             self.devices = devices
 
@@ -46,30 +45,45 @@ class SimpleRNG(RandNumGen):
         self.generators = []
         for dev in self.devices:
             gen = torch.Generator(device=dev)
-            seed_val = seed if seed is not None else int.from_bytes(os.urandom(8), "big")
+            seed_val = (
+                seed
+                if seed is not None
+                else int.from_bytes(os.urandom(8), "big")
+            )
             gen.manual_seed(seed_val)
             self.generators.append(gen)
 
-    def randbytes(self, shares: List[int] = None, repeats: int = 0, reshape: bool = False):
+    def randbytes(
+        self, shares: list[int] = None, repeats: int = 0, reshape: bool = False
+    ):
         if shares is None:
             shares = self.shares
 
         rand_out = []
         for i, (dev, gen) in enumerate(zip(self.devices, self.generators)):
             num_ch = shares[i] + repeats
-            shape = (num_ch, self.L * 4, 16) if reshape else (num_ch, self.L * 4 * 16)
-            rb = torch.randint(0, 256, shape, dtype=torch.uint8, generator=gen, device=dev)
+            shape = (
+                (num_ch, self.L * 4, 16)
+                if reshape
+                else (num_ch, self.L * 4 * 16)
+            )
+            rb = torch.randint(
+                0, 256, shape, dtype=torch.uint8, generator=gen, device=dev
+            )
             rand_out.append(rb)
         return rand_out
 
     def randint(
         self,
-        amax: Union[int, List[List[int]]],
+        amax: int | list[list[int]],
         shift: int = 0,
         repeats: int = 0,
     ):
         if isinstance(amax, int):
-            amax = [[amax] * (self.shares[i] + repeats) for i in range(self.num_devices)]
+            amax = [
+                [amax] * (self.shares[i] + repeats)
+                for i in range(self.num_devices)
+            ]
 
         result = []
         for i, (dev, gen) in enumerate(zip(self.devices, self.generators)):
@@ -86,7 +100,9 @@ class SimpleRNG(RandNumGen):
             result.append(torch.stack(per_device))
         return [result[0][:1]]
 
-    def discrete_gaussian(self, non_repeats: Union[int, List[int]] = 0, repeats: int = 1):
+    def discrete_gaussian(
+        self, non_repeats: int | list[int] = 0, repeats: int = 1
+    ):
         if isinstance(non_repeats, int):
             shares = [non_repeats] * self.num_devices
         else:

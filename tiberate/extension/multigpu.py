@@ -1,21 +1,18 @@
-# -*- coding: utf-8 -*-
 #
 # Author: GavinGong aka VisualDust
 # Github: github.com/visualDust
 
 import atexit
 import os
-import time
-import warnings
+from collections.abc import Callable
 from functools import wraps
-from typing import Any, Callable, Dict, List, Union
+from typing import Any
 
 import torch
-import torch.distributed.rpc as rpc
 from loguru import logger
+from torch.distributed import rpc
 from torch.distributed.rpc import RRef
 from vdtoys.cache import CachedDict
-from vdtoys.mvc import patch
 
 from tiberate import CkksEngine
 from tiberate.typing import *
@@ -30,7 +27,9 @@ def init_rpc_once():
     if _RPC_INITIALIZED:
         return
 
-    assert "RANK" in os.environ and "WORLD_SIZE" in os.environ, "Please launch with torchrun"
+    assert (
+        "RANK" in os.environ and "WORLD_SIZE" in os.environ
+    ), "Please launch with torchrun"
     rank = int(os.environ["RANK"])
     world_size = int(os.environ["WORLD_SIZE"])
     name = f"worker{rank}" if rank > 0 else "scheduler"
@@ -70,47 +69,62 @@ def warn_not_on_local_rank(rank: int):
 
 class WorkerContext:
     def __init__(
-        self, *, local_rank: int, ckks_params: dict, allow_sk_gen: bool = True, cache: dict = {}
+        self,
+        *,
+        local_rank: int,
+        ckks_params: dict,
+        allow_sk_gen: bool = True,
+        cache: dict = {},
     ):
         self.local_rank = local_rank
-        self.engine = CkksEngine(ckks_params=ckks_params, allow_sk_gen=allow_sk_gen)
+        self.engine = CkksEngine(
+            ckks_params=ckks_params, allow_sk_gen=allow_sk_gen
+        )
         self.cache = cache
 
-    def get_sk(self) -> Union[SecretKey, torch.jit.Future]:
+    def get_sk(self) -> SecretKey | torch.jit.Future:
         return self.engine.sk.to("cpu")
 
     def set_sk(self, sk: SecretKey):
         self.engine.sk = sk.to(self.engine.device0)
         logger.debug(f"Worker {self.local_rank} got secret key")
 
-    def get_pk(self) -> Union[PublicKey, torch.jit.Future]:
+    def get_pk(self) -> PublicKey | torch.jit.Future:
         return self.engine.pk.to("cpu")
 
     def set_pk(self, pk: PublicKey):
         self.engine.pk = pk.to(self.engine.device0)
         logger.debug(f"Worker {self.local_rank} got public key")
 
-    def get_evk(self) -> Union[EvaluationKey, torch.jit.Future]:
+    def get_evk(self) -> EvaluationKey | torch.jit.Future:
         return self.engine.evk.to("cpu")
 
     def set_evk(self, evk: EvaluationKey):
         self.engine.evk = evk.to(self.engine.device0)
         logger.debug(f"Worker {self.local_rank} got evaluation key")
 
-    def get_rotk(self) -> Union[CachedDict, torch.jit.Future]:
-        return DataStruct.copy_tensor_to_device_recursive(self.engine.rotk, "cpu")
+    def get_rotk(self) -> CachedDict | torch.jit.Future:
+        return DataStruct.copy_tensor_to_device_recursive(
+            self.engine.rotk, "cpu"
+        )
 
-    def set_rotk(self, rotk: Union[CachedDict, Dict]):
-        self.engine.rotk = DataStruct.copy_tensor_to_device_recursive(rotk, self.engine.device0)
+    def set_rotk(self, rotk: CachedDict | dict):
+        self.engine.rotk = DataStruct.copy_tensor_to_device_recursive(
+            rotk, self.engine.device0
+        )
         logger.debug(f"Worker {self.local_rank} got rotation key {rotk.keys()}")
 
-    def run(self, func: Callable, *args, **kwargs) -> Union[torch.jit.Future, Any]:
+    def run(self, func: Callable, *args, **kwargs) -> torch.jit.Future | Any:
         local_rank = int(os.environ["RANK"])
         logger.debug(
             f"Call {func.__name__} on local rank {local_rank}, will run on worker {self.local_rank}"
         )
-        args = DataStruct.copy_tensor_to_device_recursive(args, self.engine.device0)
-        kwargs = DataStruct.copy_tensor_to_device_recursive(kwargs, self.engine.device0)
+        args = DataStruct.copy_tensor_to_device_recursive(
+            args, self.engine.device0
+        )
+        kwargs = DataStruct.copy_tensor_to_device_recursive(
+            kwargs, self.engine.device0
+        )
         result = func(self.engine, self.cache, *args, **kwargs)
         return result
 
@@ -124,7 +138,7 @@ class MultiGPUEngineContext:
         self.name = f"worker{rank}" if rank > 0 else "scheduler"
 
         if rank == 0:
-            self._workers: List[RRef] = [
+            self._workers: list[RRef] = [
                 rpc.remote(
                     f"worker{i}",
                     WorkerContext,
@@ -162,12 +176,12 @@ class MultiGPUEngineContext:
         for worker in self._workers:
             worker.rpc_sync().set_evk(evk)
 
-    def set_rotk(self, rotk: Union[CachedDict, Dict]):
+    def set_rotk(self, rotk: CachedDict | dict):
         for worker in self._workers:
             worker.rpc_sync().set_rotk(rotk)
 
     @property
-    def workers(self) -> List[WorkerContext]:
+    def workers(self) -> list[WorkerContext]:
         local_rank = int(os.environ["RANK"])
         if local_rank != 0:
             raise RuntimeError(

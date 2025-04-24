@@ -112,7 +112,9 @@ def chacha20(state: torch.Tensor) -> torch.Tensor:
 
 
 class chacha20_naive:
-    def __init__(self, size, seed=None, nonce=None, count_step=1, device="cuda:0"):
+    def __init__(
+        self, size, seed=None, nonce=None, count_step=1, device="cuda:0"
+    ):
         self.size = size
         self.device = device
         self.count_step = count_step
@@ -138,7 +140,9 @@ class chacha20_naive:
         )
 
         # The ind counter.
-        self.ind = torch.arange(0, math.prod(self.size), self.count_step, device=device)
+        self.ind = torch.arange(
+            0, math.prod(self.size), self.count_step, device=device
+        )
 
         # Increment is the number of indices.
         self.inc = math.prod(self.size)
@@ -179,12 +183,17 @@ class chacha20_naive:
             n_keys = nbytes // part_bytes
             hex2int = lambda x, nbytes: int(binascii.hexlify(x), 16)
             self.seed = torch.tensor(
-                [hex2int(os.urandom(part_bytes), part_bytes) for _ in range(n_keys)],
+                [
+                    hex2int(os.urandom(part_bytes), part_bytes)
+                    for _ in range(n_keys)
+                ],
                 device=self.device,
                 dtype=torch.int64,
             )
         else:
-            self.seed = torch.tensor(seed, device=self.device, dtype=torch.int64)
+            self.seed = torch.tensor(
+                seed, device=self.device, dtype=torch.int64
+            )
 
     def generate_nonce(self, nonce):
         # nonce is 64bits.
@@ -195,12 +204,17 @@ class chacha20_naive:
             n_keys = nbytes // part_bytes
             hex2int = lambda x, nbytes: int(binascii.hexlify(x), 16)
             self.nonce = torch.tensor(
-                [hex2int(os.urandom(part_bytes), part_bytes) for _ in range(n_keys)],
+                [
+                    hex2int(os.urandom(part_bytes), part_bytes)
+                    for _ in range(n_keys)
+                ],
                 device=self.device,
                 dtype=torch.int64,
             )
         else:
-            self.nonce = torch.tensor(nonce, device=self.device, dtype=torch.int64)
+            self.nonce = torch.tensor(
+                nonce, device=self.device, dtype=torch.int64
+            )
 
     def capture(self, warmup_periods=3, fuser="fuser1"):
         with torch.cuda.device(self.device):

@@ -1,5 +1,5 @@
-#include <c10/cuda/CUDAStream.h>
 #include "chacha20_cuda.h"
+#include <c10/cuda/CUDAStream.h>
 
 #define BLOCK_SIZE 256
 

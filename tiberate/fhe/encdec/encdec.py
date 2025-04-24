@@ -1,11 +1,8 @@
-from typing import Tuple
-
 import numpy as np
 import torch
 from vdtoys.cache import CachedDict
 
 from tiberate.rng import RandNumGen
-from tiberate.typing import DataStruct
 
 # ---------------------------------------------------------------
 # Permutation.
@@ -84,7 +81,9 @@ def conjugate_permutation(p, q):
     # Check if the cycle structures match.
     cs1 = [len(c) for c in pc]
     cs2 = [len(c) for c in qc]
-    assert cs1 == cs2, "Cycle structures of permutations must match for a conjugate to exist!!!"
+    assert (
+        cs1 == cs2
+    ), "Cycle structures of permutations must match for a conjugate to exist!!!"
 
     # Expand cycles.
     pe = np.array([i for c in pc for i in c])
@@ -144,7 +143,9 @@ def expand2conjugate(m):
 
 
 def generate_twister(N, device="cuda:0"):
-    expr = -1j * torch.pi * torch.arange(N, device=device, dtype=torch.float64) / N
+    expr = (
+        -1j * torch.pi * torch.arange(N, device=device, dtype=torch.float64) / N
+    )
     return torch.exp(expr)
 
 
@@ -152,7 +153,9 @@ twister_cache = CachedDict(generate_twister)
 
 
 def generate_skewer(N, device="cuda:0"):
-    expr = 1j * torch.pi * torch.arange(N, device=device, dtype=torch.float64) / N
+    expr = (
+        1j * torch.pi * torch.arange(N, device=device, dtype=torch.float64) / N
+    )
     skew = torch.exp(expr)
     return skew
 

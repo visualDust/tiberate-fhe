@@ -98,12 +98,14 @@ class LinearFeatureWiseBenchmark(BenchmarkBase):
         engine = CkksEngine(ckks_params=ckks_params)
         input_tensor = torch.randn(input_shape)
         input_tensor = input_tensor.unsqueeze(0)
-        he_input = FeatureWise_CTEncoding.encodecrypt(src=input_tensor, engine=engine)
-        torch_linear = torch.nn.Linear(in_features=weight_shape[0], out_features=weight_shape[1])
-        he_linear = (
-            HELinear_FeatureWiseCTInput_ColMajorPTSquareWeight_FeatureWiseCTOutput.fromTorch(
-                torch_linear, engine
-            )
+        he_input = FeatureWise_CTEncoding.encodecrypt(
+            src=input_tensor, engine=engine
+        )
+        torch_linear = torch.nn.Linear(
+            in_features=weight_shape[0], out_features=weight_shape[1]
+        )
+        he_linear = HELinear_FeatureWiseCTInput_ColMajorPTSquareWeight_FeatureWiseCTOutput.fromTorch(
+            torch_linear, engine
         )
         with torch.no_grad():
             torch_out = torch_linear(input_tensor)
@@ -121,7 +123,9 @@ class LinearFeatureWiseBenchmark(BenchmarkBase):
             f"Max diff: {max_diff}, Mean diff: {mean_diff}, "
             f"Input shape: {input_shape}, Weight shape: {weight_shape}"
         )
-        logger.info(f"Benchmark {config['description']} completed successfully.")
+        logger.info(
+            f"Benchmark {config['description']} completed successfully."
+        )
 
 
 if __name__ == "__main__":
