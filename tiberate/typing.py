@@ -164,7 +164,7 @@ class DataStruct:
             return cls.get_device_of_tensor(data[0]) if data else "cpu"
         elif isinstance(data, dict):  # plaintext cache
             return (
-                cls.get_device_of_tensor(list(data.values())[0])
+                cls.get_device_of_tensor(next(iter(data.values())))
                 if data
                 else "cpu"  # if data is empty, return cpu
             )
