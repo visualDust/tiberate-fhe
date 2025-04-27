@@ -1,8 +1,9 @@
 import torch
 from vdtoys.mvc import strictype
 
+from tiberate import errors
 from tiberate.fhe.encdec import rotate
-from tiberate.fhe.engine import CkksEngine, errors
+from tiberate.fhe.engine import CkksEngine
 from tiberate.typing import *  # noqa: F403
 
 

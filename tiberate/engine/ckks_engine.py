@@ -10,83 +10,57 @@ import torch
 from loguru import logger
 from vdtoys.cache import CachedDict
 from vdtoys.mvc import initonly, strictype
-from vdtoys.registry import Registry
 
-from tiberate.fhe.context import presets
-from tiberate.fhe.context.ckks_context import CkksContext
+from tiberate import errors
+from tiberate.config import CkksConfig, RngType
 from tiberate.fhe.encdec import (
     conjugate as codec_conjugate,
     decode as codec_decode,
     encode as codec_encode,
     rotate as codec_rotate,
 )
-from tiberate.fhe.engine import errors
-from tiberate.ntt import NTTContext
 from tiberate.rng import Csprng, RandNumGen, SimpleRNG
 from tiberate.typing import *  # noqa: F403
 from tiberate.utils.massive import decompose_rot_offsets
 
-engClsRegistry = Registry("ENGINE_CLASS")
+rng_classes: dict[RngType, RandNumGen] = {
+    RngType.SIMPLE: SimpleRNG,
+    RngType.CSPRNG: Csprng,
+}
 
 
-@engClsRegistry.register(name="CkksEngine")
 class CkksEngine:
     __default: dict[str, "CkksEngine"] = {}
 
     def __init__(
         self,
-        ckks_params={},
-        *,
-        devices: (
-            list[int] | None
-        ) = None,  # if device is None, will use default cuda:0
-        allow_sk_gen: bool = True,  # if True, will allow sk generation
-        bias_guard: bool = True,
-        norm: str = "forward",
-        rng_class="Csprng",
-        **kwargs,
+        ckks_config: CkksConfig,
     ):
-        if not ckks_params and not kwargs:
-            ckks_params = presets.logN15
-            logger.info("CKKS parameters not specified. Using silver preset.")
+        self.ckks_config = ckks_config
+        self.runtime_config = ckks_config.runtime_config
+        self.rns_partition = ckks_config.rns_partition
+        RngClass = rng_classes[ckks_config.rng_class]
 
-        if kwargs:
-            logger.warning(
-                DeprecationWarning(
-                    "Some parameters are passed via kwargs. Please pass them explicitly via ckks_params."
-                )
-            )
-
-        self.ckksCtx = CkksContext(**{**ckks_params, **kwargs})
-        self.nttCtx = NTTContext(self.ckksCtx, devices=devices)
-
-        RngClass = SimpleRNG if rng_class == "SimpleRNG" else Csprng
         self.rng: RandNumGen = RngClass(
-            num_coefs=self.nttCtx.ckksCtx.N,
-            num_channels=[len(di) for di in self.nttCtx.rnsPart.d],
-            num_repeating_channels=max(self.nttCtx.num_special_primes, 2),
-            devices=self.nttCtx.devices,
+            num_coefs=self.runtime_config.N,
+            num_channels=[len(di) for di in self.rns_partition.d],
+            num_repeating_channels=max(ckks_config.num_special_primes, 2),
         )
 
         logger.info(
             f"Using Random Number Generator: {self.rng.__class__.__name__}"
         )
 
-        self.bias_guard = bias_guard
-        self.norm = norm
+        self.bias_guard = self.ckks_config.bias_guard
+        self.norm = self.ckks_config.norm
 
-        self.make_adjustments_and_corrections()
-        self.mont_PR = self.make_mont_PR()
-        self.create_ksk_rescales()
-        self.alloc_parts()
-        self.leveled_devices()
-        self.rescale_scales = self.create_rescale_scales()
+        self._init_runtime_config()
 
         # id
         self.id = str(uuid4())  # unique id for this engine at runtime
 
         # by default, do not create any keys
-        self.allow_sk_gen = allow_sk_gen
+        self.allow_sk_gen = self.ckks_config.allow_sk_gen
         self.__sk = None
         self.__pk = None
         self.__evk = None
@@ -94,11 +68,211 @@ class CkksEngine:
         self.__rotk = {}
 
         # if there is no default engine, set this as default
-        if self.ckksCtx.logN not in self.__class__.__default:
+        if self.ckks_config.logN not in self.__class__.__default:
             logger.info(
-                f"Setting engine {self.id} as default for logN {self.ckksCtx.logN}."
+                f"Setting engine {self.id} as default for logN {self.ckks_config.logN}."
             )
-            self.__class__.__default[self.ckksCtx.logN] = self
+            self.__class__.__default[self.ckks_config.logN] = self
+
+    def _init_runtime_config(self):
+        self._make_adjustments_and_corrections()
+        self._make_mont_PR()
+        self._create_ksk_rescales()
+        self._alloc_parts()
+        self._leveled_devices()
+        self._create_rescale_scales()
+
+    # -------------------------------------------------------------------------------------------
+    # Various pre-calculations.
+    # -------------------------------------------------------------------------------------------
+    @initonly
+    def _create_rescale_scales(self):
+        rescale_scales = []
+        for level in range(self.runtime_config.num_levels):
+            rescale_scales.append([])
+
+            for device_id in range(self.runtime_config.num_devices):
+                dest_level = self.rns_partition.destination_arrays[level]
+
+                if device_id < len(dest_level):
+                    dest = dest_level[device_id]
+                    rescaler_device_id = self.rns_partition.rescaler_loc[level]
+                    m0 = self.runtime_config.q[level]
+
+                    if rescaler_device_id == device_id:
+                        m = [self.runtime_config.q[i] for i in dest[1:]]
+                    else:
+                        m = [self.runtime_config.q[i] for i in dest]
+
+                    scales = [
+                        (pow(m0, -1, mi) * self.runtime_config.R) % mi
+                        for mi in m
+                    ]
+
+                    scales = torch.tensor(
+                        scales,
+                        dtype=self.runtime_config.torch_dtype,
+                        device=self.runtime_config.devices[device_id],
+                    )
+                    rescale_scales[level].append(scales)
+
+        self.rescale_scales = rescale_scales
+
+    @initonly
+    def _leveled_devices(self):
+        self.len_devices = []
+        for level in range(self.runtime_config.num_levels):
+            self.len_devices.append(
+                len([[a] for a in self.rns_partition.p[level] if len(a) > 0])
+            )
+
+        self.neighbor_devices = []
+        for level in range(self.runtime_config.num_levels):
+            self.neighbor_devices.append([])
+            len_devices_at = self.len_devices[level]
+            available_devices_ids = range(len_devices_at)
+            for src_device_id in available_devices_ids:
+                neighbor_devices_at = [
+                    device_id
+                    for device_id in available_devices_ids
+                    if device_id != src_device_id
+                ]
+                self.neighbor_devices[level].append(neighbor_devices_at)
+
+    @initonly
+    def _alloc_parts(self):
+        self.parts_alloc = []
+        for level in range(self.runtime_config.num_levels):
+            num_parts = [len(parts) for parts in self.rns_partition.p[level]]
+            parts_alloc = [
+                alloc[-num_parts[di] - 1 : -1]
+                for di, alloc in enumerate(self.rns_partition.part_allocations)
+            ]
+            self.parts_alloc.append(parts_alloc)
+
+        self.stor_ids = []
+        for level in range(self.runtime_config.num_levels):
+            self.stor_ids.append([])
+            alloc = self.parts_alloc[level]
+            min_id = min([min(a) for a in alloc if len(a) > 0])
+            for device_id in range(self.runtime_config.num_devices):
+                global_ids = self.parts_alloc[level][device_id]
+                new_ids = [i - min_id for i in global_ids]
+                self.stor_ids[level].append(new_ids)
+
+    @initonly
+    def _create_ksk_rescales(self):
+        # reserve the buffers.
+        self.ksk_buffers = []
+        for device_id in range(self.runtime_config.num_devices):
+            self.ksk_buffers.append([])
+            for part_id in range(len(self.rns_partition.p[0][device_id])):
+                buffer = torch.empty(
+                    [
+                        self.ckks_config.num_special_primes,
+                        self.runtime_config.N,
+                    ],
+                    dtype=self.runtime_config.torch_dtype,
+                ).pin_memory()
+                self.ksk_buffers[device_id].append(buffer)
+
+        # Create the buffers.
+        R = self.runtime_config.R
+        P = self.runtime_config.q[-self.ckks_config.num_special_primes :][::-1]
+        m = self.runtime_config.q
+        PiR = [
+            [(pow(Pj, -1, mi) * R) % mi for mi in m[: -P_ind - 1]]
+            for P_ind, Pj in enumerate(P)
+        ]
+
+        self.PiRs = []
+
+        level = 0
+        self.PiRs.append([])
+
+        for P_ind in range(self.ckks_config.num_special_primes):
+            self.PiRs[level].append([])
+
+            for device_id in range(self.runtime_config.num_devices):
+                dest = self.rns_partition.destination_arrays_with_special[
+                    level
+                ][device_id]
+                PiRi = [PiR[P_ind][i] for i in dest[: -P_ind - 1]]
+                PiRi = torch.tensor(
+                    PiRi,
+                    device=self.runtime_config.devices[device_id],
+                    dtype=self.runtime_config.torch_dtype,
+                )
+                self.PiRs[level][P_ind].append(PiRi)
+
+        for level in range(1, self.runtime_config.num_levels):
+            self.PiRs.append([])
+
+            for P_ind in range(self.ckks_config.num_special_primes):
+                self.PiRs[level].append([])
+
+                for device_id in range(self.runtime_config.num_devices):
+                    start = self.rns_partition.diff[level][device_id]
+                    PiRi = self.PiRs[0][P_ind][device_id][start:]
+
+                    self.PiRs[level][P_ind].append(PiRi)
+
+    @initonly
+    def _make_mont_PR(self):
+        P = math.prod(
+            self.runtime_config.q[-self.ckks_config.num_special_primes :]
+        )
+        R = self.runtime_config.R
+        PR = P * R
+        mont_PR = []
+        for device_id in range(self.runtime_config.num_devices):
+            dest = self.rns_partition.destination_arrays[0][device_id]
+            m = [self.runtime_config.q[i] for i in dest]
+            PRm = [PR % mi for mi in m]
+            PRm = torch.tensor(
+                PRm,
+                device=self.runtime_config.devices[device_id],
+                dtype=self.runtime_config.torch_dtype,
+            )
+            mont_PR.append(PRm)
+        self.mont_PR = mont_PR
+
+    @initonly
+    def _make_adjustments_and_corrections(self):
+        self.alpha = [
+            (self.runtime_config.scale / np.float64(q)) ** 2
+            for q in self.runtime_config.q[: self.ckks_config.num_scales]
+        ]
+        self.deviations = [1]
+        for al in self.alpha:
+            self.deviations.append(self.deviations[-1] ** 2 * al)
+
+        self.final_q_ind = [
+            da[0][0] for da in self.rns_partition.destination_arrays[:-1]
+        ]
+        self.final_q = [self.runtime_config.q[ind] for ind in self.final_q_ind]
+        self.final_alpha = [
+            (self.runtime_config.scale / np.float64(q)) for q in self.final_q
+        ]
+        self.corrections = [
+            1 / (d * fa) for d, fa in zip(self.deviations, self.final_alpha)
+        ]
+
+        self.base_prime = self.runtime_config.q[
+            self.rns_partition.base_prime_idx
+        ]
+
+        self.final_scalar = []
+        for qi, q in zip(self.final_q_ind, self.final_q):
+            scalar = (
+                pow(q, -1, self.base_prime) * self.runtime_config.R
+            ) % self.base_prime
+            scalar = torch.tensor(
+                [scalar],
+                device=self.runtime_config.devices[0],
+                dtype=self.runtime_config.torch_dtype,
+            )
+            self.final_scalar.append(scalar)
 
     @classmethod
     def get_default_for_logN(cls, logN):
@@ -109,7 +283,7 @@ class CkksEngine:
         return cls.__default[logN]
 
     def set_as_default(self):
-        logN = self.ckksCtx.logN
+        logN = self.ckks_config.logN
         if logN in self.__class__.__default:
             logger.warning(
                 f"Engine for logN {logN} already exists({self.__class__.__default[logN].id}). Overwriting."
@@ -225,215 +399,17 @@ class CkksEngine:
         return what_is_this
 
     @property
-    def num_slots(self) -> int:
-        return self.ckksCtx.N // 2
-
-    @property
-    def num_levels(self) -> int:
-        return self.nttCtx.num_levels - 1
-
-    @property
-    def int_scale(self) -> int:
-        return 2**self.ckksCtx.scale_bits
-
-    @property
-    def scale(self) -> float:
-        return np.float64(2**self.ckksCtx.scale_bits)
-
-    @property
     def device0(self) -> int:
         # todo remove multi-device by default
-        return self.nttCtx.devices[0]
+        return self.runtime_config.devices[0]
 
     @property
     @functools.cache  # >= python 3.9  # noqa: B019
     def hash(self) -> str:
-        qstr = ",".join([str(qi) for qi in self.ckksCtx.q])
+        qstr = ",".join([str(qi) for qi in self.runtime_config.q])
         hashstr = (self.ckksCtx.generation_string + "_" + qstr).encode("utf-8")
         # logger.debug(f"Hash string: {hashstr}")
         return sha256(bytes(hashstr)).hexdigest()
-
-    # -------------------------------------------------------------------------------------------
-    # Various pre-calculations.
-    # -------------------------------------------------------------------------------------------
-    @initonly
-    def create_rescale_scales(self):
-        rescale_scales = []
-        for level in range(self.num_levels):
-            rescale_scales.append([])
-
-            for device_id in range(self.nttCtx.num_devices):
-                dest_level = self.nttCtx.rnsPart.destination_arrays[level]
-
-                if device_id < len(dest_level):
-                    dest = dest_level[device_id]
-                    rescaler_device_id = self.nttCtx.rnsPart.rescaler_loc[level]
-                    m0 = self.ckksCtx.q[level]
-
-                    if rescaler_device_id == device_id:
-                        m = [self.ckksCtx.q[i] for i in dest[1:]]
-                    else:
-                        m = [self.ckksCtx.q[i] for i in dest]
-
-                    scales = [
-                        (pow(m0, -1, mi) * self.ckksCtx.R) % mi for mi in m
-                    ]
-
-                    scales = torch.tensor(
-                        scales,
-                        dtype=self.ckksCtx.torch_dtype,
-                        device=self.nttCtx.devices[device_id],
-                    )
-                    rescale_scales[level].append(scales)
-
-        return rescale_scales
-
-    @initonly
-    def leveled_devices(self):
-        self.len_devices = []
-        for level in range(self.num_levels):
-            self.len_devices.append(
-                len([[a] for a in self.nttCtx.rnsPart.p[level] if len(a) > 0])
-            )
-
-        self.neighbor_devices = []
-        for level in range(self.num_levels):
-            self.neighbor_devices.append([])
-            len_devices_at = self.len_devices[level]
-            available_devices_ids = range(len_devices_at)
-            for src_device_id in available_devices_ids:
-                neighbor_devices_at = [
-                    device_id
-                    for device_id in available_devices_ids
-                    if device_id != src_device_id
-                ]
-                self.neighbor_devices[level].append(neighbor_devices_at)
-
-    @initonly
-    def alloc_parts(self):
-        self.parts_alloc = []
-        for level in range(self.num_levels):
-            num_parts = [len(parts) for parts in self.nttCtx.rnsPart.p[level]]
-            parts_alloc = [
-                alloc[-num_parts[di] - 1 : -1]
-                for di, alloc in enumerate(self.nttCtx.rnsPart.part_allocations)
-            ]
-            self.parts_alloc.append(parts_alloc)
-
-        self.stor_ids = []
-        for level in range(self.num_levels):
-            self.stor_ids.append([])
-            alloc = self.parts_alloc[level]
-            min_id = min([min(a) for a in alloc if len(a) > 0])
-            for device_id in range(self.nttCtx.num_devices):
-                global_ids = self.parts_alloc[level][device_id]
-                new_ids = [i - min_id for i in global_ids]
-                self.stor_ids[level].append(new_ids)
-
-    @initonly
-    def create_ksk_rescales(self):
-        # reserve the buffers.
-        self.ksk_buffers = []
-        for device_id in range(self.nttCtx.num_devices):
-            self.ksk_buffers.append([])
-            for part_id in range(len(self.nttCtx.rnsPart.p[0][device_id])):
-                buffer = torch.empty(
-                    [self.nttCtx.num_special_primes, self.ckksCtx.N],
-                    dtype=self.ckksCtx.torch_dtype,
-                ).pin_memory()
-                self.ksk_buffers[device_id].append(buffer)
-
-        # Create the buffers.
-        R = self.ckksCtx.R
-        P = self.ckksCtx.q[-self.nttCtx.num_special_primes :][::-1]
-        m = self.ckksCtx.q
-        PiR = [
-            [(pow(Pj, -1, mi) * R) % mi for mi in m[: -P_ind - 1]]
-            for P_ind, Pj in enumerate(P)
-        ]
-
-        self.PiRs = []
-
-        level = 0
-        self.PiRs.append([])
-
-        for P_ind in range(self.nttCtx.num_special_primes):
-            self.PiRs[level].append([])
-
-            for device_id in range(self.nttCtx.num_devices):
-                dest = self.nttCtx.rnsPart.destination_arrays_with_special[
-                    level
-                ][device_id]
-                PiRi = [PiR[P_ind][i] for i in dest[: -P_ind - 1]]
-                PiRi = torch.tensor(
-                    PiRi,
-                    device=self.nttCtx.devices[device_id],
-                    dtype=self.ckksCtx.torch_dtype,
-                )
-                self.PiRs[level][P_ind].append(PiRi)
-
-        for level in range(1, self.num_levels):
-            self.PiRs.append([])
-
-            for P_ind in range(self.nttCtx.num_special_primes):
-                self.PiRs[level].append([])
-
-                for device_id in range(self.nttCtx.num_devices):
-                    start = self.nttCtx.starts[level][device_id]
-                    PiRi = self.PiRs[0][P_ind][device_id][start:]
-
-                    self.PiRs[level][P_ind].append(PiRi)
-
-    @initonly
-    def make_mont_PR(self):
-        P = math.prod(self.nttCtx.ckksCtx.q[-self.nttCtx.num_special_primes :])
-        R = self.ckksCtx.R
-        PR = P * R
-        mont_PR = []
-        for device_id in range(self.nttCtx.num_devices):
-            dest = self.nttCtx.rnsPart.destination_arrays[0][device_id]
-            m = [self.ckksCtx.q[i] for i in dest]
-            PRm = [PR % mi for mi in m]
-            PRm = torch.tensor(
-                PRm,
-                device=self.nttCtx.devices[device_id],
-                dtype=self.ckksCtx.torch_dtype,
-            )
-            mont_PR.append(PRm)
-        return mont_PR
-
-    @initonly
-    def make_adjustments_and_corrections(self):
-        self.alpha = [
-            (self.scale / np.float64(q)) ** 2
-            for q in self.ckksCtx.q[: self.ckksCtx.num_scales]
-        ]
-        self.deviations = [1]
-        for al in self.alpha:
-            self.deviations.append(self.deviations[-1] ** 2 * al)
-
-        self.final_q_ind = [
-            da[0][0] for da in self.nttCtx.rnsPart.destination_arrays[:-1]
-        ]
-        self.final_q = [self.ckksCtx.q[ind] for ind in self.final_q_ind]
-        self.final_alpha = [(self.scale / np.float64(q)) for q in self.final_q]
-        self.corrections = [
-            1 / (d * fa) for d, fa in zip(self.deviations, self.final_alpha)
-        ]
-
-        self.base_prime = self.ckksCtx.q[self.nttCtx.rnsPart.base_prime_idx]
-
-        self.final_scalar = []
-        for qi, q in zip(self.final_q_ind, self.final_q):
-            scalar = (
-                pow(q, -1, self.base_prime) * self.ckksCtx.R
-            ) % self.base_prime
-            scalar = torch.tensor(
-                [scalar],
-                device=self.nttCtx.devices[0],
-                dtype=self.ckksCtx.torch_dtype,
-            )
-            self.final_scalar.append(scalar)
 
     # -------------------------------------------------------------------------------------------
     # Encode/Decode
@@ -487,8 +463,8 @@ class CkksEngine:
 
         pt_buffer = self.ksk_buffers[0][0][0]
         pt_buffer.copy_(encoded[-1])
-        for dev_id in range(1, self.nttCtx.num_devices):
-            encoded.append(pt_buffer.cuda(self.nttCtx.devices[dev_id]))
+        for dev_id in range(1, self.runtime_config.num_devices):
+            encoded.append(pt_buffer.cuda(self.runtime_config.devices[dev_id]))
         return encoded
 
     def decode(self, m, level=0, is_real: bool = False) -> list:
@@ -623,10 +599,12 @@ class CkksEngine:
 
         start = self.nttCtx.starts[level]
         pk0 = [
-            pk.data[0][di][start[di] :] for di in range(self.nttCtx.num_devices)
+            pk.data[0][di][start[di] :]
+            for di in range(self.runtime_config.num_devices)
         ]
         pk1 = [
-            pk.data[1][di][start[di] :] for di in range(self.nttCtx.num_devices)
+            pk.data[1][di][start[di] :]
+            for di in range(self.runtime_config.num_devices)
         ]
 
         v = self.rng.randint(amax=2, shift=0, repeats=1)
@@ -839,20 +817,20 @@ class CkksEngine:
         stops = self.nttCtx.stops[-1]
         Psk_src = [
             sk_from.data[di][: stops[di]].clone()
-            for di in range(self.nttCtx.num_devices)
+            for di in range(self.runtime_config.num_devices)
         ]
 
         self.nttCtx.mont_enter_scalar(Psk_src, self.mont_PR, level)
 
-        ksk = [[] for _ in range(self.nttCtx.rnsPart.num_partitions + 1)]
+        ksk = [[] for _ in range(self.rns_partition.num_partitions + 1)]
 
-        for device_id in range(self.nttCtx.num_devices):
+        for device_id in range(self.runtime_config.num_devices):
             for part_id, part in enumerate(
-                self.nttCtx.rnsPart.p[level][device_id]
+                self.rns_partition.p[level][device_id]
             ):
-                global_part_id = self.nttCtx.rnsPart.part_allocations[
-                    device_id
-                ][part_id]
+                global_part_id = self.rns_partition.part_allocations[device_id][
+                    part_id
+                ]
 
                 crs = a[global_part_id] if a else None
                 pk = self._create_public_key(sk_to, include_special=True, a=crs)
@@ -890,8 +868,8 @@ class CkksEngine:
         # param_parts contain only the ordinary parts.
         # Hence, loop around it.
         # text_parts contain special primes.
-        text_part = self.nttCtx.rnsPart.parts[level][device_id][part_id]
-        param_part = self.nttCtx.rnsPart.p[level][device_id][part_id]
+        text_part = self.rns_partition.parts[level][device_id][part_id]
+        param_part = self.rns_partition.p[level][device_id][part_id]
 
         # Carve out the partition.
         alpha = len(text_part)
@@ -957,7 +935,7 @@ class CkksEngine:
             target_device_id = device_id
 
         rns_len = len(
-            self.nttCtx.rnsPart.destination_arrays_with_special[level][
+            self.rns_partition.destination_arrays_with_special[level][
                 target_device_id
             ]
         )
@@ -968,7 +946,7 @@ class CkksEngine:
         self.nttCtx.mont_enter([extended], level, target_device_id, -2)
 
         # Generate the search key to find the L_enter.
-        part = self.nttCtx.rnsPart.p[level][device_id][part_id]
+        part = self.rns_partition.p[level][device_id][part_id]
         key = tuple(part)
 
         # Extract the L_enter in the target device.
@@ -1023,7 +1001,7 @@ class CkksEngine:
         states = [[] for _ in range(num_parts)]
         for src_device_id in range(len_devices):
             for part_id in range(
-                len(self.nttCtx.rnsPart.p[level][src_device_id])
+                len(self.rns_partition.p[level][src_device_id])
             ):
                 storage_id = self.stor_ids[level][src_device_id][part_id]
                 state = self.pre_extend(
@@ -1035,7 +1013,7 @@ class CkksEngine:
         CPU_states = [[] for _ in range(num_parts)]
         for src_device_id in range(len_devices):
             for part_id, part in enumerate(
-                self.nttCtx.rnsPart.p[level][src_device_id]
+                self.rns_partition.p[level][src_device_id]
             ):
                 storage_id = self.stor_ids[level][src_device_id][part_id]
                 alpha = len(part)
@@ -1046,7 +1024,7 @@ class CkksEngine:
         # 3. Continue on with the follow ups on source devices.
         for src_device_id in range(len_devices):
             for part_id in range(
-                len(self.nttCtx.rnsPart.p[level][src_device_id])
+                len(self.rns_partition.p[level][src_device_id])
             ):
                 storage_id = self.stor_ids[level][src_device_id][part_id]
                 state = states[storage_id]
@@ -1062,12 +1040,13 @@ class CkksEngine:
         for src_device_id in range(len_devices):
             for j, dst_device_id in enumerate(neighbor_devices[src_device_id]):
                 for part_id, part in enumerate(
-                    self.nttCtx.rnsPart.p[level][src_device_id]
+                    self.rns_partition.p[level][src_device_id]
                 ):
                     storage_id = self.stor_ids[level][src_device_id][part_id]
                     CPU_state = CPU_states[storage_id]
                     CUDA_states[storage_id] = CPU_state.cuda(
-                        self.nttCtx.devices[dst_device_id], non_blocking=True
+                        self.runtime_config.devices[dst_device_id],
+                        non_blocking=True,
                     )
 
         # 5. Synchronize.
@@ -1077,7 +1056,7 @@ class CkksEngine:
         for src_device_id in range(len_devices):
             for j, dst_device_id in enumerate(neighbor_devices[src_device_id]):
                 for part_id, part in enumerate(
-                    self.nttCtx.rnsPart.p[level][src_device_id]
+                    self.rns_partition.p[level][src_device_id]
                 ):
                     storage_id = self.stor_ids[level][src_device_id][part_id]
                     CUDA_state = CUDA_states[storage_id]
@@ -1119,18 +1098,18 @@ class CkksEngine:
 
         # Pre-montgomery enter the ordinary part.
         # Note that special prime channels remain intact.
-        c0 = [d[: -self.nttCtx.num_special_primes] for d in d0]
-        c1 = [d[: -self.nttCtx.num_special_primes] for d in d1]
+        c0 = [d[: -self.ckks_config.num_special_primes] for d in d0]
+        c1 = [d[: -self.ckks_config.num_special_primes] for d in d1]
 
         self.nttCtx.mont_enter(c0, level, -1)
         self.nttCtx.mont_enter(c1, level, -1)
 
         current_len = [
             len(d)
-            for d in self.nttCtx.rnsPart.destination_arrays_with_special[level]
+            for d in self.rns_partition.destination_arrays_with_special[level]
         ]
 
-        for P_ind in range(self.nttCtx.num_special_primes):
+        for P_ind in range(self.ckks_config.num_special_primes):
             PiRi = self.PiRs[level][P_ind]
 
             # Tile.
@@ -1144,8 +1123,8 @@ class CkksEngine:
             ]
 
             # mont enter only the ordinary part.
-            Q0 = [d[: -self.nttCtx.num_special_primes] for d in P0]
-            Q1 = [d[: -self.nttCtx.num_special_primes] for d in P1]
+            Q0 = [d[: -self.ckks_config.num_special_primes] for d in P0]
+            Q1 = [d[: -self.ckks_config.num_special_primes] for d in P1]
 
             self.nttCtx.mont_enter(Q0, level, -1)
             self.nttCtx.mont_enter(Q1, level, -1)
@@ -1161,8 +1140,8 @@ class CkksEngine:
             self.nttCtx.mont_enter_scalar(d1, PiRi, level, -2)
 
         # Carve out again, since d0 and d1 are fresh new.
-        c0 = [d[: -self.nttCtx.num_special_primes] for d in d0]
-        c1 = [d[: -self.nttCtx.num_special_primes] for d in d1]
+        c0 = [d[: -self.ckks_config.num_special_primes] for d in d0]
+        c1 = [d[: -self.ckks_config.num_special_primes] for d in d1]
 
         # Exit the montgomery.
         self.nttCtx.mont_reduce(c0, level, -1)
@@ -1240,12 +1219,12 @@ class CkksEngine:
         level = ct.level
         next_level = level + 1
 
-        if next_level >= self.num_levels:
+        if next_level >= self.runtime_config.num_levels:
             raise errors.MaximumLevelError(
-                level=ct.level, level_max=self.num_levels
+                level=ct.level, level_max=self.runtime_config.num_levels
             )
 
-        rescaler_device_id = self.nttCtx.rnsPart.rescaler_loc[level]
+        rescaler_device_id = self.rns_partition.rescaler_loc[level]
         neighbor_devices_before = self.neighbor_devices[level]
         neighbor_devices_after = self.neighbor_devices[next_level]
         len_devices_after = len(neighbor_devices_after)
@@ -1275,7 +1254,7 @@ class CkksEngine:
         CPU_rescaler1.copy_(rescaler1_at, non_blocking=True)
 
         for device_id in neighbor_devices_before[rescaler_device_id]:
-            device = self.nttCtx.devices[device_id]
+            device = self.runtime_config.devices[device_id]
             CUDA_rescaler0 = CPU_rescaler0.cuda(device)
             CUDA_rescaler1 = CPU_rescaler1.cuda(device)
 
@@ -1287,11 +1266,11 @@ class CkksEngine:
                 data1[device_id] = ct.data[1][device_id]
 
         if exact_rounding:
-            rescale_channel_prime_id = self.nttCtx.rnsPart.destination_arrays[
+            rescale_channel_prime_id = self.rns_partition.destination_arrays[
                 level
             ][rescaler_device_id][0]
 
-            round_at = self.ckksCtx.q[rescale_channel_prime_id] // 2
+            round_at = self.runtime_config.q[rescale_channel_prime_id] // 2
 
             rounder0 = [[] for _ in range(len_devices_before)]
             rounder1 = [[] for _ in range(len_devices_before)]
@@ -1764,7 +1743,7 @@ class CkksEngine:
 
         src_level = current_level + 1
 
-        dst_len_devices = len(self.nttCtx.rnsPart.destination_arrays[dst_level])
+        dst_len_devices = len(self.rns_partition.destination_arrays[dst_level])
 
         diff_deviation = self.deviations[dst_level] / np.sqrt(
             self.deviations[src_level]
@@ -1774,12 +1753,10 @@ class CkksEngine:
 
         if dst_level - src_level > 0:
             src_rns_lens = [
-                len(d)
-                for d in self.nttCtx.rnsPart.destination_arrays[src_level]
+                len(d) for d in self.rns_partition.destination_arrays[src_level]
             ]
             dst_rns_lens = [
-                len(d)
-                for d in self.nttCtx.rnsPart.destination_arrays[dst_level]
+                len(d) for d in self.rns_partition.destination_arrays[dst_level]
             ]
 
             diff_rns_lens = [y - x for x, y in zip(dst_rns_lens, src_rns_lens)]
@@ -1799,14 +1776,16 @@ class CkksEngine:
 
         multipliers = []
         for device_id in range(dst_len_devices):
-            dest = self.nttCtx.rnsPart.destination_arrays[dst_level][device_id]
-            q = [self.ckksCtx.q[i] for i in dest]
+            dest = self.rns_partition.destination_arrays[dst_level][device_id]
+            q = [self.runtime_config.q[i] for i in dest]
 
-            multiplier = [(deviated_delta * self.ckksCtx.R) % qi for qi in q]
+            multiplier = [
+                (deviated_delta * self.runtime_config.R) % qi for qi in q
+            ]
             multiplier = torch.tensor(
                 multiplier,
-                dtype=self.ckksCtx.torch_dtype,
-                device=self.nttCtx.devices[device_id],
+                dtype=self.runtime_config.torch_dtype,
+                device=self.runtime_config.devices[device_id],
             )
             multipliers.append(multiplier)
 
@@ -1855,13 +1834,13 @@ class CkksEngine:
             dc_scale = int(dc_integral) * int(self.scale)
             dc_rns = []
             for device_id, dest in enumerate(
-                self.nttCtx.rnsPart.destination_arrays[level]
+                self.rns_partition.destination_arrays[level]
             ):
-                dci = [dc_scale % self.ckksCtx.q[i] for i in dest]
+                dci = [dc_scale % self.runtime_config.q[i] for i in dest]
                 dci = torch.tensor(
                     dci,
-                    dtype=self.ckksCtx.torch_dtype,
-                    device=self.nttCtx.devices[device_id],
+                    dtype=self.runtime_config.torch_dtype,
+                    device=self.runtime_config.devices[device_id],
                 )
                 dc_rns.append(dci)
 
@@ -1872,8 +1851,8 @@ class CkksEngine:
 
         pt_buffer = self.ksk_buffers[0][0][0]
         pt_buffer.copy_(encoded[-1])
-        for dev_id in range(1, self.nttCtx.num_devices):
-            encoded.append(pt_buffer.cuda(self.nttCtx.devices[dev_id]))
+        for dev_id in range(1, self.runtime_config.num_devices):
+            encoded.append(pt_buffer.cuda(self.runtime_config.devices[dev_id]))
 
         mult_type = -2 if pk.has_flag(FLAGS.INCLUDE_SPECIAL) else -1
 
@@ -1897,10 +1876,12 @@ class CkksEngine:
 
         start = self.nttCtx.starts[level]
         pk0 = [
-            pk.data[0][di][start[di] :] for di in range(self.nttCtx.num_devices)
+            pk.data[0][di][start[di] :]
+            for di in range(self.runtime_config.num_devices)
         ]
         pk1 = [
-            pk.data[1][di][start[di] :] for di in range(self.nttCtx.num_devices)
+            pk.data[1][di][start[di] :]
+            for di in range(self.runtime_config.num_devices)
         ]
 
         v = self.rng.randint(amax=2, shift=0, repeats=1)
@@ -2007,7 +1988,7 @@ class CkksEngine:
         base = pt[0][base_at][None, :]
         scaler = pt[0][0][None, :]
 
-        len_left = len(self.nttCtx.rnsPart.destination_arrays[level][0])
+        len_left = len(self.rns_partition.destination_arrays[level][0])
 
         if (len_left >= 3) and self.bias_guard:
             dc0 = base[0][0].item()
@@ -2017,13 +1998,13 @@ class CkksEngine:
             base[0][0] = 0
             scaler[0][0] = 0
 
-            q0_ind = self.nttCtx.rnsPart.destination_arrays[level][0][base_at]
-            q1_ind = self.nttCtx.rnsPart.destination_arrays[level][0][0]
-            q2_ind = self.nttCtx.rnsPart.destination_arrays[level][0][1]
+            q0_ind = self.rns_partition.destination_arrays[level][0][base_at]
+            q1_ind = self.rns_partition.destination_arrays[level][0][0]
+            q2_ind = self.rns_partition.destination_arrays[level][0][1]
 
-            q0 = self.ckksCtx.q[q0_ind]
-            q1 = self.ckksCtx.q[q1_ind]
-            q2 = self.ckksCtx.q[q2_ind]
+            q0 = self.runtime_config.q[q0_ind]
+            q1 = self.runtime_config.q[q1_ind]
+            q2 = self.runtime_config.q[q2_ind]
 
             Q = q0 * q1 * q2
             Q0 = q1 * q2
@@ -2215,10 +2196,11 @@ class CkksEngine:
 
         int_scalar = int(scalar)
         mont_scalar = [
-            (int_scalar * self.ckksCtx.R) % qi for qi in self.ckksCtx.q
+            (int_scalar * self.runtime_config.R) % qi
+            for qi in self.runtime_config.q
         ]
 
-        dest = self.nttCtx.rnsPart.destination_arrays[ct.level]
+        dest = self.rns_partition.destination_arrays[ct.level]
 
         partitioned_mont_scalar = [
             [mont_scalar[i] for i in desti] for desti in dest
@@ -2227,8 +2209,8 @@ class CkksEngine:
         for device_id in range(device_len):
             scal_tensor = torch.tensor(
                 partitioned_mont_scalar[device_id],
-                dtype=self.ckksCtx.torch_dtype,
-                device=self.nttCtx.devices[device_id],
+                dtype=self.runtime_config.torch_dtype,
+                device=self.runtime_config.devices[device_id],
             )
             tensorized_scalar.append(scal_tensor)
 
@@ -2253,10 +2235,11 @@ class CkksEngine:
         )
 
         mont_scalar = [
-            (scaled_scalar * self.ckksCtx.R) % qi for qi in self.ckksCtx.q
+            (scaled_scalar * self.runtime_config.R) % qi
+            for qi in self.runtime_config.q
         ]
 
-        dest = self.nttCtx.rnsPart.destination_arrays[ct.level]
+        dest = self.rns_partition.destination_arrays[ct.level]
 
         partitioned_mont_scalar = [
             [mont_scalar[i] for i in dest_i] for dest_i in dest
@@ -2265,8 +2248,8 @@ class CkksEngine:
         for device_id in range(device_len):
             scal_tensor = torch.tensor(
                 partitioned_mont_scalar[device_id],
-                dtype=self.ckksCtx.torch_dtype,
-                device=self.nttCtx.devices[device_id],
+                dtype=self.runtime_config.torch_dtype,
+                device=self.runtime_config.devices[device_id],
             )
             tensorized_scalar.append(scal_tensor)
 
@@ -2296,9 +2279,9 @@ class CkksEngine:
 
         scaled_scalar *= self.int_scale
 
-        scaled_scalar = [scaled_scalar % qi for qi in self.ckksCtx.q]
+        scaled_scalar = [scaled_scalar % qi for qi in self.runtime_config.q]
 
-        dest = self.nttCtx.rnsPart.destination_arrays[ct.level]
+        dest = self.rns_partition.destination_arrays[ct.level]
 
         partitioned_mont_scalar = [
             [scaled_scalar[i] for i in desti] for desti in dest
@@ -2307,8 +2290,8 @@ class CkksEngine:
         for device_id in range(device_len):
             scal_tensor = torch.tensor(
                 partitioned_mont_scalar[device_id],
-                dtype=self.ckksCtx.torch_dtype,
-                device=self.nttCtx.devices[device_id],
+                dtype=self.runtime_config.torch_dtype,
+                device=self.runtime_config.devices[device_id],
             )
             tensorized_scalar.append(scal_tensor)
 

@@ -7,16 +7,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 from joblib import Parallel, delayed
 
-from tiberate.fhe.context import cache
-
-from .check_prim import MillerRabinPrimalityTest
-from .security_parameters import maximum_qbits
-
-# Default cache folder.
-CACHE_FOLDER = cache.path_cache
+from tiberate.cache import CACHE_FOLDER
+from tiberate.prim.check_prim import MillerRabinPrimalityTest
+from tiberate.security_parameters import maximum_qbits
 
 
-def generate_N_M(logN=None, cache_folder=CACHE_FOLDER, **kw):
+def generate_N_M(
+    logN: list[int] | None = None, cache_folder=CACHE_FOLDER, **kw
+):
     if logN is None:
         logN = list(range(12, 18))
     savefile = Path(cache_folder) / "logN_N_M.pkl"

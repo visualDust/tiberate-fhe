@@ -7,12 +7,12 @@ import numpy as np
 import torch
 from loguru import logger
 
-from tiberate.fhe.context import cache, errors
-from tiberate.fhe.context.generate_primes import (
+from tiberate import cache, errors
+from tiberate.prim.generate_primes import (
     generate_message_primes,
     generate_scale_primes,
 )
-from tiberate.fhe.context.security_parameters import maximum_qbits
+from tiberate.security_parameters import maximum_qbits
 
 # ------------------------------------------------------------------------------------------
 # NTT parameter pre-calculation.

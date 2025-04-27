@@ -1,17 +1,12 @@
 import glob
 import os
 
-path_cache = os.path.abspath(__file__).replace("cache.py", "resources")
-
-
-# logN_N_M = os.path.join(path_cache, "logN_N_M.pkl")
-# message_special_primes = os.path.join(path_cache, "message_special_primes.pkl")
-# scale_primes = os.path.join(path_cache, "scale_primes.pkl")
+CACHE_FOLDER = os.path.abspath(__file__).replace("cache.py", "resources")
 
 
 def clean_cache(path=None):
     if path is None:
-        path = path_cache
+        path = CACHE_FOLDER
     files = glob.glob(os.path.join(path, "*.pkl"))
     for file in files:
         try:
@@ -23,9 +18,9 @@ def clean_cache(path=None):
 
 def generate_cache(path=None):
     if path is None:
-        path = path_cache
+        path = CACHE_FOLDER
     # Read in pre-calculated high-quality primes.
-    from tiberate.fhe.context import generate_primes
+    from tiberate.prim import generate_primes
 
     _ = generate_primes.generate_message_primes(cache_folder=path)
     _ = generate_primes.generate_scale_primes(cache_folder=path)

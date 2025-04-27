@@ -6,8 +6,6 @@ from loguru import logger
 
 from tiberate.fhe.context.ckks_context import CkksContext
 
-from .rns_partition import RnsPartition
-
 
 class NTTContext:
     def __init__(
@@ -30,10 +28,6 @@ class NTTContext:
 
         self.num_ordinary_primes = self.ckksCtx.num_scales + 1
         self.num_special_primes = self.ckksCtx.num_special_primes
-
-        self.rnsPart = RnsPartition(
-            self.num_ordinary_primes, self.num_special_primes, self.num_devices
-        )
 
         self.prepare_parameters()
 
