@@ -3,8 +3,8 @@ from vdtoys.mvc import strictype
 
 from tiberate import errors
 from tiberate.engine import CkksEngine
-from tiberate.nn.functional import rotate
 from tiberate.typing import *  # noqa: F403
+from tiberate.utils.encoding import rotate
 
 
 class CkksEngineMPCExtension(CkksEngine):

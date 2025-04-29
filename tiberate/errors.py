@@ -60,3 +60,14 @@ class NotFoundScalePrimes(Exception):
 
     def __str__(self):
         return self.message_error
+
+
+class MaximumLevelError(Exception):
+    def __init__(self, level, level_max):
+        self.message_error = f"""The number of multiplications available for this cipher text is fully depleted. I cannot proceed further. maximum : {level_max:2d}, now : {level:2d}""".strip()
+
+    def __repr__(self):
+        return repr(self.message_error)
+
+    def __str__(self):
+        return self.message_error

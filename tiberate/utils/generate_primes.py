@@ -2,16 +2,79 @@ import math
 import multiprocessing
 import os
 import pickle
+import random
 
 import matplotlib.pyplot as plt
 import numpy as np
 from joblib import Parallel, delayed
 from loguru import logger
 
-from tiberate.prim.check_prim import MillerRabinPrimalityTest
-from tiberate.security_parameters import maximum_qbits
+from tiberate.config.security_parameters import maximum_qbits
 
 CACHE_FOLDER = os.path.dirname(__file__)
+
+
+def MillerRabinPrimalityTest(number, rounds=10):
+    # If the input is an even number, return immediately with False.
+    if number == 2:
+        return True
+    elif number == 1 or number % 2 == 0:
+        return False
+
+    # First we want to express n as : 2^s * r ( were r is odd )
+
+    # The odd part of the number
+    oddPartOfNumber = number - 1
+
+    # The number of time that the number is divided by two
+    timesTwoDividNumber = 0
+
+    # while r is even divid by 2 to find the odd part
+    while oddPartOfNumber % 2 == 0:
+        oddPartOfNumber = oddPartOfNumber / 2
+        timesTwoDividNumber = timesTwoDividNumber + 1
+
+    # Make oddPartOfNumber integer.
+    oddPartOfNumber = int(oddPartOfNumber)
+
+    # Since there are number that are cases of "strong liar" we need to check more than one number
+    for time in range(rounds):
+        # Choose "Good" random number
+        while True:
+            # Draw a RANDOM number in range of number ( Z_number )
+            randomNumber = random.randint(2, number) - 1
+            if randomNumber != 0 and randomNumber != 1:
+                break
+
+        # randomNumberWithPower = randomNumber^oddPartOfNumber mod number
+        randomNumberWithPower = pow(randomNumber, oddPartOfNumber, number)
+
+        # If random number is not 1 and not -1 ( in mod n )
+        if (randomNumberWithPower != 1) and (
+            randomNumberWithPower != number - 1
+        ):
+            # number of iteration
+            iterationNumber = 1
+
+            # While we can squre the number and the squered number is not -1 mod number
+            while (iterationNumber <= timesTwoDividNumber - 1) and (
+                randomNumberWithPower != number - 1
+            ):
+                # Squre the number
+                randomNumberWithPower = pow(randomNumberWithPower, 2, number)
+
+                # inc the number of iteration
+                iterationNumber = iterationNumber + 1
+
+            # If x != -1 mod number then it is because we did not find strong witnesses
+            # hence 1 have more then two roots in mod n ==>
+            # n is composite ==> return false for primality
+
+            if randomNumberWithPower != (number - 1):
+                return False
+
+    # The number pass the tests ==> it is probably prime ==> return true for primality
+    return True
 
 
 def generate_N_M(logN: list[int] | None = None):
@@ -210,33 +273,6 @@ def cum_prod(x: list) -> list:
     for i in range(len(x)):
         ret.append(ret[-1] * x[i])
     return ret[1:]
-
-
-def plot_cumulative_relative_error(
-    sb: int = 40, N: int = 2**15, label: str = "Optimized", **kw
-):
-    how_many: int = maximum_levels(N=N, qbits=sb)
-    p: list = generate_alternating_prime_sequence(
-        sb=sb, N=N, how_many=how_many, **kw
-    )
-
-    # Check every prime in the sequence is unique.
-    unique_p: list = sorted(set(p))
-
-    err_msg = "There are repeating primes in the generate primes set!!!"
-    assert len(unique_p) == len(p), err_msg
-
-    scale: int = 2**sb
-    e: list = [scale / pi for pi in p]
-
-    y: list = cum_prod(e)
-
-    plt.plot(y, label=label)
-    plt.grid()
-    plt.show()
-    # Error propagation.
-    q: np.array = np.array(y) - 1
-    print(f"Error expanded {np.abs(q).max() / np.abs(q)[0]} times.")
 
 
 def pgen_pseq(sb, N, how_many: int) -> list | str:

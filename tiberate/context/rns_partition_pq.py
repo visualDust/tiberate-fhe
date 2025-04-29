@@ -1,235 +1,10 @@
 import functools
-import math
 import operator
 from dataclasses import dataclass
-from enum import Enum
-from typing import Union
 
 import numpy as np
-import torch
 
-from tiberate import errors
-from tiberate.prim.generate_primes import (
-    generate_message_primes,
-    generate_scale_primes,
-)
-from tiberate.security_parameters import maximum_qbits
-
-
-class RngType(Enum):
-    SIMPLE = "SimpleRNG"
-    CSPRNG = "Csprng"
-
-
-class Preset(Enum):
-    logN14 = "logN14"
-    logN15 = "logN15"
-    logN16 = "logN16"
-    logN17 = "logN17"
-
-
-_PRESET_CONFIGS = {
-    Preset.logN14: {
-        "logN": 14,
-        "num_special_primes": 1,
-    },
-    Preset.logN15: {
-        "logN": 15,
-        "num_special_primes": 2,
-    },
-    Preset.logN16: {
-        "logN": 16,
-        "num_special_primes": 4,
-    },
-    Preset.logN17: {
-        "logN": 17,
-        "num_special_primes": 6,
-    },
-}
-
-
-@dataclass
-class CkksConfig:
-    logN: int = 16
-    buffer_bit_length: int = 62
-    scale_bits: int = 40
-    num_special_primes: int = 2
-    sigma = 3.2
-    uniform_ternary_secret: bool = True
-    security_bits: int = 128
-    quantum: str = "post_quantum"
-    distribution: str = "uniform"
-    read_cache: bool = True
-    save_cache: bool = True
-    allow_sk_gen: bool = True
-    bias_guard: bool = True
-    norm: str = "forward"
-    rng_class: RngType = RngType.CSPRNG
-    num_scales: int | None = None
-
-    # Derived attributes
-    runtime_config: Union["CkksEngineRuntimeConfig", None] = None
-    rns_partition: Union["RnsPartition", None] = None
-
-    @classmethod
-    def from_preset(cls, preset: Preset, **kwargs):
-        """
-        Create a CkksConfig instance from a preset.
-        Args:
-            preset (Preset): The preset to use.
-            **kwargs: Additional keyword arguments to override the preset values.
-        Returns:
-            CkksConfig: The CkksConfig instance with the preset values.
-        """
-        preset_config = _PRESET_CONFIGS[preset]
-        config = cls(**preset_config, **kwargs)
-        return config
-
-    def __post_init__(self):
-        """
-        Post-initialization processing for CkksConfig.
-        """
-        self.N = 2**self.logN
-        self.runtime_config = CkksEngineRuntimeConfig.from_ckks_config(self)
-        self.rns_partition = RnsPartition.from_ckks_config(self)
-
-
-@dataclass
-class CkksEngineRuntimeConfig:
-    # Derived attributes
-    devices: list[str] | None
-    max_qbits: int  # Maximum number of bits in the primes pack.
-    num_slots: int  # Number of slots in the polynomial.
-    num_levels: int  # Number of levels in the CKKS scheme.
-    int_scale: int  # Integer scale for the CKKS scheme.
-    scale: float  # Scale factor for the CKKS scheme.
-    message_bits: int  # Bit-length of the message prime.
-    q: list[int]  # List of primes in the CKKS scheme.
-    R: int  # Bit-length of the CKKS scheme.
-    torch_dtype: torch.dtype  # Data type for PyTorch tensors.
-    numpy_dtype: np.dtype  # Data type for NumPy arrays.
-    num_devices: int  # Number of devices available for computation.
-    generation_string: str  # String representation of the configuration.
-    R_square: list[int]  # List of R^2 mod q_i for each prime q_i.
-
-    @classmethod
-    def from_ckks_config(cls, ckks_config: CkksConfig):
-        """
-        Create a CkksEngineRuntimeConfig instance from a CkksConfig instance.
-        Args:
-            ckks_config (CkksConfig): The CkksConfig instance to use.
-        Returns:
-            CkksEngineRuntimeConfig: The CkksEngineRuntimeConfig instance.
-        """
-
-        devices = ["cuda:0"]  # always use cuda:0
-        num_devices = len(devices)
-
-        N = ckks_config.N
-
-        # Compose the primes pack.
-        # Rescaling drops off primes in --> direction.
-        # Key switching drops off primes in <-- direction.
-        # Hence, [scale primes, base message prime, special primes]
-        max_qbits = int(
-            maximum_qbits(
-                N,
-                ckks_config.security_bits,
-                ckks_config.quantum,
-                ckks_config.distribution,
-            )
-        )
-        num_slots = N // 2
-
-        int_scale = 2**ckks_config.scale_bits
-
-        scale = np.float64(
-            2**ckks_config.scale_bits
-        )  # TODO(puqing): What is difference between int_scale and scale?
-
-        # We set the message prime to of bit-length W-2.
-        message_bits = ckks_config.buffer_bit_length - 2
-
-        # Read in pre-calculated high-quality primes.
-        try:
-            message_special_primes = generate_message_primes()[message_bits][N]
-        except KeyError:
-            raise errors.NotFoundMessageSpecialPrimes(
-                message_bit=message_bits, N=N
-            )
-
-        # For logN > 16, we need significantly more primes.
-        how_many = 64 if ckks_config.logN < 16 else 128
-        try:
-            scale_primes = generate_scale_primes(how_many=how_many)[
-                ckks_config.scale_bits, N
-            ]
-        except KeyError:
-            raise errors.NotFoundScalePrimes(
-                scale_bits=ckks_config.scale_bits, N=N
-            )
-
-        base_special_primes = message_special_primes[
-            : 1 + ckks_config.num_special_primes
-        ]
-
-        # If num_scales is None, generate the maximal number of levels.
-        try:
-            if ckks_config.num_scales is None:
-                base_special_bits = sum(
-                    [math.log2(p) for p in base_special_primes]
-                )
-                available_bits = max_qbits - base_special_bits
-                num_scales = 0
-                available_bits -= math.log2(scale_primes[num_scales])
-                while available_bits > 0:
-                    num_scales += 1
-                    available_bits -= math.log2(scale_primes[num_scales])
-
-            ckks_config.num_scales = num_scales
-            q = scale_primes[:num_scales] + base_special_primes
-
-        except IndexError:
-            raise errors.NotEnoughPrimes(scale_bits=ckks_config.scale_bits, N=N)
-
-        num_levels = (
-            ckks_config.num_scales
-        )  # TODO(puqing): Why not use ckks_config.num_scales?
-
-        R = 2**ckks_config.buffer_bit_length
-
-        torch_dtype = {30: torch.int32, 62: torch.int64}[
-            ckks_config.buffer_bit_length
-        ]
-
-        generation_string = (
-            f"{ckks_config.buffer_bit_length}_{ckks_config.scale_bits}_{ckks_config.logN}_{ckks_config.num_scales}_"
-            f"{ckks_config.num_special_primes}_{ckks_config.security_bits}_{ckks_config.quantum}_"
-            f"{ckks_config.distribution}"
-        )
-
-        R_square = [R**2 % qi for qi in q]
-
-        numpy_dtype = {30: np.int32, 62: np.int64}[
-            ckks_config.buffer_bit_length
-        ]
-
-        return cls(
-            devices=devices,
-            max_qbits=max_qbits,
-            num_slots=num_slots,
-            num_levels=num_levels,
-            int_scale=int_scale,
-            scale=scale,
-            message_bits=message_bits,
-            q=q,
-            R=R,
-            torch_dtype=torch_dtype,
-            numpy_dtype=numpy_dtype,
-            num_devices=num_devices,
-            generation_string=generation_string,
-            R_square=R_square,
-        )
+from tiberate.config.ckks_config import CkksConfig
 
 
 @dataclass
@@ -269,7 +44,7 @@ class RnsPartition:
     # Configuration parameters
     num_ordinary_primes: int = 17
     num_special_primes: int = 2
-    num_devices: int = 2
+    num_devices: int = 1
 
     # Derived attributes
     base_prime_idx = num_ordinary_primes - 1
@@ -283,7 +58,7 @@ class RnsPartition:
     rescaler_loc: list[int] | None = None
 
     @classmethod
-    def from_ckks_config(cls, ckks_config: CkksConfig):
+    def from_ckks_config(cls, ckks_config: CkksConfig, num_devices: int = 1):
         """
         Create a RnsPartition instance from a CkksConfig instance.
         Args:
@@ -294,7 +69,7 @@ class RnsPartition:
         self = cls(
             num_ordinary_primes=ckks_config.num_scales + 1,
             num_special_primes=ckks_config.num_special_primes,
-            num_devices=len(ckks_config.runtime_config.devices),
+            num_devices=num_devices,
         )
         return self
 

@@ -4,7 +4,7 @@ import plotext as plt
 from loguru import logger
 from vdtoys.registry import Registry
 
-from tiberate import CkksConfig, CkksEngine, Preset
+from tiberate import CkksConfig, CkksEngine, Preset, errors
 from tiberate.typing import Plaintext
 from tiberate.utils.massive import (
     calculate_ckks_cipher_datastruct_size_in_list_recursive,
@@ -181,9 +181,10 @@ class ConsumeAllLevelsBenchmark(BenchmarkBase):
                 logger.info(
                     f"At level {packed_ct_1.level}, Max diff: {max_diff}, Mean diff: {mean_diff}"
                 )
+        except errors.MaximumLevelError as e:
+            pass
         except Exception as e:
-            logger.info(f"Seems max level reached: {e}")
-            # raise e
+            raise e
         finally:
             plt.plot(max_diff_array, label="Max Diff")
             plt.plot(mean_diff_array, label="Mean Diff")

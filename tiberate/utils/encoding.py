@@ -20,7 +20,7 @@ def padding(
     """
     if isinstance(m, (int, float)):
         m = [m]
-    # TODO how about length > num_slots
+    # TODO raise error if length > num_slots ?
     if isinstance(m, torch.Tensor):
         assert (
             len(m.shape) == 1
@@ -326,7 +326,7 @@ def encode(
 
     pre_perm, post_perm = prepost_perms_cache[N, device]
 
-    mm = m * deviation  # todo check dtype m * deviation
+    mm = m * deviation  # todo check dtype m * deviation ?
     if isinstance(mm, torch.Tensor):
         mm = mm.to(device, copy=True)
     mm = pre_permute(mm, pre_perm)
