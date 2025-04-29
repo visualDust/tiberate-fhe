@@ -1,39 +1,41 @@
 import math
 import multiprocessing
+import os
 import pickle
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 from joblib import Parallel, delayed
+from loguru import logger
 
-from tiberate.cache import CACHE_FOLDER
 from tiberate.prim.check_prim import MillerRabinPrimalityTest
 from tiberate.security_parameters import maximum_qbits
 
+CACHE_FOLDER = os.path.dirname(__file__)
 
-def generate_N_M(
-    logN: list[int] | None = None, cache_folder=CACHE_FOLDER, **kw
-):
-    if logN is None:
-        logN = list(range(12, 18))
-    savefile = Path(cache_folder) / "logN_N_M.pkl"
 
-    if savefile.exists():
-        with savefile.open("rb") as f:
-            logN_N_M = pickle.load(f)
-            logN = logN_N_M["logN"]
-            N = logN_N_M["N"]
-            M = logN_N_M["M"]
-            return logN, N, M
+def generate_N_M(logN: list[int] | None = None):
+    # default to generate logN from 12 to 18
+    logN = list(range(12, 18)) if logN is None else logN
+    logN = sorted(set(logN))  # sort logN and make it unique
 
-    N = [2**lN for lN in logN]
-    M = [2 * n for n in N]
+    filename = "N_M_" + "_".join([str(lN) for lN in logN]) + ".pkl"
+    filepath = os.path.join(CACHE_FOLDER, filename)
 
-    logN_N_M = {"logN": logN, "N": N, "M": M}
+    if not os.path.exists(filepath):
+        N = [2**lN for lN in logN]
+        M = [2 * n for n in N]
 
-    with savefile.open("wb") as f:
-        pickle.dump(logN_N_M, f)
+        logN_N_M = {"logN": logN, "N": N, "M": M}
+
+        with open(filepath, "wb") as f:
+            pickle.dump(logN_N_M, f)
+
+    with open(filepath, "rb") as f:
+        logN_N_M = pickle.load(f)
+        logN = logN_N_M["logN"]
+        N = logN_N_M["N"]
+        M = logN_N_M["M"]
 
     return logN, N, M
 
@@ -50,19 +52,18 @@ def check_ntt_primality(q: int, M: int):
     return False
 
 
-def generate_message_primes(
-    mbits=None, cache_folder=CACHE_FOLDER, how_many=11, **kw
-):
-    if mbits is None:
-        mbits = [28, 60]
-    savefile = Path(cache_folder) / "message_special_primes.pkl"
+def generate_message_primes(mbits=None, how_many=11):
+    mbits = [28, 60] if mbits is None else mbits
 
-    if savefile.exists():
-        with savefile.open("rb") as f:
+    filename = "message_special_primes.pkl"
+    filepath = os.path.join(CACHE_FOLDER, filename)
+
+    if os.path.exists(filepath):
+        with open(filepath, "rb") as f:
             mprimes = pickle.load(f)
             # return mprimes
     else:
-        logN, N, M = generate_N_M(cache_folder=cache_folder, **kw)
+        logN, N, M = generate_N_M()
 
         mprimes = {}
         for mb in mbits:
@@ -87,7 +88,7 @@ def generate_message_primes(
                     # Move onto the next query.
                     current_query -= 2
 
-        with savefile.open("wb") as f:
+        with open(filepath, "wb") as f:
             pickle.dump(mprimes, f)
 
     return mprimes
@@ -253,11 +254,9 @@ def pgen_pseq(sb, N, how_many: int) -> list | str:
     return res
 
 
-def generate_scale_primes(
-    cache_folder=CACHE_FOLDER, how_many=64, ncpu_cutdown=32, verbose=0
-):
-    savefile = Path(cache_folder) / "scale_primes.pkl"
-    if savefile.exists():
+def generate_scale_primes(how_many=64, ncpu_cutdown=32, verbose=0):
+    savefile = os.path.join(CACHE_FOLDER, "scale_primes.pkl")
+    if os.path.exists(savefile):
         with open(savefile, "rb") as f:
             result_dict = pickle.load(f)
             return result_dict
@@ -267,7 +266,7 @@ def generate_scale_primes(
     # Cut down the number of n-cpus. It tends to slow down after 32.
     ncpu = min(ncpu, ncpu_cutdown)
 
-    logN, N, M = generate_N_M(cache_folder=cache_folder)
+    logN, N, M = generate_N_M()
 
     # Scale.
     logS = list(range(20, 55, 5))
@@ -279,13 +278,14 @@ def generate_scale_primes(
         for sb in logS:
             inputs.append((sb, n, how_many))
 
+    logger.info(f"Generating {len(inputs)} primes with {ncpu} cpus...")
     result = Parallel(n_jobs=ncpu, verbose=verbose)(
         delayed(pgen_pseq)(*inp) for inp in inputs
     )
 
     result_dict = {(sb, N): pr for (sb, N, how_many), pr in zip(inputs, result)}
 
-    with savefile.open("wb") as f:
+    with open(savefile, "wb") as f:
         pickle.dump(result_dict, f)
 
     return result_dict

@@ -9,7 +9,6 @@ import numpy as np
 import torch
 
 from tiberate import errors
-from tiberate.cache import CACHE_FOLDER
 from tiberate.prim.generate_primes import (
     generate_message_primes,
     generate_scale_primes,
@@ -66,7 +65,6 @@ class CkksConfig:
     bias_guard: bool = True
     norm: str = "forward"
     rng_class: RngType = RngType.CSPRNG
-    cache_folder: str = CACHE_FOLDER
     num_scales: int | None = None
 
     # Derived attributes
@@ -91,6 +89,7 @@ class CkksConfig:
         """
         Post-initialization processing for CkksConfig.
         """
+        self.N = 2**self.logN
         self.runtime_config = CkksEngineRuntimeConfig.from_ckks_config(self)
         self.rns_partition = RnsPartition.from_ckks_config(self)
 
@@ -99,7 +98,6 @@ class CkksConfig:
 class CkksEngineRuntimeConfig:
     # Derived attributes
     devices: list[str] | None
-    N: int  # Polynomial length.
     max_qbits: int  # Maximum number of bits in the primes pack.
     num_slots: int  # Number of slots in the polynomial.
     num_levels: int  # Number of levels in the CKKS scheme.
@@ -127,7 +125,7 @@ class CkksEngineRuntimeConfig:
         devices = ["cuda:0"]  # always use cuda:0
         num_devices = len(devices)
 
-        N = 2**ckks_config.logN
+        N = ckks_config.N
 
         # Compose the primes pack.
         # Rescaling drops off primes in --> direction.
@@ -154,9 +152,7 @@ class CkksEngineRuntimeConfig:
 
         # Read in pre-calculated high-quality primes.
         try:
-            message_special_primes = generate_message_primes(
-                cache_folder=ckks_config.cache_folder
-            )[message_bits][N]
+            message_special_primes = generate_message_primes()[message_bits][N]
         except KeyError:
             raise errors.NotFoundMessageSpecialPrimes(
                 message_bit=message_bits, N=N
@@ -165,9 +161,9 @@ class CkksEngineRuntimeConfig:
         # For logN > 16, we need significantly more primes.
         how_many = 64 if ckks_config.logN < 16 else 128
         try:
-            scale_primes = generate_scale_primes(
-                cache_folder=ckks_config.cache_folder, how_many=how_many
-            )[ckks_config.scale_bits, N]
+            scale_primes = generate_scale_primes(how_many=how_many)[
+                ckks_config.scale_bits, N
+            ]
         except KeyError:
             raise errors.NotFoundScalePrimes(
                 scale_bits=ckks_config.scale_bits, N=N
@@ -220,7 +216,6 @@ class CkksEngineRuntimeConfig:
 
         return cls(
             devices=devices,
-            N=N,
             max_qbits=max_qbits,
             num_slots=num_slots,
             num_levels=num_levels,

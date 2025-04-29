@@ -1,19 +1,20 @@
 import math
+import os
 import pickle
 import warnings
-from pathlib import Path
 
 import numpy as np
 import torch
 from loguru import logger
 
 from tiberate import errors
-from tiberate.cache import CACHE_FOLDER
 from tiberate.prim.generate_primes import (
     generate_message_primes,
     generate_scale_primes,
 )
 from tiberate.security_parameters import maximum_qbits
+
+CACHE_FOLDER = os.path.dirname(__file__)
 
 # ------------------------------------------------------------------------------------------
 # NTT parameter pre-calculation.
@@ -158,7 +159,6 @@ class CkksContext:
         num_special_primes=2,
         sigma=3.2,
         uniform_ternary_secret=True,
-        cache_folder=CACHE_FOLDER,
         security_bits=128,
         quantum="post_quantum",
         distribution="uniform",
@@ -166,9 +166,6 @@ class CkksContext:
         save_cache=True,
         is_secured=True,
     ):
-        if not Path(cache_folder).exists():
-            Path(cache_folder).mkdir(parents=True, exist_ok=True)
-
         self.generation_string = (
             f"{buffer_bit_length}_{scale_bits}_{logN}_{num_scales}_"
             f"{num_special_primes}_{security_bits}_{quantum}_"
@@ -177,9 +174,9 @@ class CkksContext:
 
         self.is_secured = is_secured
         # Compose cache savefile name.
-        savepath = Path(cache_folder) / Path(self.generation_string + ".pkl")
+        savepath = os.path.join(CACHE_FOLDER, self.generation_string + ".pkl")
 
-        if savepath.exists() and read_cache:
+        if os.path.exists(savepath) and read_cache:
             with savepath.open("rb") as f:
                 __dict__ = pickle.load(f)
                 self.__dict__.update(__dict__)
@@ -191,7 +188,6 @@ class CkksContext:
         self.scale_bits = scale_bits
         self.logN = logN
         self.num_special_primes = num_special_primes
-        self.cache_folder = cache_folder
         self.security_bits = security_bits
         self.quantum = quantum
         self.distribution = distribution
@@ -217,9 +213,9 @@ class CkksContext:
 
         # Read in pre-calculated high-quality primes.
         try:
-            message_special_primes = generate_message_primes(
-                cache_folder=cache_folder
-            )[self.message_bits][self.N]
+            message_special_primes = generate_message_primes()[
+                self.message_bits
+            ][self.N]
         except KeyError:
             raise errors.NotFoundMessageSpecialPrimes(
                 message_bit=self.message_bits, N=self.N
@@ -228,9 +224,9 @@ class CkksContext:
         # For logN > 16, we need significantly more primes.
         how_many = 64 if self.logN < 16 else 128
         try:
-            scale_primes = generate_scale_primes(
-                cache_folder=cache_folder, how_many=how_many
-            )[self.scale_bits, self.N]
+            scale_primes = generate_scale_primes(how_many=how_many)[
+                self.scale_bits, self.N
+            ]
         except KeyError:
             raise errors.NotFoundScalePrimes(
                 scale_bits=self.scale_bits, N=self.N
@@ -352,7 +348,6 @@ class CkksContext:
         N = {self.N:,d}
         Number of special primes = {self.num_special_primes:,d}
         Number of scales = {self.num_scales:,d} (can do {(self.num_scales-1):,d} mult)
-        Cache folder = '{self.cache_folder:s}'
         Security bits = {self.security_bits:,d}
         Quantum security model = {self.quantum:s}
         Security sampling distribution = {self.distribution:s}
