@@ -4,7 +4,7 @@ import torch
 from loguru import logger
 from vdtoys.registry import Registry
 
-from tiberate import CkksEngine, presets
+from tiberate import CkksConfig, CkksEngine, Preset
 
 from .interface import BenchmarkBase
 
@@ -19,32 +19,32 @@ class CMultSingleOPBenchmark(BenchmarkBase):
         self.config_matrix = {
             "logN14 No Relinearize": {
                 "description": "Using polynomial degree logN14, run CMult(without relinearization) for 100 times",
-                "ckks_params": presets.logN14,
+                "ckks_params": Preset.logN14,
                 "relinearize": False,
             },
             "logN14": {
                 "description": "Using polynomial degree logN14, run CMult for 100 times",
-                "ckks_params": presets.logN14,
+                "ckks_params": Preset.logN14,
                 "relinearize": True,
             },
             "logN15 No Relinearize": {
                 "description": "Using polynomial degree logN15, run CMult(without relinearization) for 100 times",
-                "ckks_params": presets.logN15,
+                "ckks_params": Preset.logN15,
                 "relinearize": False,
             },
             "logN15": {
                 "description": "Using polynomial degree logN15, run CMult for 100 times",
-                "ckks_params": presets.logN15,
+                "ckks_params": Preset.logN15,
                 "relinearize": True,
             },
             "logN16 No Relinearize": {
                 "description": "Using polynomial degree logN16, run CMult(without relinearization) for 100 times",
-                "ckks_params": presets.logN16,
+                "ckks_params": Preset.logN16,
                 "relinearize": False,
             },
             "logN16": {
                 "description": "Using polynomial degree logN16, run CMult for 100 times",
-                "ckks_params": presets.logN16,
+                "ckks_params": Preset.logN16,
                 "relinearize": True,
             },
         }
@@ -60,7 +60,7 @@ class CMultSingleOPBenchmark(BenchmarkBase):
         ckks_params = config["ckks_params"]
         logger.info(f"Running benchmark: {config['description']}")
 
-        engine = CkksEngine(ckks_params=ckks_params)
+        engine = CkksEngine(ckks_config=CkksConfig.from_preset(ckks_params))
         input_tensor_1 = torch.randn((engine.num_slots,))
         input_tensor_2 = torch.randn((engine.num_slots,))
         plain_output = input_tensor_1 * input_tensor_2

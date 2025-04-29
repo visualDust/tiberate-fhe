@@ -4,7 +4,7 @@ import plotext as plt
 from loguru import logger
 from vdtoys.registry import Registry
 
-from tiberate import CkksEngine, presets
+from tiberate import CkksConfig, CkksEngine, Preset
 from tiberate.typing import Plaintext
 from tiberate.utils.massive import (
     calculate_ckks_cipher_datastruct_size_in_list_recursive,
@@ -127,17 +127,17 @@ class ConsumeAllLevelsBenchmark(BenchmarkBase):
         self.config_matrix = {
             "logN14": {
                 "description": "Using polynomial degree logN14",
-                "ckks_params": presets.logN14,
+                "ckks_params": Preset.logN14,
                 "relinearize": True,
             },
             "logN15": {
                 "description": "Using polynomial degree logN15",
-                "ckks_params": presets.logN15,
+                "ckks_params": Preset.logN15,
                 "relinearize": True,
             },
             "logN16": {
                 "description": "Using polynomial degree logN16",
-                "ckks_params": presets.logN16,
+                "ckks_params": Preset.logN16,
                 "relinearize": True,
             },
         }
@@ -153,7 +153,7 @@ class ConsumeAllLevelsBenchmark(BenchmarkBase):
         ckks_params = config["ckks_params"]
         logger.info(f"Running benchmark: {config['description']}")
 
-        engine = CkksEngine(ckks_params=ckks_params)
+        engine = CkksEngine(ckks_config=CkksConfig.from_preset(ckks_params))
 
         # =========== Test Error ========== #
         packed_ct_1, input_tensor_1 = engine.randn(return_src=True)

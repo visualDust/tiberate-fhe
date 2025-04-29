@@ -2,7 +2,7 @@ import torch
 from loguru import logger
 from vdtoys.registry import Registry
 
-from tiberate import CkksEngine, presets
+from tiberate import CkksConfig, CkksEngine, Preset
 
 from ..components.interface import HELinear
 from ..components.linear_feature_wise import (
@@ -27,57 +27,57 @@ class LinearFeatureWiseBenchmark(BenchmarkBase):
                 "description": "(64,256) input x (256,256) weight - polynomial degree logN14",
                 "input_shape": (64, 256),
                 "weight_shape": (256, 256),
-                "ckks_params": presets.logN14,
+                "ckks_params": Preset.logN14,
             },
             "(64,256)-logN15": {
                 "description": "(64,256) input x (256,256) weight - polynomial degree logN15",
                 "input_shape": (64, 256),
                 "weight_shape": (256, 256),
-                "ckks_params": presets.logN15,
+                "ckks_params": Preset.logN15,
             },
             "(64,256)-logN16": {
                 "description": "(64,256) input x (256,256) weight - polynomial degree logN16",
                 "input_shape": (64, 256),
                 "weight_shape": (256, 256),
-                "ckks_params": presets.logN16,
+                "ckks_params": Preset.logN16,
             },
             # (128, 512) x (512, 512)
             "(128,512)-logN14": {
                 "description": "(128,512) input x (512,512) weight - polynomial degree logN14",
                 "input_shape": (128, 512),
                 "weight_shape": (512, 512),
-                "ckks_params": presets.logN14,
+                "ckks_params": Preset.logN14,
             },
             "(128,512)-logN15": {
                 "description": "(128,512) input x (512,512) weight - polynomial degree logN15",
                 "input_shape": (128, 512),
                 "weight_shape": (512, 512),
-                "ckks_params": presets.logN15,
+                "ckks_params": Preset.logN15,
             },
             "(128,512)-logN16": {
                 "description": "(128,512) input x (512,512) weight - polynomial degree logN16",
                 "input_shape": (128, 512),
                 "weight_shape": (512, 512),
-                "ckks_params": presets.logN16,
+                "ckks_params": Preset.logN16,
             },
             # (256, 1024) x (1024, 1024)
             "(256,1024)-logN14": {
                 "description": "(256,1024) input x (1024,1024) weight - polynomial degree logN14",
                 "input_shape": (256, 1024),
                 "weight_shape": (1024, 1024),
-                "ckks_params": presets.logN14,
+                "ckks_params": Preset.logN14,
             },
             "(256,1024)-logN15": {
                 "description": "(256,1024) input x (1024,1024) weight - polynomial degree logN15",
                 "input_shape": (256, 1024),
                 "weight_shape": (1024, 1024),
-                "ckks_params": presets.logN15,
+                "ckks_params": Preset.logN15,
             },
             "(256,1024)-logN16": {
                 "description": "(256,1024) input x (1024,1024) weight - polynomial degree logN16",
                 "input_shape": (256, 1024),
                 "weight_shape": (1024, 1024),
-                "ckks_params": presets.logN16,
+                "ckks_params": Preset.logN16,
             },
         }
 
@@ -97,7 +97,7 @@ class LinearFeatureWiseBenchmark(BenchmarkBase):
         CTEncoding.debug = True
         HELinear.debug = True
 
-        engine = CkksEngine(ckks_params=ckks_params)
+        engine = CkksEngine(ckks_config=CkksConfig.from_preset(ckks_params))
         input_tensor = torch.randn(input_shape)
         input_tensor = input_tensor.unsqueeze(0)
         he_input = FeatureWise_CTEncoding.encodecrypt(

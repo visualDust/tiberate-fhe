@@ -4,7 +4,7 @@ import torch
 from loguru import logger
 from vdtoys.registry import Registry
 
-from tiberate import CkksEngine, presets
+from tiberate import CkksConfig, CkksEngine, Preset
 from tiberate.typing import Plaintext
 
 from .interface import BenchmarkBase
@@ -20,15 +20,15 @@ class PMultSingleOPBenchmark(BenchmarkBase):
         self.config_matrix = {
             "logN14": {
                 "description": "Using polynomial degree logN14, run PMult for 100 times",
-                "ckks_params": presets.logN14,
+                "ckks_params": Preset.logN14,
             },
             "logN15": {
                 "description": "Using polynomial degree logN15, run PMult for 100 times",
-                "ckks_params": presets.logN15,
+                "ckks_params": Preset.logN15,
             },
             "logN16": {
                 "description": "Using polynomial degree logN16, run PMult for 100 times",
-                "ckks_params": presets.logN16,
+                "ckks_params": Preset.logN16,
             },
         }
 
@@ -43,7 +43,7 @@ class PMultSingleOPBenchmark(BenchmarkBase):
         ckks_params = config["ckks_params"]
         logger.info(f"Running benchmark: {config['description']}")
 
-        engine = CkksEngine(ckks_params=ckks_params)
+        engine = CkksEngine(ckks_config=CkksConfig.from_preset(ckks_params))
         input_tensor_1 = torch.randn((engine.num_slots,))
         input_tensor_2 = torch.randn((engine.num_slots,))
         plain_output = input_tensor_1 * input_tensor_2

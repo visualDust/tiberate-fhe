@@ -7,7 +7,8 @@ import numpy as np
 import torch
 from loguru import logger
 
-from tiberate import cache, errors
+from tiberate import errors
+from tiberate.cache import CACHE_FOLDER
 from tiberate.prim.generate_primes import (
     generate_message_primes,
     generate_scale_primes,
@@ -17,7 +18,6 @@ from tiberate.security_parameters import maximum_qbits
 # ------------------------------------------------------------------------------------------
 # NTT parameter pre-calculation.
 # ------------------------------------------------------------------------------------------
-CACHE_FOLDER = cache.path_cache  # todo make this configurable
 
 
 def primitive_root_2N(q, N):

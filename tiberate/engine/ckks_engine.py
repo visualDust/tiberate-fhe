@@ -9,16 +9,12 @@ import numpy as np
 import torch
 from loguru import logger
 from vdtoys.cache import CachedDict
-from vdtoys.mvc import initonly, strictype
+from vdtoys.mvc import strictype
 
+import tiberate.nn.functional as F
 from tiberate import errors
 from tiberate.config import CkksConfig, RngType
-from tiberate.fhe.encdec import (
-    conjugate as codec_conjugate,
-    decode as codec_decode,
-    encode as codec_encode,
-    rotate as codec_rotate,
-)
+from tiberate.engine.ntt_context import NTTContext
 from tiberate.rng import Csprng, RandNumGen, SimpleRNG
 from tiberate.typing import *  # noqa: F403
 from tiberate.utils.massive import decompose_rot_offsets
@@ -47,6 +43,7 @@ class CkksEngine:
             num_repeating_channels=max(ckks_config.num_special_primes, 2),
         )
 
+        self.nttCtx = NTTContext(self.ckks_config)
         logger.info(
             f"Using Random Number Generator: {self.rng.__class__.__name__}"
         )
@@ -54,7 +51,12 @@ class CkksEngine:
         self.bias_guard = self.ckks_config.bias_guard
         self.norm = self.ckks_config.norm
 
-        self._init_runtime_config()
+        self._make_adjustments_and_corrections()
+        self._make_mont_PR()
+        self._create_ksk_rescales()
+        self._alloc_parts()
+        self._leveled_devices()
+        self._create_rescale_scales()
 
         # id
         self.id = str(uuid4())  # unique id for this engine at runtime
@@ -74,18 +76,10 @@ class CkksEngine:
             )
             self.__class__.__default[self.ckks_config.logN] = self
 
-    def _init_runtime_config(self):
-        self._make_adjustments_and_corrections()
-        self._make_mont_PR()
-        self._create_ksk_rescales()
-        self._alloc_parts()
-        self._leveled_devices()
-        self._create_rescale_scales()
-
     # -------------------------------------------------------------------------------------------
     # Various pre-calculations.
     # -------------------------------------------------------------------------------------------
-    @initonly
+
     def _create_rescale_scales(self):
         rescale_scales = []
         for level in range(self.runtime_config.num_levels):
@@ -118,7 +112,6 @@ class CkksEngine:
 
         self.rescale_scales = rescale_scales
 
-    @initonly
     def _leveled_devices(self):
         self.len_devices = []
         for level in range(self.runtime_config.num_levels):
@@ -139,7 +132,6 @@ class CkksEngine:
                 ]
                 self.neighbor_devices[level].append(neighbor_devices_at)
 
-    @initonly
     def _alloc_parts(self):
         self.parts_alloc = []
         for level in range(self.runtime_config.num_levels):
@@ -160,7 +152,6 @@ class CkksEngine:
                 new_ids = [i - min_id for i in global_ids]
                 self.stor_ids[level].append(new_ids)
 
-    @initonly
     def _create_ksk_rescales(self):
         # reserve the buffers.
         self.ksk_buffers = []
@@ -217,7 +208,6 @@ class CkksEngine:
 
                     self.PiRs[level][P_ind].append(PiRi)
 
-    @initonly
     def _make_mont_PR(self):
         P = math.prod(
             self.runtime_config.q[-self.ckks_config.num_special_primes :]
@@ -237,7 +227,6 @@ class CkksEngine:
             mont_PR.append(PRm)
         self.mont_PR = mont_PR
 
-    @initonly
     def _make_adjustments_and_corrections(self):
         self.alpha = [
             (self.runtime_config.scale / np.float64(q)) ** 2
@@ -257,7 +246,6 @@ class CkksEngine:
         self.corrections = [
             1 / (d * fa) for d, fa in zip(self.deviations, self.final_alpha)
         ]
-
         self.base_prime = self.runtime_config.q[
             self.rns_partition.base_prime_idx
         ]
@@ -406,40 +394,18 @@ class CkksEngine:
     @property
     @functools.cache  # >= python 3.9  # noqa: B019
     def hash(self) -> str:
-        qstr = ",".join([str(qi) for qi in self.runtime_config.q])
-        hashstr = (self.ckksCtx.generation_string + "_" + qstr).encode("utf-8")
+        """
+        Hash of the engine.
+        This is used to identify the engine and its parameters.
+        """
+        q_str = ",".join(map(str, self.runtime_config.q))
+        hash_input = f"{self.runtime_config.generation_string}_{q_str}"
         # logger.debug(f"Hash string: {hashstr}")
-        return sha256(bytes(hashstr)).hexdigest()
+        return sha256(hash_input.encode("utf-8")).hexdigest()
 
     # -------------------------------------------------------------------------------------------
     # Encode/Decode
     # -------------------------------------------------------------------------------------------
-
-    def padding(self, m: list | np.ndarray | torch.Tensor):
-        # todo how about length > num_slots
-        if isinstance(m, torch.Tensor):
-            assert (
-                len(m.shape) == 1
-            ), f"Input tensor should be 1D, but got {len(m.shape)}D."
-            m = m.clone().detach().cpu().numpy()
-        if isinstance(m, torch.Tensor):
-            padding_result = torch.cat(
-                (m, torch.zeros(self.num_slots - m.shape[0], device=m.device))
-            )
-        else:
-            try:
-                m_len = len(m)
-                padding_result = np.pad(
-                    m, (0, self.num_slots - m_len), constant_values=(0, 0)
-                )
-            except TypeError as e:
-                m_len = len([m])
-                padding_result = np.pad(
-                    [m], (0, self.num_slots - m_len), constant_values=(0, 0)
-                )
-        if not isinstance(padding_result, torch.Tensor):
-            padding_result = torch.tensor(padding_result)
-        return padding_result
 
     def encode(
         self, m, level: int = 0, padding=True, scale=None
@@ -450,11 +416,11 @@ class CkksEngine:
         """
         deviation = self.deviations[level]
         if padding:
-            m = self.padding(m)
+            m = F.padding(m)
         encoded = [
-            codec_encode(
+            F.encode(
                 m,
-                scale=scale or self.scale,
+                scale=scale or self.runtime_config.scale,
                 rng=self.rng,
                 device=self.device0,
                 deviation=deviation,
@@ -474,13 +440,13 @@ class CkksEngine:
         Assuming this is an orginary RNS deinclude_special.
         """
         correction = self.corrections[level]
-        decoded = codec_decode(
+        decoded = F.decode(
             m[0].squeeze(),
-            scale=self.scale,
+            scale=self.runtime_config.scale,
             correction=correction,
             norm=self.norm,
         )
-        m = decoded[: self.ckksCtx.N // 2].cpu().numpy()
+        m = decoded[: self.runtime_config.N // 2].cpu().numpy()
         if is_real:
             m = m.real
         return m
@@ -505,7 +471,7 @@ class CkksEngine:
             | FLAGS.NTT_STATE,
             level=0,
             # following is metadata (not required args)
-            logN=self.ckksCtx.logN,
+            logN=self.ckks_config.logN,
             creator_hash=self.hash,
         )
 
@@ -537,7 +503,7 @@ class CkksEngine:
 
         self.nttCtx.enter_ntt(e, level, mult_type)
         repeats = (
-            self.ckksCtx.num_special_primes
+            self.ckks_config.num_special_primes
             if sk.has_flag(FLAGS.INCLUDE_SPECIAL)
             else 0
         )
@@ -558,7 +524,7 @@ class CkksEngine:
             | FLAGS.NTT_STATE,
             level=0,
             # following is metadata (not required args)
-            logN=self.ckksCtx.logN,
+            logN=self.ckks_config.logN,
             creator_hash=self.hash,
         )
 
@@ -1740,7 +1706,6 @@ class CkksEngine:
     def level_up(
         self, ct: Ciphertext, dst_level: int, inplace=True
     ) -> Ciphertext:
-
         if ct.level == dst_level:
             return ct if inplace else ct.clone()
 
@@ -1822,7 +1787,7 @@ class CkksEngine:
     ) -> Ciphertext:
         pk = pk or self.pk
         if padding:
-            m = self.padding(m=m)
+            m = F.padding(m=m)
         deviation = self.deviations[level]
         pt = codec_encode(
             m,
@@ -2459,7 +2424,6 @@ class CkksEngine:
         level=0,
         return_src=False,
     ) -> np.array:
-
         def integral_bits_available(self):
             base_prime = self.base_prime
             max_bits = math.floor(math.log2(base_prime))
@@ -2474,11 +2438,15 @@ class CkksEngine:
 
         base = 10**decimal_places
         a = (
-            np.random.randint(amin * base, amax * base, self.ckksCtx.N // 2)
+            np.random.randint(
+                amin * base, amax * base, self.runtime_config.N // 2
+            )
             / base
         )
         b = (
-            np.random.randint(amin * base, amax * base, self.ckksCtx.N // 2)
+            np.random.randint(
+                amin * base, amax * base, self.runtime_config.N // 2
+            )
             / base
         )
 

@@ -199,6 +199,7 @@ def main():
             logger.info(f"Created benchmark instance {name}")
         except Exception as e:
             logger.error(f"Failed to initialize benchmark {name}: {e}")
+            raise e
             continue
 
     app = BenchSelector(available_bench_instances)

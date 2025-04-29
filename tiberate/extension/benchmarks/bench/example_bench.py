@@ -3,7 +3,7 @@ import os
 from loguru import logger
 from vdtoys.registry import Registry
 
-from tiberate import presets
+from tiberate.config import Preset
 
 from .interface import BenchmarkBase
 
@@ -27,76 +27,76 @@ class ExampleBenchClass(BenchmarkBase):
                 "description": "(64,256) input x (256,256) weight - polynomial degree logN14",
                 "input_shape": (64, 256),
                 "weight_shape": (256, 256),
-                "ckks_params": presets.logN14,
+                "ckks_params": Preset.logN14,
             },
             "Example-64-logN15": {
                 "description": "(64,256) input x (256,256) weight - polynomial degree logN15",
                 "input_shape": (64, 256),
                 "weight_shape": (256, 256),
-                "ckks_params": presets.logN15,
+                "ckks_params": Preset.logN15,
             },
             "Example-64-logN16": {
                 "description": "(64,256) input x (256,256) weight - polynomial degree logN16",
                 "input_shape": (64, 256),
                 "weight_shape": (256, 256),
-                "ckks_params": presets.logN16,
+                "ckks_params": Preset.logN16,
             },
             # (128, 512) x (512, 512)
             "Example-128-logN14": {
                 "description": "(128,512) input x (512,512) weight - polynomial degree logN14",
                 "input_shape": (128, 512),
                 "weight_shape": (512, 512),
-                "ckks_params": presets.logN14,
+                "ckks_params": Preset.logN14,
             },
             "Example-128-logN15": {
                 "description": "(128,512) input x (512,512) weight - polynomial degree logN15",
                 "input_shape": (128, 512),
                 "weight_shape": (512, 512),
-                "ckks_params": presets.logN15,
+                "ckks_params": Preset.logN15,
             },
             "Example-128-logN16": {
                 "description": "(128,512) input x (512,512) weight - polynomial degree logN16",
                 "input_shape": (128, 512),
                 "weight_shape": (512, 512),
-                "ckks_params": presets.logN16,
+                "ckks_params": Preset.logN16,
             },
             # (256, 1024) x (1024, 1024)
             "Example-256-logN14": {
                 "description": "(256,1024) input x (1024,1024) weight - polynomial degree logN14",
                 "input_shape": (256, 1024),
                 "weight_shape": (1024, 1024),
-                "ckks_params": presets.logN14,
+                "ckks_params": Preset.logN14,
             },
             "Example-256-logN15": {
                 "description": "(256,1024) input x (1024,1024) weight - polynomial degree logN15",
                 "input_shape": (256, 1024),
                 "weight_shape": (1024, 1024),
-                "ckks_params": presets.logN15,
+                "ckks_params": Preset.logN15,
             },
             "Example-256-logN16": {
                 "description": "(256,1024) input x (1024,1024) weight - polynomial degree logN16",
                 "input_shape": (256, 1024),
                 "weight_shape": (1024, 1024),
-                "ckks_params": presets.logN16,
+                "ckks_params": Preset.logN16,
             },
             # (512, 2048) x (2048, 2048)
             "Example-512-logN14": {
                 "description": "(512,2048) input x (2048,2048) weight - polynomial degree logN14",
                 "input_shape": (512, 2048),
                 "weight_shape": (2048, 2048),
-                "ckks_params": presets.logN14,
+                "ckks_params": Preset.logN14,
             },
             "Example-512-logN15": {
                 "description": "(512,2048) input x (2048,2048) weight - polynomial degree logN15",
                 "input_shape": (512, 2048),
                 "weight_shape": (2048, 2048),
-                "ckks_params": presets.logN15,
+                "ckks_params": Preset.logN15,
             },
             "Example-512-logN16": {
                 "description": "(512,2048) input x (2048,2048) weight - polynomial degree logN16",
                 "input_shape": (512, 2048),
                 "weight_shape": (2048, 2048),
-                "ckks_params": presets.logN16,
+                "ckks_params": Preset.logN16,
             },
         }
 

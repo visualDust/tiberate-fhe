@@ -23,26 +23,26 @@ class RngType(Enum):
 
 
 class Preset(Enum):
-    LogN14 = "logN14"
-    LogN15 = "logN15"
-    LogN16 = "logN16"
-    LogN17 = "logN17"
+    logN14 = "logN14"
+    logN15 = "logN15"
+    logN16 = "logN16"
+    logN17 = "logN17"
 
 
 _PRESET_CONFIGS = {
-    Preset.LogN14: {
+    Preset.logN14: {
         "logN": 14,
         "num_special_primes": 1,
     },
-    Preset.LogN15: {
+    Preset.logN15: {
         "logN": 15,
         "num_special_primes": 2,
     },
-    Preset.LogN16: {
+    Preset.logN16: {
         "logN": 16,
         "num_special_primes": 4,
     },
-    Preset.LogN17: {
+    Preset.logN17: {
         "logN": 17,
         "num_special_primes": 6,
     },
@@ -98,7 +98,7 @@ class CkksConfig:
 @dataclass
 class CkksEngineRuntimeConfig:
     # Derived attributes
-    devices: list[str]
+    devices: list[str] | None
     N: int  # Polynomial length.
     max_qbits: int  # Maximum number of bits in the primes pack.
     num_slots: int  # Number of slots in the polynomial.
@@ -109,7 +109,10 @@ class CkksEngineRuntimeConfig:
     q: list[int]  # List of primes in the CKKS scheme.
     R: int  # Bit-length of the CKKS scheme.
     torch_dtype: torch.dtype  # Data type for PyTorch tensors.
+    numpy_dtype: np.dtype  # Data type for NumPy arrays.
     num_devices: int  # Number of devices available for computation.
+    generation_string: str  # String representation of the configuration.
+    R_square: list[int]  # List of R^2 mod q_i for each prime q_i.
 
     @classmethod
     def from_ckks_config(cls, ckks_config: CkksConfig):
@@ -120,64 +123,58 @@ class CkksEngineRuntimeConfig:
         Returns:
             CkksEngineRuntimeConfig: The CkksEngineRuntimeConfig instance.
         """
-        self = cls()
 
-        gpu_count = torch.cuda.device_count()
-        self.devices = [f"cuda:{i}" for i in range(gpu_count)]
-        self.num_devices = len(self.devices)
+        devices = ["cuda:0"]  # always use cuda:0
+        num_devices = len(devices)
 
-        self.N = 2**ckks_config.logN
+        N = 2**ckks_config.logN
 
         # Compose the primes pack.
         # Rescaling drops off primes in --> direction.
         # Key switching drops off primes in <-- direction.
         # Hence, [scale primes, base message prime, special primes]
-        self.max_qbits = int(
+        max_qbits = int(
             maximum_qbits(
-                self.N,
+                N,
                 ckks_config.security_bits,
                 ckks_config.quantum,
                 ckks_config.distribution,
             )
         )
-        self.num_slots = self.N // 2
+        num_slots = N // 2
 
-        self.num_levels = (
-            ckks_config.num_scales
-        )  # TODO(puqing): Why not use ckks_config.num_scales?
+        int_scale = 2**ckks_config.scale_bits
 
-        self.int_scale = 2**ckks_config.scale_bits
-
-        self.scale = np.float64(
+        scale = np.float64(
             2**ckks_config.scale_bits
         )  # TODO(puqing): What is difference between int_scale and scale?
 
         # We set the message prime to of bit-length W-2.
-        self.message_bits = ckks_config.buffer_bit_length - 2
+        message_bits = ckks_config.buffer_bit_length - 2
 
         # Read in pre-calculated high-quality primes.
         try:
             message_special_primes = generate_message_primes(
                 cache_folder=ckks_config.cache_folder
-            )[self.message_bits][self.N]
+            )[message_bits][N]
         except KeyError:
             raise errors.NotFoundMessageSpecialPrimes(
-                message_bit=self.message_bits, N=self.N
+                message_bit=message_bits, N=N
             )
 
         # For logN > 16, we need significantly more primes.
-        how_many = 64 if self.logN < 16 else 128
+        how_many = 64 if ckks_config.logN < 16 else 128
         try:
             scale_primes = generate_scale_primes(
                 cache_folder=ckks_config.cache_folder, how_many=how_many
-            )[ckks_config.scale_bits, self.N]
+            )[ckks_config.scale_bits, N]
         except KeyError:
             raise errors.NotFoundScalePrimes(
-                scale_bits=ckks_config.scale_bits, N=self.N
+                scale_bits=ckks_config.scale_bits, N=N
             )
 
         base_special_primes = message_special_primes[
-            : 1 + self.num_special_primes
+            : 1 + ckks_config.num_special_primes
         ]
 
         # If num_scales is None, generate the maximal number of levels.
@@ -186,7 +183,7 @@ class CkksEngineRuntimeConfig:
                 base_special_bits = sum(
                     [math.log2(p) for p in base_special_primes]
                 )
-                available_bits = self.max_qbits - base_special_bits
+                available_bits = max_qbits - base_special_bits
                 num_scales = 0
                 available_bits -= math.log2(scale_primes[num_scales])
                 while available_bits > 0:
@@ -194,19 +191,53 @@ class CkksEngineRuntimeConfig:
                     available_bits -= math.log2(scale_primes[num_scales])
 
             ckks_config.num_scales = num_scales
-            self.q = scale_primes[:num_scales] + base_special_primes
+            q = scale_primes[:num_scales] + base_special_primes
+
         except IndexError:
-            raise errors.NotEnoughPrimes(scale_bits=self.scale_bits, N=self.N)
+            raise errors.NotEnoughPrimes(scale_bits=ckks_config.scale_bits, N=N)
 
-        self.R = 2**ckks_config.buffer_bit_length
+        num_levels = (
+            ckks_config.num_scales
+        )  # TODO(puqing): Why not use ckks_config.num_scales?
 
-        self.torch_dtype = {30: torch.int32, 62: torch.int64}[
+        R = 2**ckks_config.buffer_bit_length
+
+        torch_dtype = {30: torch.int32, 62: torch.int64}[
             ckks_config.buffer_bit_length
         ]
-        return self
+
+        generation_string = (
+            f"{ckks_config.buffer_bit_length}_{ckks_config.scale_bits}_{ckks_config.logN}_{ckks_config.num_scales}_"
+            f"{ckks_config.num_special_primes}_{ckks_config.security_bits}_{ckks_config.quantum}_"
+            f"{ckks_config.distribution}"
+        )
+
+        R_square = [R**2 % qi for qi in q]
+
+        numpy_dtype = {30: np.int32, 62: np.int64}[
+            ckks_config.buffer_bit_length
+        ]
+
+        return cls(
+            devices=devices,
+            N=N,
+            max_qbits=max_qbits,
+            num_slots=num_slots,
+            num_levels=num_levels,
+            int_scale=int_scale,
+            scale=scale,
+            message_bits=message_bits,
+            q=q,
+            R=R,
+            torch_dtype=torch_dtype,
+            numpy_dtype=numpy_dtype,
+            num_devices=num_devices,
+            generation_string=generation_string,
+            R_square=R_square,
+        )
 
 
-@dataclass(frozen=True)
+@dataclass
 class RnsPartition:
     """
     Manages the partitioning of the RNS primes for a given number of devices.
@@ -247,14 +278,14 @@ class RnsPartition:
 
     # Derived attributes
     base_prime_idx = num_ordinary_primes - 1
-    partitions: list[list[int]]
-    part_allocations: list[list[int]]
-    flat_prime_allocations: list[list[int]]
-    destination_arrays: list[list[list[int]]]
-    destination_arrays_with_special: list[list[list[int]]]
-    prime_allocations: list[list[int]]
-    d: list[list[int]]
-    rescaler_loc: list[int]
+    partitions: list[list[int]] | None = None
+    part_allocations: list[list[int]] | None = None
+    flat_prime_allocations: list[list[int]] | None = None
+    destination_arrays: list[list[list[int]]] | None = None
+    destination_arrays_with_special: list[list[list[int]]] | None = None
+    prime_allocations: list[list[int]] | None = None
+    d: list[list[int]] | None = None
+    rescaler_loc: list[int] | None = None
 
     @classmethod
     def from_ckks_config(cls, ckks_config: CkksConfig):
@@ -349,11 +380,6 @@ class RnsPartition:
         self.p = []
         self.p_special = []
         self.diff = []
-
-        self.d = [
-            self.destination_arrays[0][dev_i]
-            for dev_i in range(self.num_devices)
-        ]
 
         self.d_special = [
             self.destination_arrays_with_special[0][dev_i]

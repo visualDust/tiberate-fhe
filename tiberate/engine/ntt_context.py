@@ -2,9 +2,8 @@ import textwrap
 
 import numpy as np
 import torch
-from loguru import logger
 
-from tiberate.fhe.context.ckks_context import CkksContext
+from tiberate.config import CkksConfig
 
 
 def copy_to_devices(variable, dtype, devices):
@@ -17,25 +16,12 @@ def copy_to_devices(variable, dtype, devices):
 class NTTContext:
     def __init__(
         self,
-        ctx: CkksContext,
+        ckks_config: CkksConfig,
         index_type=torch.int32,
         devices=None,
     ):
-        # Set devices first.
-        if devices is None:
-            devices = ["cuda:0"]
-            logger.info(f"Device not specified. Using default {devices}.")
-
-        self.devices = devices
-        self.num_devices = len(self.devices)
-
-        # Transfer input parameters.
-        self.index_type = index_type
-        self.ckksCtx = ctx
-
-        self.num_ordinary_primes = self.ckksCtx.num_scales + 1
-        self.num_special_primes = self.ckksCtx.num_special_primes
-
+        self.ckks_config = ckks_config
+        self.runtime_config = ckks_config.runtime_config
         self.prepare_parameters()
 
         self.qlists = [qi.tolist() for qi in self.q]
@@ -45,9 +31,7 @@ class NTTContext:
         ]
         astop_ordinary = [len(d) for d in self.rnsPart.destination_arrays[0]]
         self.starts = self.rnsPart.diff
-
         self.stops = [astop_special, astop_ordinary]
-
         self.generate_parts_pack()
         self.pre_package()
 
@@ -55,20 +39,122 @@ class NTTContext:
     def num_levels(self) -> int:
         return self.ckksCtx.num_scales + 1
 
+    def mont_enter(self, a, lvl=0, mult_type=-1, part=0):
+        torch.ops.tiberate_ntt_ops.mont_enter(
+            a,
+            self.Rs_prepack[mult_type][lvl][part],
+            *self.mont_prepack[mult_type][lvl][part],
+        )
+
+    def mont_enter_scale(self, a, lvl=0, mult_type=-1, part=0):
+        torch.ops.tiberate_ntt_ops.mont_enter(
+            a,
+            self.Rs_scale_prepack[mult_type][lvl][part],
+            *self.mont_prepack[mult_type][lvl][part],
+        )
+
+    def mont_enter_scalar(self, a, b, lvl=0, mult_type=-1, part=0):
+        torch.ops.tiberate_ntt_ops.mont_enter(
+            a, b, *self.mont_prepack[mult_type][lvl][part]
+        )
+
+    def mont_mult(self, a, b, lvl=0, mult_type=-1, part=0):
+        return torch.ops.tiberate_ntt_ops.mont_mult(
+            a, b, *self.mont_prepack[mult_type][lvl][part]
+        )
+
+    def ntt(self, a, lvl=0, mult_type=-1, part=0):
+        # self.ntt_prepack[mult_type][lvl][part] structure is:
+        # - 0: even [duplicated]
+        # - 1: odd [duplicated]
+        # - 2: psi [nth root of unity]
+        # - 3: _2q [2 * q]
+        # - 4: ql [lower bits of q]
+        # - 5: qh [higher bits of q]
+        # - 6: kl [lower bits of k]
+        # - 7: kh [higher bits of k]
+        torch.ops.tiberate_ntt_ops.ntt(
+            a, *self.ntt_prepack[mult_type][lvl][part]
+        )
+
+    def enter_ntt(self, a, lvl=0, mult_type=-1, part=0):
+        torch.ops.tiberate_ntt_ops.enter_ntt(
+            a,
+            self.Rs_prepack[mult_type][lvl][part],
+            *self.ntt_prepack[mult_type][lvl][part],
+        )
+
+    def intt(self, a, lvl=0, mult_type=-1, part=0):
+        torch.ops.tiberate_ntt_ops.intt(
+            a, *self.intt_prepack[mult_type][lvl][part]
+        )
+
+    def mont_reduce(self, a, lvl=0, mult_type=-1, part=0):
+        torch.ops.tiberate_ntt_ops.mont_reduce(
+            a, *self.mont_prepack[mult_type][lvl][part]
+        )
+
+    def intt_exit(self, a, lvl=0, mult_type=-1, part=0):
+        torch.ops.tiberate_ntt_ops.intt_exit(
+            a, *self.intt_prepack[mult_type][lvl][part]
+        )
+
+    def intt_exit_reduce(self, a, lvl=0, mult_type=-1, part=0):
+        torch.ops.tiberate_ntt_ops.intt_exit_reduce(
+            a, *self.intt_prepack[mult_type][lvl][part]
+        )
+
+    def intt_exit_reduce_signed(self, a, lvl=0, mult_type=-1, part=0):
+        torch.ops.tiberate_ntt_ops.intt_exit_reduce_signed(
+            a, *self.intt_prepack[mult_type][lvl][part]
+        )
+
+    def reduce_2q(self, a, lvl=0, mult_type=-1, part=0):
+        torch.ops.tiberate_ntt_ops.reduce_2q(
+            a, self._2q_prepack[mult_type][lvl][part]
+        )
+
+    def make_signed(self, a, lvl=0, mult_type=-1, part=0):
+        torch.ops.tiberate_ntt_ops.make_signed(
+            a, self._2q_prepack[mult_type][lvl][part]
+        )
+
+    def make_unsigned(self, a, lvl=0, mult_type=-1, part=0):
+        torch.ops.tiberate_ntt_ops.make_unsigned(
+            a, self._2q_prepack[mult_type][lvl][part]
+        )
+
+    def mont_add(self, a, b, lvl=0, mult_type=-1, part=0):
+        return torch.ops.tiberate_ntt_ops.mont_add(
+            a, b, self._2q_prepack[mult_type][lvl][part]
+        )
+
+    def mont_sub(self, a, b, lvl=0, mult_type=-1, part=0):
+        return torch.ops.tiberate_ntt_ops.mont_sub(
+            a, b, self._2q_prepack[mult_type][lvl][part]
+        )
+
+    def tile_unsigned(self, a, lvl=0, mult_type=-1, part=0):
+        return torch.ops.tiberate_ntt_ops.tile_unsigned(
+            a, self._2q_prepack[mult_type][lvl][part]
+        )
+
     # -------------------------------------------------------------------------------------------------
     # Arrange according to partitioning scheme input variables, and copy to GPUs for fast access.
     # -------------------------------------------------------------------------------------------------
 
     def partition_variable(self, variable):
-        np_v = np.array(variable, dtype=self.ckksCtx.numpy_dtype)
+        np_v = np.array(variable, dtype=self.runtime_config.numpy_dtype)
 
         v_special = []
-        dest = self.rnsPart.d_special
-        for dev_id in range(self.num_devices):
+        dest = self.ckks_config.rns_partition.d_special
+        for dev_id in range(self.runtime_config.num_devices):
             d = dest[dev_id]
             parted_v = np_v[d]
             v_special.append(
-                torch.from_numpy(parted_v).to(self.devices[dev_id])
+                torch.from_numpy(parted_v).to(
+                    self.runtime_config.devices[dev_id]
+                )
             )
 
         return v_special
@@ -97,22 +183,24 @@ class NTTContext:
         ]
 
     def prepare_parameters(self):
-        scale = 2**self.ckksCtx.scale_bits
+        scale = 2**self.ckks_config.scale_bits
         self.Rs_scale = self.partition_variable(
             [
                 (Rs * scale) % q
-                for Rs, q in zip(self.ckksCtx.R_square, self.ckksCtx.q)
+                for Rs, q in zip(
+                    self.runtime_config.R_square, self.runtime_config.q
+                )
             ]
         )
 
-        self.Rs = self.partition_variable(self.ckksCtx.R_square)
+        self.Rs = self.partition_variable(self.runtime_config.R_square)
 
-        self.q = self.partition_variable(self.ckksCtx.q)
-        self._2q = self.partition_variable(self.ckksCtx.q_double)
-        self.ql = self.partition_variable(self.ckksCtx.q_lower_bits)
-        self.qh = self.partition_variable(self.ckksCtx.q_higher_bits)
-        self.kl = self.partition_variable(self.ckksCtx.k_lower_bits)
-        self.kh = self.partition_variable(self.ckksCtx.k_higher_bits)
+        self.q = self.partition_variable(self.runtime_config.q)
+        self._2q = self.partition_variable(self.runtime_config.q_double)
+        self.ql = self.partition_variable(self.runtime_config.q_lower_bits)
+        self.qh = self.partition_variable(self.runtime_config.q_higher_bits)
+        self.kl = self.partition_variable(self.runtime_config.k_lower_bits)
+        self.kh = self.partition_variable(self.runtime_config.k_higher_bits)
 
         self.even = copy_to_devices(
             self.ckksCtx.forward_even_indices,
@@ -505,106 +593,6 @@ class NTTContext:
     # -------------------------------------------------------------------------------------------------
     # Helper functions to do the Montgomery and NTT operations.
     # -------------------------------------------------------------------------------------------------
-
-    def mont_enter(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.mont_enter(
-            a,
-            self.Rs_prepack[mult_type][lvl][part],
-            *self.mont_prepack[mult_type][lvl][part],
-        )
-
-    def mont_enter_scale(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.mont_enter(
-            a,
-            self.Rs_scale_prepack[mult_type][lvl][part],
-            *self.mont_prepack[mult_type][lvl][part],
-        )
-
-    def mont_enter_scalar(self, a, b, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.mont_enter(
-            a, b, *self.mont_prepack[mult_type][lvl][part]
-        )
-
-    def mont_mult(self, a, b, lvl=0, mult_type=-1, part=0):
-        return torch.ops.tiberate_ntt_ops.mont_mult(
-            a, b, *self.mont_prepack[mult_type][lvl][part]
-        )
-
-    def ntt(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.ntt(
-            a, *self.ntt_prepack[mult_type][lvl][part]
-        )
-        # self.ntt_prepack[mult_type][lvl][part] structure is:
-        # - 0: even [duplicated]
-        # - 1: odd [duplicated]
-        # - 2: psi [nth root of unity]
-        # - 3: _2q [2 * q]
-        # - 4: ql [lower bits of q]
-        # - 5: qh [higher bits of q]
-        # - 6: kl [lower bits of k]
-        # - 7: kh [higher bits of k]
-
-    def enter_ntt(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.enter_ntt(
-            a,
-            self.Rs_prepack[mult_type][lvl][part],
-            *self.ntt_prepack[mult_type][lvl][part],
-        )
-
-    def intt(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.intt(
-            a, *self.intt_prepack[mult_type][lvl][part]
-        )
-
-    def mont_reduce(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.mont_reduce(
-            a, *self.mont_prepack[mult_type][lvl][part]
-        )
-
-    def intt_exit(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.intt_exit(
-            a, *self.intt_prepack[mult_type][lvl][part]
-        )
-
-    def intt_exit_reduce(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.intt_exit_reduce(
-            a, *self.intt_prepack[mult_type][lvl][part]
-        )
-
-    def intt_exit_reduce_signed(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.intt_exit_reduce_signed(
-            a, *self.intt_prepack[mult_type][lvl][part]
-        )
-
-    def reduce_2q(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.reduce_2q(
-            a, self._2q_prepack[mult_type][lvl][part]
-        )
-
-    def make_signed(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.make_signed(
-            a, self._2q_prepack[mult_type][lvl][part]
-        )
-
-    def make_unsigned(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.make_unsigned(
-            a, self._2q_prepack[mult_type][lvl][part]
-        )
-
-    def mont_add(self, a, b, lvl=0, mult_type=-1, part=0):
-        return torch.ops.tiberate_ntt_ops.mont_add(
-            a, b, self._2q_prepack[mult_type][lvl][part]
-        )
-
-    def mont_sub(self, a, b, lvl=0, mult_type=-1, part=0):
-        return torch.ops.tiberate_ntt_ops.mont_sub(
-            a, b, self._2q_prepack[mult_type][lvl][part]
-        )
-
-    def tile_unsigned(self, a, lvl=0, mult_type=-1, part=0):
-        return torch.ops.tiberate_ntt_ops.tile_unsigned(
-            a, self._2q_prepack[mult_type][lvl][part]
-        )
 
     def __repr__(self):
         pass

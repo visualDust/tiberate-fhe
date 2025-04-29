@@ -26,9 +26,9 @@ def load_pytorch_ops():
 # Load the PyTorch ops
 load_pytorch_ops()
 
-from tiberate.fhe.context import presets
-from tiberate.fhe.engine import CkksEngine
+from tiberate.config import CkksConfig, Preset
+from tiberate.engine import CkksEngine
 
 __version__ = version("tiberate")
 
-__all__ = ["CkksEngine", "presets"]
+__all__ = ["CkksEngine", "Preset", "CkksConfig"]
