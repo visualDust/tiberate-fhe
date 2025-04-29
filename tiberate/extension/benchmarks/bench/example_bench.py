@@ -10,7 +10,7 @@ from .interface import BenchmarkBase
 benchreg = Registry("benchmarks")
 
 
-@benchreg.register(name="Benchmark Example Code")
+# @benchreg.register(name="Benchmark Example Code")
 class ExampleBenchClass(BenchmarkBase):
     def __init__(self):
         super().__init__()

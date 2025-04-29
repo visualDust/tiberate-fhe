@@ -3,6 +3,9 @@
 *.pyi
 uv.lock
 
+# Temporarily ignored
+tiberate/jit/
+
 # poetry
 poetry.lock
 

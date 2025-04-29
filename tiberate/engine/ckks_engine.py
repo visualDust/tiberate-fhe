@@ -421,6 +421,7 @@ class CkksEngine:
             assert (
                 len(m.shape) == 1
             ), f"Input tensor should be 1D, but got {len(m.shape)}D."
+            m = m.clone().detach().cpu().numpy()
         if isinstance(m, torch.Tensor):
             padding_result = torch.cat(
                 (m, torch.zeros(self.num_slots - m.shape[0], device=m.device))
@@ -1736,7 +1737,13 @@ class CkksEngine:
     # Level up.
     # -------------------------------------------------------------------------------------------
     @strictype
-    def level_up(self, ct: Ciphertext, dst_level: int) -> Ciphertext:
+    def level_up(
+        self, ct: Ciphertext, dst_level: int, inplace=True
+    ) -> Ciphertext:
+
+        if ct.level == dst_level:
+            return ct if inplace else ct.clone()
+
         current_level = ct.level
 
         new_ct = self.rescale(ct)
@@ -2442,6 +2449,47 @@ class CkksEngine:
     #### -------------------------------------------------------------------------------------------
     ####  Statistics
     #### -------------------------------------------------------------------------------------------
+
+    @strictype
+    def randn(
+        self,
+        amin=-1,
+        amax=1,
+        decimal_places: int = 10,
+        level=0,
+        return_src=False,
+    ) -> np.array:
+
+        def integral_bits_available(self):
+            base_prime = self.base_prime
+            max_bits = math.floor(math.log2(base_prime))
+            integral_bits = max_bits - self.ckksCtx.scale_bits
+            return integral_bits
+
+        if amin is None:
+            amin = -(2 ** integral_bits_available())
+
+        if amax is None:
+            amax = 2 ** integral_bits_available()
+
+        base = 10**decimal_places
+        a = (
+            np.random.randint(amin * base, amax * base, self.ckksCtx.N // 2)
+            / base
+        )
+        b = (
+            np.random.randint(amin * base, amax * base, self.ckksCtx.N // 2)
+            / base
+        )
+
+        sample = a + b * 1j
+
+        encrypted = self.encodecrypt(
+            m=sample,
+            level=level,
+        )
+
+        return (encrypted, sample) if return_src else encrypted
 
     @strictype
     def var(

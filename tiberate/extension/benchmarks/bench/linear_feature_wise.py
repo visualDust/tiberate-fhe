@@ -84,9 +84,11 @@ class LinearFeatureWiseBenchmark(BenchmarkBase):
     def get_bench_option2desc(self):
         return {k: v["description"] for k, v in self.config_matrix.items()}
 
-    def run(self, name: str):
-        assert name in self.config_matrix, f"Invalid benchmark name: {name}"
-        config = self.config_matrix[name]
+    def run(self, option_name: str):
+        assert (
+            option_name in self.config_matrix
+        ), f"Invalid benchmark name: {option_name}"
+        config = self.config_matrix[option_name]
         input_shape = config["input_shape"]
         weight_shape = config["weight_shape"]
         ckks_params = config["ckks_params"]

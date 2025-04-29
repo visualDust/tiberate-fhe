@@ -21,11 +21,11 @@ message(STATUS "Detected Python SOABI: ${Python3_SOABI}")
 set(PYTHON_MODULE_SUFFIX ".${Python3_SOABI}")
 list(APPEND CMAKE_PREFIX_PATH ${TORCH_CMAKE_PATH})
 
-include_directories(${Python_INCLUDE_DIRS})
-find_package(pybind11 REQUIRED)
 find_package(Torch REQUIRED)
-include_directories(${TORCH_INCLUDE_DIRS})
 find_package(CUDA REQUIRED)
+
+include_directories(${Python_INCLUDE_DIRS})
+include_directories(${TORCH_INCLUDE_DIRS})
 
 message(STATUS "Python include dirs: ${Python_INCLUDE_DIRS}")
 message(STATUS "Torch include dirs: ${TORCH_INCLUDE_DIRS}")

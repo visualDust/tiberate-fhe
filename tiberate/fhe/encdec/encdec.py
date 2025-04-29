@@ -292,7 +292,7 @@ def encode(
 
     mm = m * deviation  # todo check dtype m * deviation
     if isinstance(mm, torch.Tensor):
-        mm = mm.clone().to(device)
+        mm = mm.to(device=device, copy=True)
     mm = pre_permute(mm, pre_perm)
     twister = twister_cache[(N, device)]
     if return_without_scaling:

@@ -7,6 +7,13 @@ from loguru import logger
 from tiberate.fhe.context.ckks_context import CkksContext
 
 
+def copy_to_devices(variable, dtype, devices):
+
+    return [
+        torch.tensor(variable, dtype=dtype, device=device) for device in devices
+    ]
+
+
 class NTTContext:
     def __init__(
         self,
@@ -66,12 +73,6 @@ class NTTContext:
 
         return v_special
 
-    def copy_to_devices(self, variable):
-        return [
-            torch.tensor(variable, dtype=self.index_type, device=device)
-            for device in self.devices
-        ]
-
     def psi_enter(self):
         Rs = self.Rs
         ql = self.ql
@@ -113,10 +114,26 @@ class NTTContext:
         self.kl = self.partition_variable(self.ckksCtx.k_lower_bits)
         self.kh = self.partition_variable(self.ckksCtx.k_higher_bits)
 
-        self.even = self.copy_to_devices(self.ckksCtx.forward_even_indices)
-        self.odd = self.copy_to_devices(self.ckksCtx.forward_odd_indices)
-        self.ieven = self.copy_to_devices(self.ckksCtx.backward_even_indices)
-        self.iodd = self.copy_to_devices(self.ckksCtx.backward_odd_indices)
+        self.even = copy_to_devices(
+            self.ckksCtx.forward_even_indices,
+            dtype=self.index_type,
+            devices=self.devices,
+        )
+        self.odd = copy_to_devices(
+            self.ckksCtx.forward_odd_indices,
+            dtype=self.index_type,
+            devices=self.devices,
+        )
+        self.ieven = copy_to_devices(
+            self.ckksCtx.backward_even_indices,
+            dtype=self.index_type,
+            devices=self.devices,
+        )
+        self.iodd = copy_to_devices(
+            self.ckksCtx.backward_odd_indices,
+            dtype=self.index_type,
+            devices=self.devices,
+        )
 
         self.psi = self.partition_variable(self.ckksCtx.forward_psi)
         self.ipsi = self.partition_variable(self.ckksCtx.backward_psi_inv)
@@ -157,7 +174,9 @@ class NTTContext:
             for dev_id in range(self.num_devices)
         ]
 
-        remove_empty_f = lambda x: [xi for xi in x if len(xi) > 0]
+        def remove_empty_f(x):
+            return [xi for xi in x if len(xi) > 0]
+
         if remove_empty:
             pack = remove_empty_f(pack)
         return pack
@@ -169,11 +188,11 @@ class NTTContext:
         ]
 
     def ntt_pack(self, astart, astop, remove_empty=True):
-        remove_empty_f_x = lambda x: [xi for xi in x if len(xi) > 0]
+        def remove_empty_f_x(x):
+            return [xi for xi in x if len(xi) > 0]
 
-        remove_empty_f_xy = lambda x, y: [
-            xi for xi, yi in zip(x, y) if len(yi) > 0
-        ]
+        def remove_empty_f_xy(x, y):
+            return [xi for xi, yi in zip(x, y) if len(yi) > 0]
 
         even_odd = self.ntt_pack0[:2]
         rest = [
@@ -188,11 +207,11 @@ class NTTContext:
         return even_odd + rest
 
     def intt_pack(self, astart, astop, remove_empty=True):
-        remove_empty_f_x = lambda x: [xi for xi in x if len(xi) > 0]
+        def remove_empty_f_x(x):
+            return [xi for xi in x if len(xi) > 0]
 
-        remove_empty_f_xy = lambda x, y: [
-            xi for xi, yi in zip(x, y) if len(yi) > 0
-        ]
+        def remove_empty_f_xy(x, y):
+            return [xi for xi, yi in zip(x, y) if len(yi) > 0]
 
         even_odd = self.intt_pack0[:2]
         rest = [
