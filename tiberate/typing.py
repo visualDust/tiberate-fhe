@@ -519,7 +519,9 @@ class Ciphertext(DataStruct):
 
     def level_up(self, dst_level: int, **kwargs):
         engine = self._default_engine
-        return engine.level_up(self, dst_level=dst_level, **kwargs)
+        return engine.level_up(
+            self, dst_level=dst_level, inplace=False, **kwargs
+        )
 
     def decryptcode(
         self, sk: "SecretKey" = None, is_real=False, final_round=True, **kwargs

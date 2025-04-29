@@ -1,5 +1,3 @@
-import time
-
 from loguru import logger
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal
@@ -202,8 +200,6 @@ def main():
         except Exception as e:
             logger.error(f"Failed to initialize benchmark {name}: {e}")
             continue
-
-    time.sleep(0.5)
 
     app = BenchSelector(available_bench_instances)
     app._should_run_bench = False

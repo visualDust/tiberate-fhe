@@ -95,3 +95,8 @@ class CMultSingleOPBenchmark(BenchmarkBase):
         )
 
         logger.info(f"Benchmark {self.name} completed successfully.")
+
+
+if __name__ == "__main__":
+    benchmark = CMultSingleOPBenchmark()
+    benchmark.run("logN14")  # Example run with logN14 configuration

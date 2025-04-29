@@ -74,3 +74,8 @@ class PMultSingleOPBenchmark(BenchmarkBase):
         )
 
         logger.info(f"Benchmark {self.name} completed successfully.")
+
+
+if __name__ == "__main__":
+    benchmark = PMultSingleOPBenchmark()
+    benchmark.run("logN14")  # Example run with logN14 configuration
