@@ -13,7 +13,7 @@ from vdtoys.mvc import strictype
 
 import tiberate.utils.encoding as codec
 from tiberate import errors
-from tiberate.config import CkksConfig
+from tiberate.config import CkksConfig, Preset
 from tiberate.context.ntt_context import NTTContext
 from tiberate.rng import Csprng
 from tiberate.typing import *  # noqa: F403
@@ -25,7 +25,7 @@ class CkksEngine:
 
     def __init__(
         self,
-        ckks_config: CkksConfig,
+        ckks_config: CkksConfig = CkksConfig.from_preset(Preset.logN15),
         devices=None,
         allow_sk_gen: bool = True,  # if True, will allow sk generation
         bias_guard: bool = True,
