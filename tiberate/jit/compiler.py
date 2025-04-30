@@ -18,7 +18,7 @@ def _process_fx(gm: torch.fx.GraphModule, example_inputs: list[torch.Tensor]):
 @register_backend
 def _compiler(gm: torch.fx.GraphModule, example_inputs: list[torch.Tensor]):
     gm = _process_fx(gm, example_inputs)
-    logger.info("tiberate_compiler() called with FX graph:")
+    logger.debug("tiberate_compiler() called with FX graph:")
     # gm.graph.print_tabular()
     return gm.forward
 

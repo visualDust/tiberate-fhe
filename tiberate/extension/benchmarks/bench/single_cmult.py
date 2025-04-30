@@ -4,9 +4,13 @@ import torch
 from loguru import logger
 from vdtoys.registry import Registry
 
-from tiberate import CkksConfig, CkksEngine, Preset
+from tiberate import CkksEngine, Preset
 
-from .interface import BenchmarkBase
+from .interface import (
+    BenchmarkBase,
+    BenchmarkResult,
+    BenchmarkResultMetricType,
+)
 
 benchreg = Registry("benchmarks")
 
@@ -49,7 +53,7 @@ class CMultSingleOPBenchmark(BenchmarkBase):
             },
         }
 
-    def get_bench_option2desc(self):
+    def get_option_name2desc(self):
         return {k: v["description"] for k, v in self.config_matrix.items()}
 
     def run(self, option_name):
@@ -58,9 +62,11 @@ class CMultSingleOPBenchmark(BenchmarkBase):
         ), f"Invalid benchmark name: {option_name}"
         config = self.config_matrix[option_name]
         ckks_params = config["ckks_params"]
-        logger.info(f"Running benchmark: {config['description']}")
+        logger.info(f"Using config: {config['description']}")
 
-        engine = CkksEngine(ckks_config=CkksConfig.from_preset(ckks_params))
+        benchmark_result = BenchmarkResult()
+
+        engine = CkksEngine(ckks_params)
         input_tensor_1 = torch.randn((engine.num_slots,))
         input_tensor_2 = torch.randn((engine.num_slots,))
         plain_output = input_tensor_1 * input_tensor_2
@@ -88,13 +94,33 @@ class CMultSingleOPBenchmark(BenchmarkBase):
         max_diff = diff.max()
         mean_diff = diff.mean()
 
-        latency = (time1 - time0) / 100 * 1000  # Convert to milliseconds
-
-        logger.info(
-            f"Max diff: {max_diff}, Mean diff: {mean_diff}, Latency: {latency:.4f} milliseconds"
+        benchmark_result.add_metric(
+            name="Max Diff",
+            metric_type=BenchmarkResultMetricType.SCALAR,
+            value=max_diff,
+            series="error",
+            description="Maximum difference between plaintext and decrypted ciphertext output.",
         )
 
-        logger.info(f"Benchmark {self.name} completed successfully.")
+        benchmark_result.add_metric(
+            name="Mean Diff",
+            metric_type=BenchmarkResultMetricType.SCALAR,
+            value=mean_diff,
+            series="error",
+            description="Mean difference between plaintext and decrypted ciphertext output.",
+        )
+
+        latency = (time1 - time0) / 100 * 1000  # Convert to milliseconds
+
+        benchmark_result.add_metric(
+            name="Avg Latency (ms)",
+            metric_type=BenchmarkResultMetricType.SCALAR,
+            value=latency,
+            series="latency",
+            description="Average latency of a single CMult operation in milliseconds.",
+        )
+
+        return benchmark_result
 
 
 if __name__ == "__main__":

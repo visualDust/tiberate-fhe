@@ -9,11 +9,10 @@ import numpy as np
 import torch
 from loguru import logger
 from vdtoys.cache import CachedDict
-from vdtoys.mvc import strictype
 
+# from vdtoys.mvc import strictype # enable when debugging
 import tiberate.utils.encoding as codec
 from tiberate import errors
-from tiberate.compiler import tiberate_compiler
 from tiberate.config import CkksConfig, Preset
 from tiberate.context.ntt_context import NTTContext
 from tiberate.rng import Csprng
@@ -26,12 +25,17 @@ class CkksEngine:
 
     def __init__(
         self,
-        ckks_config: CkksConfig = CkksConfig.from_preset(Preset.logN15),
+        ckks_config: CkksConfig | dict = None,
         devices=None,
         allow_sk_gen: bool = True,  # if True, will allow sk generation
         bias_guard: bool = True,
         norm: str = "forward",
     ):
+        if not ckks_config:
+            logger.info("Ckks config is None. Using default config logN15.")
+            ckks_config = Preset.logN15
+        if not isinstance(ckks_config, CkksConfig):
+            ckks_config = CkksConfig.parse(ckks_config)
         self.ckksCfg = ckks_config
 
         if devices is None:
@@ -411,7 +415,7 @@ class CkksEngine:
     # Encode/Decode
     # -------------------------------------------------------------------------------------------
 
-    @torch.compile(backend=tiberate_compiler)
+    # @torch.compile(backend=tiberate_compiler)
     def encode(
         self, m, level: int = 0, padding=True, scale=None
     ) -> list[torch.Tensor]:
@@ -439,7 +443,7 @@ class CkksEngine:
             encoded.append(pt_buffer.cuda(self.nttCtx.devices[dev_id]))
         return encoded
 
-    @torch.compile(backend=tiberate_compiler)
+    # @torch.compile(backend=tiberate_compiler)
     def decode(self, m, level=0, is_real: bool = False) -> list:
         """
         Base prime is located at -1 of the RNS channels in GPU0.
@@ -481,7 +485,7 @@ class CkksEngine:
             creator_hash=self.hash,
         )
 
-    @strictype
+    # @strictype # enable when debugging
     def _create_public_key(
         self,
         sk: SecretKey = None,
@@ -538,8 +542,8 @@ class CkksEngine:
     # Encrypt/Decrypt
     # -------------------------------------------------------------------------------------------
 
-    @strictype
-    @torch.compile(backend=tiberate_compiler)
+    # @strictype # enable when debugging
+    # @torch.compile(backend=tiberate_compiler)
     def encrypt(
         self, pt: list[torch.Tensor], pk: PublicKey = None, *, level: int = 0
     ) -> Ciphertext:
@@ -613,8 +617,8 @@ class CkksEngine:
 
         return ct
 
-    @strictype
-    @torch.compile(backend=tiberate_compiler)
+    # @strictype # enable when debugging
+    # @torch.compile(backend=tiberate_compiler)
     def decrypt_triplet(
         self,
         ct_mult: CiphertextTriplet,
@@ -681,7 +685,7 @@ class CkksEngine:
 
         return scaled
 
-    @strictype
+    # @strictype # enable when debugging
     def decrypt_double(
         self, ct: Ciphertext, sk: SecretKey = None, *, final_round=True
     ) -> list[torch.Tensor]:
@@ -736,7 +740,7 @@ class CkksEngine:
         return scaled
 
     # @restrict_type
-    @torch.compile(backend=tiberate_compiler)
+    # @torch.compile(backend=tiberate_compiler)
     def decrypt(
         self,
         ct: Ciphertext | CiphertextTriplet,
@@ -769,8 +773,8 @@ class CkksEngine:
     # Key switching.
     # -------------------------------------------------------------------------------------------
 
-    @strictype
-    @torch.compile(backend=tiberate_compiler)
+    # @strictype # enable when debugging
+    # @torch.compile(backend=tiberate_compiler)
     def create_key_switching_key(
         self, sk_from: SecretKey, sk_to: SecretKey, a=None
     ) -> KeySwitchKey:
@@ -837,7 +841,7 @@ class CkksEngine:
             creator_hash=self.hash,
         )
 
-    @torch.compile(backend=tiberate_compiler)
+    # @torch.compile(backend=tiberate_compiler)
     def pre_extend(self, a, device_id, level, part_id, exit_ntt=False):
         # param_parts contain only the ordinary parts.
         # Hence, loop around it.
@@ -899,7 +903,7 @@ class CkksEngine:
         # Returned state is in plain integer format.
         return state
 
-    @torch.compile(backend=tiberate_compiler)
+    # @torch.compile(backend=tiberate_compiler)
     def extend(self, state, device_id, level, part_id, target_device_id=None):
         # Note that device_id, level, and part_id is from
         # where the state has been originally calculated at.
@@ -1160,7 +1164,7 @@ class CkksEngine:
         # When returning, un-list the results by taking the 0th element.
         return d0[0], d1[0]
 
-    @strictype
+    # @strictype # enable when debugging
     def switch_key(self, ct: Ciphertext, ksk: KeySwitchKey) -> Ciphertext:
         level = ct.level
         a = ct.data[1]
@@ -1184,7 +1188,7 @@ class CkksEngine:
     # Multiplication.
     # -------------------------------------------------------------------------------------------
 
-    @strictype
+    # @strictype # enable when debugging
     def rescale(self, ct: Ciphertext, exact_rounding=True) -> Ciphertext:
         level = ct.level
         next_level = level + 1
@@ -1279,7 +1283,7 @@ class CkksEngine:
             creator_hash=self.hash,
         )
 
-    @strictype
+    # @strictype # enable when debugging
     def _create_evk(self, sk: SecretKey = None) -> EvaluationKey:
         sk = sk or self.sk
         sk2_data = self.nttCtx.mont_mult(sk.data, sk.data, 0, -2)
@@ -1295,7 +1299,7 @@ class CkksEngine:
         )
         return EvaluationKey.wrap(self.create_key_switching_key(sk2, sk))
 
-    @strictype
+    # @strictype # enable when debugging
     def cc_mult(
         self,
         a: Ciphertext,
@@ -1349,7 +1353,7 @@ class CkksEngine:
 
         return ct_mult
 
-    @strictype
+    # @strictype # enable when debugging
     def relinearize(
         self, ct_triplet: CiphertextTriplet, evk: EvaluationKey = None
     ) -> Ciphertext:
@@ -1392,7 +1396,7 @@ class CkksEngine:
     # Rotation.
     # -------------------------------------------------------------------------------------------
 
-    @strictype
+    # @strictype # enable when debugging
     def _create_rotation_key(
         self,
         delta: int,
@@ -1420,7 +1424,7 @@ class CkksEngine:
         logger.debug(f"Rotation key created for delta {delta}")
         return rotk
 
-    @strictype
+    # @strictype # enable when debugging
     def rotate_single(
         self,
         ct: Ciphertext,
@@ -1456,7 +1460,7 @@ class CkksEngine:
             rotated_ct = self.switch_key(rotated_ct, rotk)
         return rotated_ct
 
-    @strictype
+    # @strictype # enable when debugging
     def _create_galois_key(self, sk: SecretKey = None) -> GaloisKey:
         sk = sk or self.sk
         galois_deltas = [2**i for i in range(self.ckksCfg.logN - 1)]
@@ -1477,7 +1481,7 @@ class CkksEngine:
         )
         return galois_key
 
-    @strictype
+    # @strictype # enable when debugging
     def rotate_galois(
         self,
         ct: Ciphertext,
@@ -1521,7 +1525,7 @@ class CkksEngine:
         # else:
         #     return rotated_ct
 
-    @strictype
+    # @strictype # enable when debugging
     def rotate_offset(
         self,
         ct: Ciphertext,
@@ -1545,7 +1549,7 @@ class CkksEngine:
     # -------------------------------------------------------------------------------------------
     # Add/sub.
     # -------------------------------------------------------------------------------------------
-    @strictype
+    # @strictype # enable when debugging
     def cc_add_double(self, a: Ciphertext, b: Ciphertext) -> Ciphertext:
         if a.has_flag(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=False)
@@ -1572,7 +1576,7 @@ class CkksEngine:
             creator_hash=self.hash,
         )
 
-    @strictype
+    # @strictype # enable when debugging
     def cc_add_triplet(
         self, a: CiphertextTriplet, b: CiphertextTriplet
     ) -> CiphertextTriplet:
@@ -1624,7 +1628,7 @@ class CkksEngine:
 
         return result
 
-    @strictype
+    # @strictype # enable when debugging
     def cc_sub_double(self, a: Ciphertext, b: Ciphertext) -> Ciphertext:
         if a.has_flag(FLAGS.NTT_STATE):
             raise errors.NTTStateError(expected=False)
@@ -1652,7 +1656,7 @@ class CkksEngine:
             creator_hash=self.hash,
         )
 
-    @strictype
+    # @strictype # enable when debugging
     def cc_sub_triplet(
         self, a: CiphertextTriplet, b: CiphertextTriplet
     ) -> CiphertextTriplet:
@@ -1686,7 +1690,7 @@ class CkksEngine:
             creator_hash=self.hash,
         )
 
-    @strictype
+    # @strictype # enable when debugging
     def cc_sub(
         self,
         a: Ciphertext | CiphertextTriplet,
@@ -1705,7 +1709,7 @@ class CkksEngine:
     # -------------------------------------------------------------------------------------------
     # Level up.
     # -------------------------------------------------------------------------------------------
-    @strictype
+    # @strictype # enable when debugging
     def level_up(
         self, ct: Ciphertext, dst_level: int, inplace=True
     ) -> Ciphertext:
@@ -1782,7 +1786,7 @@ class CkksEngine:
     # Fused enc/dec.
     # -------------------------------------------------------------------------------------------
 
-    @strictype
+    # @strictype # enable when debugging
     def encodecrypt(
         self, m, pk: PublicKey = None, *, level: int = 0, padding=True
     ) -> Ciphertext:
@@ -2033,7 +2037,7 @@ class CkksEngine:
     # Conjugation
     # -------------------------------------------------------------------------------------------
 
-    @strictype
+    # @strictype # enable when debugging
     def create_conjugation_key(self, sk: SecretKey = None) -> ConjugationKey:
         sk = sk or self.sk
 
@@ -2059,7 +2063,7 @@ class CkksEngine:
         )
         return rotk
 
-    @strictype
+    # @strictype # enable when debugging
     def conjugate(self, ct: Ciphertext, conjk: ConjugationKey) -> Ciphertext:
         level = ct.level
         conj_ct_data = [
@@ -2077,7 +2081,7 @@ class CkksEngine:
         conj_ct = self.switch_key(conj_ct_sk, conjk)
         return conj_ct
 
-    @strictype
+    # @strictype # enable when debugging
     def negate(self, ct: Ciphertext, inplace: bool = False) -> Ciphertext:
         if not inplace:
             ct = ct.clone()
@@ -2093,7 +2097,7 @@ class CkksEngine:
     # scalar ops.
     # -------------------------------------------------------------------------------------------
 
-    @strictype
+    # @strictype # enable when debugging
     def pc_add(
         self,
         pt: Plaintext,
@@ -2122,7 +2126,7 @@ class CkksEngine:
         new_ct.data[0] = new_d0
         return new_ct
 
-    @strictype
+    # @strictype # enable when debugging
     def pc_mult(
         self,
         pt: Plaintext,
@@ -2161,7 +2165,7 @@ class CkksEngine:
             new_ct = self.rescale(new_ct)
         return new_ct
 
-    @strictype
+    # @strictype # enable when debugging
     def mult_int_scalar(self, ct: Ciphertext, scalar) -> Ciphertext:
         device_len = len(ct.data[0])
 
@@ -2194,7 +2198,7 @@ class CkksEngine:
 
         return new_ct
 
-    @strictype
+    # @strictype # enable when debugging
     def mult_scalar(
         self, ct: Ciphertext, scalar: ScalarMessageType, inplace: bool = False
     ) -> Ciphertext:
@@ -2234,7 +2238,7 @@ class CkksEngine:
 
         return self.rescale(new_ct)
 
-    @strictype
+    # @strictype # enable when debugging
     def add_scalar(
         self, ct: Ciphertext, scalar: ScalarMessageType, inplace: bool = False
     ) -> Ciphertext:
@@ -2280,7 +2284,7 @@ class CkksEngine:
     # message ops.
     # -------------------------------------------------------------------------------------------
 
-    @strictype
+    # @strictype # enable when debugging
     def mc_mult(
         self, m, ct: Ciphertext, inplace: bool = False, post_rescale=True
     ) -> Ciphertext:
@@ -2291,7 +2295,7 @@ class CkksEngine:
             post_rescale=post_rescale,
         )
 
-    @strictype
+    # @strictype # enable when debugging
     def mc_add(self, m, ct: Ciphertext, inplace: bool = False) -> Ciphertext:
         return self.pc_add(pt=Plaintext(m), ct=ct, inplace=inplace)
 
@@ -2318,7 +2322,7 @@ class CkksEngine:
         # Reduce the accumulated error in the cipher text.
         return self.mult_scalar(ct, 1.0)
 
-    @strictype
+    # @strictype # enable when debugging
     def sum(self, ct: Ciphertext) -> Ciphertext:
         new_ct = ct.clone()
         for roti in range(self.ckksCfg.logN - 1):
@@ -2327,7 +2331,7 @@ class CkksEngine:
             new_ct = self.cc_add(rot_ct, new_ct)
         return new_ct
 
-    @strictype
+    # @strictype # enable when debugging
     def mean(self, ct: Ciphertext, *, alpha=1):
         # Divide by num_slots.
         # The cipher text is refreshed here, and hence
@@ -2339,7 +2343,7 @@ class CkksEngine:
             new_ct = self.cc_add(rot_ct, new_ct)
         return new_ct
 
-    @strictype
+    # @strictype # enable when debugging
     def cov(
         self,
         ct_a: Ciphertext,
@@ -2359,7 +2363,7 @@ class CkksEngine:
         )
         return ct_cov
 
-    @strictype
+    # @strictype # enable when debugging
     def pow(
         self, ct: Ciphertext, power: int, evk: EvaluationKey = None
     ) -> Ciphertext:
@@ -2386,7 +2390,7 @@ class CkksEngine:
 
         return new_ct
 
-    @strictype
+    # @strictype # enable when debugging
     def sqrt(
         self, ct: Ciphertext, evk: EvaluationKey = None, e=0.0001, alpha=0.0001
     ) -> Ciphertext:
@@ -2413,7 +2417,7 @@ class CkksEngine:
     ####  Statistics
     #### -------------------------------------------------------------------------------------------
 
-    @strictype
+    # @strictype # enable when debugging
     def randn(
         self,
         amin=-1,
@@ -2453,7 +2457,7 @@ class CkksEngine:
 
         return (encrypted, sample) if return_src else encrypted
 
-    @strictype
+    # @strictype # enable when debugging
     def var(
         self,
         ct: Ciphertext,
@@ -2470,7 +2474,7 @@ class CkksEngine:
         ct_var = self.mean(ct=dev)
         return ct_var
 
-    @strictype
+    # @strictype # enable when debugging
     def std(
         self,
         ct: Ciphertext,

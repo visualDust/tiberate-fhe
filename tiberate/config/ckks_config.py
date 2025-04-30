@@ -56,16 +56,21 @@ class CkksConfig:
     force_secured: bool = True
 
     @classmethod
-    def from_preset(cls, preset: Preset, **kwargs):
+    def parse(cls, src: dict | Preset, **kwargs):
         """
         Create a CkksConfig instance from a preset.
         Args:
-            preset (Preset): The preset to use.
+            src (dict|Preset): The source of the preset configuration.
+                If a dictionary, it should contain some valid parameters.
+                If a Preset enum, it will use the corresponding preset values.
             **kwargs: Additional keyword arguments to override the preset values.
         Returns:
             CkksConfig: The CkksConfig instance with the preset values.
         """
-        preset_config = _PRESET_CONFIGS[preset]
+        preset_config = _PRESET_CONFIGS[src] if isinstance(src, Preset) else src
+        assert isinstance(
+            preset_config, dict
+        ), "src must be a dictionary or a Preset enum."
         instance = cls(**preset_config, **kwargs)
         return instance
 

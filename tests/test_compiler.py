@@ -1,6 +1,6 @@
 import torch
 
-from tiberate.compiler import tiberate_compiler
+from tiberate.jit.compiler import tiberate_compiler
 
 
 def test_tiberate_compiler():

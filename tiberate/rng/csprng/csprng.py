@@ -244,7 +244,7 @@ class Csprng(RandNumGen):
 
         return random_bytes
 
-    @torch.compiler.disable()
+    # @torch.compiler.disable()
     def randint(self, amax=3, shift=0, repeats=0):
         # The default values are for generating the same uniform ternary
         # arrays in all GPUs.

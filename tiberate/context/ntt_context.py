@@ -556,7 +556,21 @@ class NTTContext:
     # -------------------------------------------------------------------------------------------------
     # Pre-packaging.
     # -------------------------------------------------------------------------------------------------
+
+    # Structure of self.ntt_prepack[mult_type][lvl][part]:
+    #   Part Index | Description                      | Shape                              | Example(cuda:0, logN15, N=32768, 16 scales, 15 levels)
+    # -------------|----------------------------------|------------------------------------|-------------------------------------------------------
+    #       0      | Even values (duplicated)         | [n_dev, logN, N/2]                 | [1, 15, 16384]
+    #       1      | Odd values (duplicated)          | [n_dev, logN, N/2]                 | [1, 15, 16384]
+    #       2      | Psi (nth roots of unity)         | [n_dev, n_scales+1-lvl, logN, N/2] | [1, 16~1, 15, 16384]
+    #       3      | 2q values                        | [n_dev, n_scales+1-lvl]            | [1, 16~1]
+    #       4      | Lower bits of q (ql)             | [n_dev, n_scales+1-lvl]            | [1, 16~1]
+    #       5      | Higher bits of q (qh)            | [n_dev, n_scales+1-lvl]            | [1, 16~1]
+    #       6      | Lower bits of k (kl)             | [n_dev, n_scales+1-lvl]            | [1, 16~1]
+    #       7      | Higher bits of k (kh)            | [n_dev, n_scales+1-lvl]            | [1, 16~1]
+
     def pre_package(self):
+
         self.mont_prepack = []
         self.ntt_prepack = []
         self.intt_prepack = []
@@ -697,15 +711,6 @@ class NTTContext:
         torch.ops.tiberate_ntt_ops.ntt(
             a, *self.ntt_prepack[mult_type][lvl][part]
         )
-        # self.ntt_prepack[mult_type][lvl][part] structure is:
-        # - 0: even [duplicated]
-        # - 1: odd [duplicated]
-        # - 2: psi [nth root of unity]
-        # - 3: _2q [2 * q]
-        # - 4: ql [lower bits of q]
-        # - 5: qh [higher bits of q]
-        # - 6: kl [lower bits of k]
-        # - 7: kh [higher bits of k]
 
     def enter_ntt(self, a, lvl=0, mult_type=-1, part=0):
         torch.ops.tiberate_ntt_ops.enter_ntt(
