@@ -13,6 +13,7 @@ from vdtoys.mvc import strictype
 
 import tiberate.utils.encoding as codec
 from tiberate import errors
+from tiberate.compiler import tiberate_compiler
 from tiberate.config import CkksConfig, Preset
 from tiberate.context.ntt_context import NTTContext
 from tiberate.rng import Csprng
@@ -410,6 +411,7 @@ class CkksEngine:
     # Encode/Decode
     # -------------------------------------------------------------------------------------------
 
+    @torch.compile(backend=tiberate_compiler)
     def encode(
         self, m, level: int = 0, padding=True, scale=None
     ) -> list[torch.Tensor]:
@@ -437,6 +439,7 @@ class CkksEngine:
             encoded.append(pt_buffer.cuda(self.nttCtx.devices[dev_id]))
         return encoded
 
+    @torch.compile(backend=tiberate_compiler)
     def decode(self, m, level=0, is_real: bool = False) -> list:
         """
         Base prime is located at -1 of the RNS channels in GPU0.
@@ -536,6 +539,7 @@ class CkksEngine:
     # -------------------------------------------------------------------------------------------
 
     @strictype
+    @torch.compile(backend=tiberate_compiler)
     def encrypt(
         self, pt: list[torch.Tensor], pk: PublicKey = None, *, level: int = 0
     ) -> Ciphertext:
@@ -610,6 +614,7 @@ class CkksEngine:
         return ct
 
     @strictype
+    @torch.compile(backend=tiberate_compiler)
     def decrypt_triplet(
         self,
         ct_mult: CiphertextTriplet,
@@ -731,6 +736,7 @@ class CkksEngine:
         return scaled
 
     # @restrict_type
+    @torch.compile(backend=tiberate_compiler)
     def decrypt(
         self,
         ct: Ciphertext | CiphertextTriplet,
@@ -764,6 +770,7 @@ class CkksEngine:
     # -------------------------------------------------------------------------------------------
 
     @strictype
+    @torch.compile(backend=tiberate_compiler)
     def create_key_switching_key(
         self, sk_from: SecretKey, sk_to: SecretKey, a=None
     ) -> KeySwitchKey:
@@ -830,6 +837,7 @@ class CkksEngine:
             creator_hash=self.hash,
         )
 
+    @torch.compile(backend=tiberate_compiler)
     def pre_extend(self, a, device_id, level, part_id, exit_ntt=False):
         # param_parts contain only the ordinary parts.
         # Hence, loop around it.
@@ -891,6 +899,7 @@ class CkksEngine:
         # Returned state is in plain integer format.
         return state
 
+    @torch.compile(backend=tiberate_compiler)
     def extend(self, state, device_id, level, part_id, target_device_id=None):
         # Note that device_id, level, and part_id is from
         # where the state has been originally calculated at.

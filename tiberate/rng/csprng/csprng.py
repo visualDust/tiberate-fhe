@@ -244,6 +244,7 @@ class Csprng(RandNumGen):
 
         return random_bytes
 
+    @torch.compiler.disable()
     def randint(self, amax=3, shift=0, repeats=0):
         # The default values are for generating the same uniform ternary
         # arrays in all GPUs.
@@ -258,7 +259,9 @@ class Csprng(RandNumGen):
 
         # Convert the amax list to contiguous numpy array pointers.
         q_conti = [np.ascontiguousarray(q, dtype=np.uint64) for q in amax]
-        q_ptr = [q.__array_interface__["data"][0] for q in q_conti]
+        q_ptr = [
+            q.__array_interface__["data"][0] for q in q_conti
+        ]  # TODO(puqing): this __getitem__ will break torch fx graph
 
         # Set the target states.
         target_states = []
