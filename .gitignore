@@ -2,9 +2,7 @@
 .ignored
 *.pyi
 uv.lock
-
-# Temporarily ignored
-tiberate/jit/
+tests/FxGraphDrawer/
 
 # poetry
 poetry.lock

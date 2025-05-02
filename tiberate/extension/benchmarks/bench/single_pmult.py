@@ -4,10 +4,14 @@ import torch
 from loguru import logger
 from vdtoys.registry import Registry
 
-from tiberate import CkksEngine, presets
+from tiberate import CkksEngine, Preset
 from tiberate.typing import Plaintext
 
-from .interface import BenchmarkBase
+from .interface import (
+    BenchmarkBase,
+    BenchmarkResult,
+    BenchmarkResultMetricType,
+)
 
 benchreg = Registry("benchmarks")
 
@@ -20,19 +24,19 @@ class PMultSingleOPBenchmark(BenchmarkBase):
         self.config_matrix = {
             "logN14": {
                 "description": "Using polynomial degree logN14, run PMult for 100 times",
-                "ckks_params": presets.logN14,
+                "ckks_params": Preset.logN14,
             },
             "logN15": {
                 "description": "Using polynomial degree logN15, run PMult for 100 times",
-                "ckks_params": presets.logN15,
+                "ckks_params": Preset.logN15,
             },
             "logN16": {
                 "description": "Using polynomial degree logN16, run PMult for 100 times",
-                "ckks_params": presets.logN16,
+                "ckks_params": Preset.logN16,
             },
         }
 
-    def get_bench_option2desc(self):
+    def get_option_name2desc(self):
         return {k: v["description"] for k, v in self.config_matrix.items()}
 
     def run(self, option_name):
@@ -41,9 +45,11 @@ class PMultSingleOPBenchmark(BenchmarkBase):
         ), f"Invalid benchmark name: {option_name}"
         config = self.config_matrix[option_name]
         ckks_params = config["ckks_params"]
-        logger.info(f"Running benchmark: {config['description']}")
+        logger.info(f"Using config: {config['description']}")
 
-        engine = CkksEngine(ckks_params=ckks_params)
+        benchmark_result = BenchmarkResult()
+
+        engine = CkksEngine(ckks_params)
         input_tensor_1 = torch.randn((engine.num_slots,))
         input_tensor_2 = torch.randn((engine.num_slots,))
         plain_output = input_tensor_1 * input_tensor_2
@@ -67,13 +73,33 @@ class PMultSingleOPBenchmark(BenchmarkBase):
         max_diff = diff.max()
         mean_diff = diff.mean()
 
-        latency = (time1 - time0) / 100 * 1000  # in ms
-
-        logger.info(
-            f"Max diff: {max_diff}, Mean diff: {mean_diff}, Latency: {latency:.4f} milliseconds"
+        benchmark_result.add_metric(
+            name="Max Difference",
+            metric_type=BenchmarkResultMetricType.SCALAR,
+            series="error",
+            value=max_diff,
+            description="Maximum difference between plaintext and decrypted ciphertext output",
         )
 
-        logger.info(f"Benchmark {self.name} completed successfully.")
+        benchmark_result.add_metric(
+            name="Mean Difference",
+            metric_type=BenchmarkResultMetricType.SCALAR,
+            series="error",
+            value=mean_diff,
+            description="Mean difference between plaintext and decrypted ciphertext output",
+        )
+
+        latency = (time1 - time0) / 100 * 1000  # in ms
+
+        benchmark_result.add_metric(
+            name="Avg Latency (ms)",
+            metric_type=BenchmarkResultMetricType.SCALAR,
+            series="latency",
+            value=latency,
+            description="Average latency of a single PMult operation over 100 runs, in milliseconds",
+        )
+
+        return benchmark_result
 
 
 if __name__ == "__main__":

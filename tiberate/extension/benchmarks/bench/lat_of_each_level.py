@@ -1,31 +1,45 @@
 import time
 
-import plotext as plt
 from loguru import logger
 from vdtoys.registry import Registry
 
-from tiberate import CkksEngine, presets
+from tiberate import CkksEngine, Preset, errors
 from tiberate.typing import Plaintext
 from tiberate.utils.massive import (
     calculate_ckks_cipher_datastruct_size_in_list_recursive,
 )
 
-from .interface import BenchmarkBase
+from .interface import (
+    BenchmarkBase,
+    BenchmarkResult,
+    BenchmarkResultMetricType,
+)
 
 benchreg = Registry("benchmarks")
 
 
-def test_lat_and_size_until_level_used_up(
-    engine: CkksEngine, do_print: bool = True
-):
-    # print table header
-    if do_print:
-        print(
-            "ct level, ct size(MB),cc_add latency(ms),cc_mult latency(ms)(no relin),cc_add_triplet latency(ms),relin latency(ms),pt_add latency(ms),pt_add cache size(MB),pt_mult latency(ms)(no rescale),rescale latency(ms),pt_mult cache size(MB),rotate latency(ms)(no key switching),key switching latency(ms)"
-        )
-
+def test_lat_and_size_until_level_used_up(engine: CkksEngine) -> list[list]:
+    result_table = []
+    result_table.append(
+        [
+            'level (in->out)',
+            'ct size (MB)',
+            'cc_add latency (ms)',
+            'cc_mult latency (ms) (no relin)',
+            'cc_add_triplet latency (ms)',
+            'relin latency (ms)',
+            'pt_add latency (ms)',
+            'pt_add cache size (MB)',
+            'pt_mult latency (ms) (no rescale)',
+            'rescale latency (ms)',
+            'pt_mult cache size (MB)',
+            'rotate latency (ms) (no key switching)',
+            'key switching latency (ms)',
+        ]
+    )  # append header
+    level_list = [0, *list(range(engine.num_levels))]  # first run is warmup
     try:
-        for i in range(engine.num_levels - 1):
+        for idx, i in enumerate(level_list):
             # create ct
             ct = engine.encodecrypt([1, 2, 3, 4], level=i)
 
@@ -110,13 +124,29 @@ def test_lat_and_size_until_level_used_up(
             )
 
             # print result, do not drop precision
-            if do_print:
-                print(
-                    f"{ct.level},{size_mb},{lat_cadd},{lat_cmult_no_relin},{lat_cadd_tri},{lat_relin},{lat_pcadd},{pt_add_cache_size},{lat_pcmult_no_rescale},{lat_rescale},{pt_mult_cache_size},{lat_rotate},{lat_key_switch}"
-                )
-
+            result_table.append(
+                [
+                    f"{ct.level}->{ct_.level}" if idx else "warmup",
+                    size_mb,
+                    lat_cadd,
+                    lat_cmult_no_relin,
+                    lat_cadd_tri,
+                    lat_relin,
+                    lat_pcadd,
+                    pt_add_cache_size,
+                    lat_pcmult_no_rescale,
+                    lat_rescale,
+                    pt_mult_cache_size,
+                    lat_rotate,
+                    lat_key_switch,
+                ]
+            )
+    except errors.MaximumLevelError as e:
+        pass  # reached max level, this is expected
     except Exception as e:
         raise e
+
+    return result_table
 
 
 @benchreg.register(name="Test op latency at each level")
@@ -127,22 +157,22 @@ class ConsumeAllLevelsBenchmark(BenchmarkBase):
         self.config_matrix = {
             "logN14": {
                 "description": "Using polynomial degree logN14",
-                "ckks_params": presets.logN14,
+                "ckks_params": Preset.logN14,
                 "relinearize": True,
             },
             "logN15": {
                 "description": "Using polynomial degree logN15",
-                "ckks_params": presets.logN15,
+                "ckks_params": Preset.logN15,
                 "relinearize": True,
             },
             "logN16": {
                 "description": "Using polynomial degree logN16",
-                "ckks_params": presets.logN16,
+                "ckks_params": Preset.logN16,
                 "relinearize": True,
             },
         }
 
-    def get_bench_option2desc(self):
+    def get_option_name2desc(self):
         return {k: v["description"] for k, v in self.config_matrix.items()}
 
     def run(self, option_name):
@@ -153,7 +183,9 @@ class ConsumeAllLevelsBenchmark(BenchmarkBase):
         ckks_params = config["ckks_params"]
         logger.info(f"Running benchmark: {config['description']}")
 
-        engine = CkksEngine(ckks_params=ckks_params)
+        benchmark_result = BenchmarkResult()
+
+        engine = CkksEngine(ckks_params)
 
         # =========== Test Error ========== #
         packed_ct_1, input_tensor_1 = engine.randn(return_src=True)
@@ -163,46 +195,58 @@ class ConsumeAllLevelsBenchmark(BenchmarkBase):
             max_diff_array = []
             mean_diff_array = []
             while True:
-                # Perform the CMult operation
-                packed_ct_2 = engine.encodecrypt(
-                    input_tensor_2, level=packed_ct_1.level
-                )
-                packed_ct_1 = engine.cc_mult(packed_ct_1, packed_ct_2)
-                input_tensor_1 = input_tensor_1 * input_tensor_2
+                # At current level check the error
                 dec_he_out = engine.decryptcode(packed_ct_1)
-
-                # Check the difference
                 diff = input_tensor_1 - dec_he_out
                 max_diff = diff.max()
                 mean_diff = diff.mean()
                 max_diff_array.append(max_diff.real)
                 mean_diff_array.append(mean_diff.real)
 
-                logger.info(
-                    f"At level {packed_ct_1.level}, Max diff: {max_diff}, Mean diff: {mean_diff}"
+                # Perform the CMult operation to increase the level
+                packed_ct_2 = engine.encodecrypt(
+                    input_tensor_2, level=packed_ct_1.level
                 )
+                packed_ct_1 = engine.cc_mult(packed_ct_1, packed_ct_2)
+                input_tensor_1 = input_tensor_1 * input_tensor_2
+        except errors.MaximumLevelError as e:
+            pass  # reached max level
         except Exception as e:
-            logger.info(f"Seems max level reached: {e}")
-            # raise e
+            raise e  # unexpected error
         finally:
-            plt.plot(max_diff_array, label="Max Diff")
-            plt.plot(mean_diff_array, label="Mean Diff")
-            plt.title("Max and Mean Error at Each Level")
-            plt.show()
+            benchmark_result.add_metric(
+                name="Max diff",
+                metric_type=BenchmarkResultMetricType.PLOT,
+                value=max_diff_array,
+                series="error",
+                description="the maximum difference between the expected output and decrypted output at each level.",
+            )
+            benchmark_result.add_metric(
+                name="Mean diff",
+                metric_type=BenchmarkResultMetricType.PLOT,
+                value=mean_diff_array,
+                series="error",
+                description="the mean difference between the expected output and decrypted output at each level.",
+            )
+            # benchmark_result.add_metric(
+            #     name="Last level error distribution",
+            #     metric_type=BenchmarkResultMetricType.DISTRIBUTION,
+            #     series="error",
+            #     value=diff.real.tolist(),
+            #     description="The distribution of the last level error.",
+            # )
 
         # =========== Test Latency and Size ========== #
 
-        test_lat_and_size_until_level_used_up(engine, do_print=False)  # warm up
-
-        logger.info("<== Begin of CSV output ==>")
-        test_lat_and_size_until_level_used_up(
-            engine, do_print=True
-        )  # print results
-        logger.info("<== End of CSV output ==>")
-
-        logger.info(
-            f"Benchmark {self.name} with config {config['description']} completed successfully."
+        lat_table = test_lat_and_size_until_level_used_up(engine)
+        benchmark_result.add_metric(
+            name="Latency / Data Size by Level",
+            metric_type=BenchmarkResultMetricType.TABLE,
+            value=lat_table,
+            description="Latency and size/level",
         )
+
+        return benchmark_result
 
 
 if __name__ == "__main__":

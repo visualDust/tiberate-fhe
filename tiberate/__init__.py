@@ -26,9 +26,14 @@ def load_pytorch_ops():
 # Load the PyTorch ops
 load_pytorch_ops()
 
-from tiberate.fhe.context import presets
-from tiberate.fhe.engine import CkksEngine
+import tiberate.ops  # Register the FakeTensor kernel see https://docs.google.com/document/d/1_W62p8WJOQQUzPsJYa7s701JXt0qf2OfLub2sbkHOaU/edit?tab=t.0  # noqa: F401
+from tiberate.config import CkksConfig, Preset
+from tiberate.engine import CkksEngine
 
 __version__ = version("tiberate")
 
-__all__ = ["CkksEngine", "presets"]
+__all__ = [
+    "CkksEngine",
+    "Preset",
+    "CkksConfig",
+]

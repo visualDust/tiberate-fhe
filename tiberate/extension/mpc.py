@@ -1,9 +1,10 @@
 import torch
 from vdtoys.mvc import strictype
 
-from tiberate.fhe.encdec import rotate
-from tiberate.fhe.engine import CkksEngine, errors
+from tiberate import errors
+from tiberate.engine import CkksEngine
 from tiberate.typing import *  # noqa: F403
+from tiberate.utils.encoding import rotate
 
 
 class CkksEngineMPCExtension(CkksEngine):

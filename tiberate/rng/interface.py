@@ -13,12 +13,12 @@ class RandNumGen(ABC):
         Generate random bytes.
 
         Args:
-            shares (List[int]): Number of channels per device.
+            shares (list[int]): Number of channels per device.
             repeats (int): Number of repeating channels.
             reshape (bool): Whether to reshape the output.
 
         Returns:
-            List[torch.Tensor]: List of random byte tensors.
+            list[torch.Tensor]: list of random byte tensors.
         """
         pass
 
@@ -33,12 +33,12 @@ class RandNumGen(ABC):
         Generate random integers.
 
         Args:
-            amax (int or List[List[int]]): Maximum values per channel.
+            amax (int or list[list[int]]): Maximum values per channel.
             shift (int): Optional shift to apply to results.
             repeats (int): Number of repeating channels.
 
         Returns:
-            List[torch.Tensor]: List of random integer tensors.
+            list[torch.Tensor]: list of random integer tensors.
         """
         pass
 
@@ -50,11 +50,11 @@ class RandNumGen(ABC):
         Generate discrete Gaussian samples.
 
         Args:
-            non_repeats (int or List[int]): Channels without repetition.
+            non_repeats (int or list[int]): Channels without repetition.
             repeats (int): Number of repeating channels.
 
         Returns:
-            List[torch.Tensor]: List of sampled tensors.
+            list[torch.Tensor]: list of sampled tensors.
         """
         pass
 
