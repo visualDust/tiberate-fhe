@@ -10,7 +10,10 @@ import torch
 from loguru import logger
 from vdtoys.cache import CachedDict
 
+import tiberate
+
 # from vdtoys.mvc import strictype # enable when debugging
+import tiberate.jit
 import tiberate.utils.encoding as codec
 from tiberate import errors
 from tiberate.config import CkksConfig, Preset
@@ -1189,6 +1192,7 @@ class CkksEngine:
     # -------------------------------------------------------------------------------------------
 
     # @strictype # enable when debugging
+    @torch.compiler.disable()
     def rescale(self, ct: Ciphertext, exact_rounding=True) -> Ciphertext:
         level = ct.level
         next_level = level + 1
@@ -1300,6 +1304,7 @@ class CkksEngine:
         return EvaluationKey.wrap(self.create_key_switching_key(sk2, sk))
 
     # @strictype # enable when debugging
+    @torch.compile(backend=tiberate.jit.tiberate_compiler)
     def cc_mult(
         self,
         a: Ciphertext,

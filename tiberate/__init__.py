@@ -32,4 +32,8 @@ from tiberate.engine import CkksEngine
 
 __version__ = version("tiberate")
 
-__all__ = ["CkksEngine", "Preset", "CkksConfig"]
+__all__ = [
+    "CkksEngine",
+    "Preset",
+    "CkksConfig",
+]

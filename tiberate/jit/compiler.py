@@ -1,5 +1,6 @@
+import os
+
 import torch
-from loguru import logger
 from torch._decomp import get_decompositions
 from torch._dynamo import register_backend
 from torch._dynamo.backends.common import aot_autograd
@@ -18,8 +19,21 @@ def _process_fx(gm: torch.fx.GraphModule, example_inputs: list[torch.Tensor]):
 @register_backend
 def _compiler(gm: torch.fx.GraphModule, example_inputs: list[torch.Tensor]):
     gm = _process_fx(gm, example_inputs)
-    logger.debug("tiberate_compiler() called with FX graph:")
-    # gm.graph.print_tabular()
+
+    if os.getenv("DEBUG_MODE") == "1":
+        gm.graph.print_tabular()
+        import time
+
+        import ubelt as ub
+        from torch.fx import passes
+
+        random_name = str(int(time.time() * 1000))
+        g = passes.graph_drawer.FxGraphDrawer(gm, "tiberate_compiler")
+        dpath = (
+            ub.Path(__file__).parent.parent.parent / "tests" / "FxGraphDrawer"
+        ).ensuredir()
+        fpath = dpath / f"{random_name}.svg"
+        g.get_dot_graph().write_svg(fpath)
     return gm.forward
 
 
