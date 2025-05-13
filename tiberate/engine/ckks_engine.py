@@ -1,6 +1,5 @@
 import functools
 import math
-import textwrap
 import warnings
 from hashlib import sha256
 from uuid import uuid4
@@ -10,10 +9,7 @@ import torch
 from loguru import logger
 from vdtoys.cache import CachedDict
 
-import tiberate
-
 # from vdtoys.mvc import strictype # enable when debugging
-import tiberate.jit
 import tiberate.utils.encoding as codec
 from tiberate import errors
 from tiberate.config import CkksConfig, Preset
@@ -392,10 +388,10 @@ class CkksEngine:
         self.__rotk = new_rotk
 
     def __str__(self):
-        what_is_this = f"{self.__class__}\n"
-        what_is_this += f"Runtime ID: {self.id}"
-        what_is_this += f"{textwrap.indent(str(self.nttCtx), '    ')}"
-        return what_is_this
+        result = f"{self.__class__.__name__} "
+        result += f"({self.id}) "
+        result += str(self.ckksCfg)
+        return result
 
     @property
     def device0(self) -> int:
@@ -410,7 +406,7 @@ class CkksEngine:
         This is used to identify the engine and its parameters.
         """
         q_str = ",".join(map(str, self.montCtx.q))
-        hash_input = f"{self.ckksCfg.generation_string}_{q_str}"
+        hash_input = f"{self.ckksCfg!r}_{q_str}"
         # logger.debug(f"Hash string: {hashstr}")
         return sha256(hash_input.encode("utf-8")).hexdigest()
 
@@ -1192,7 +1188,7 @@ class CkksEngine:
     # -------------------------------------------------------------------------------------------
 
     # @strictype # enable when debugging
-    @torch.compiler.disable()
+    # @torch.compiler.disable()
     def rescale(self, ct: Ciphertext, exact_rounding=True) -> Ciphertext:
         level = ct.level
         next_level = level + 1
@@ -1304,7 +1300,7 @@ class CkksEngine:
         return EvaluationKey.wrap(self.create_key_switching_key(sk2, sk))
 
     # @strictype # enable when debugging
-    @torch.compile(backend=tiberate.jit.tiberate_compiler)
+    # @torch.compile(backend=tiberate.jit.tiberate_compiler)
     def cc_mult(
         self,
         a: Ciphertext,

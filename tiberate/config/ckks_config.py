@@ -166,10 +166,19 @@ class CkksConfig:
                     f"requested total is {self.total_qbits:4d}."
                 )
 
-    @property
-    def generation_string(self):
+    def __repr__(self):
         return (
             f"{self.buffer_bit_length}_{self.scale_bits}_{self.logN}_{self.num_scales}_"
             f"{self.num_special_primes}_{self.security_bits}_{self.quantum}_"
             f"{self.distribution}"
+        )
+
+    def __str__(self):
+        return (
+            f"CkksConfig(buffer_bit_length={self.buffer_bit_length}, "
+            f"scale_bits={self.scale_bits}, logN={self.logN}, "
+            f"num_scales={self.num_scales}, num_special_primes={self.num_special_primes}, "
+            f"sigma={self.sigma}, uniform_ternary_secret={self.uniform_ternary_secret}, "
+            f"security_bits={self.security_bits}, quantum='{self.quantum}', "
+            f"distribution='{self.distribution}', force_secured={self.force_secured})"
         )
