@@ -13,9 +13,11 @@ class RnsPartition:
 
         num_partitions = -(-(num_ordinary_primes - 1) // num_special_primes)
 
-        part = lambda i: primes_idx[
-            i * num_special_primes : (i + 1) * num_special_primes
-        ]
+        def part(i):
+            return primes_idx[
+                i * num_special_primes : (i + 1) * num_special_primes
+            ]
+
         partitions = [part(i) for i in range(num_partitions)]
 
         partitions.append([num_ordinary_primes - 1])
@@ -29,9 +31,9 @@ class RnsPartition:
             )
         )
 
-        alloc = lambda i: list(range(num_partitions - i - 1, -1, -num_devices))[
-            ::-1
-        ]
+        def alloc(i):
+            return list(range(num_partitions - i - 1, -1, -num_devices))[::-1]
+
         part_allocations = [alloc(i) for i in range(num_devices)]
 
         part_allocations[0].append(num_partitions)
@@ -39,9 +41,9 @@ class RnsPartition:
         for p in part_allocations:
             p.append(num_partitions + 1)
 
-        expand_alloc = lambda i: [
-            partitions[part] for part in part_allocations[i]
-        ]
+        def expand_alloc(i):
+            return [partitions[part] for part in part_allocations[i]]
+
         prime_allocations = [expand_alloc(i) for i in range(num_devices)]
 
         flat_prime_allocations = [
@@ -66,41 +68,52 @@ class RnsPartition:
         self.compute_partitions()
 
     def compute_destination_arrays(self):
-        filter_alloc = lambda devi, i: [
-            a for a in self.flat_prime_allocations[devi] if a >= i
-        ]
+        def filter_alloc(devi, i):
+            return [a for a in self.flat_prime_allocations[devi] if a >= i]
 
         self.destination_arrays_with_special = []
         for lvl in range(self.num_ordinary_primes):
             src = [filter_alloc(devi, lvl) for devi in range(self.num_devices)]
             self.destination_arrays_with_special.append(src)
 
-        special_removed = lambda i: [
-            a[: -self.num_special_primes]
-            for a in self.destination_arrays_with_special[i]
-        ]
+        def special_removed(i):
+            return [
+                a[: -self.num_special_primes]
+                for a in self.destination_arrays_with_special[i]
+            ]
 
         self.destination_arrays = [
             special_removed(i) for i in range(self.num_ordinary_primes)
         ]
 
-        lint = lambda arr: [a for a in arr if len(a) > 0]
+        def lint(arr):
+            return [a for a in arr if len(a) > 0]
+
         self.destination_arrays = [lint(a) for a in self.destination_arrays]
 
     def compute_rescaler_locations(self):
-        mins = lambda arr: [min(a) for a in arr]
-        mins_loc = lambda a: mins(a).index(min(mins(a)))
+        def mins(arr):
+            return [min(a) for a in arr]
+
+        def mins_loc(a):
+            return mins(a).index(min(mins(a)))
+
         self.rescaler_loc = [
             mins_loc(a) for a in self.destination_arrays_with_special
         ]
 
     def partings(self, lvl):
-        count_element_sizes = lambda arr: np.array([len(a) for a in arr])
-        cumsum_element_sizes = lambda arr: np.cumsum(arr)
-        remove_empty_parts = lambda arr: [a for a in arr if a > 0]
-        regenerate_parts = lambda arr: [
-            list(range(a, b)) for a, b in zip([0] + arr[:-1], arr)
-        ]
+        def count_element_sizes(arr):
+            return np.array([len(a) for a in arr])
+
+        def cumsum_element_sizes(arr):
+            return np.cumsum(arr)
+
+        def remove_empty_parts(arr):
+            return [a for a in arr if a > 0]
+
+        def regenerate_parts(arr):
+            return [list(range(a, b)) for a, b in zip([0] + arr[:-1], arr)]
 
         part_counts = [count_element_sizes(a) for a in self.prime_allocations]
         part_cumsums = [cumsum_element_sizes(a) for a in part_counts]

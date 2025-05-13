@@ -1,41 +1,104 @@
 import math
 import multiprocessing
+import os
 import pickle
-from pathlib import Path
+import random
 
 import matplotlib.pyplot as plt
 import numpy as np
 from joblib import Parallel, delayed
+from loguru import logger
 
-from tiberate.fhe.context import cache
+from tiberate.config.security_parameters import maximum_qbits
 
-from .check_prim import MillerRabinPrimalityTest
-from .security_parameters import maximum_qbits
-
-# Default cache folder.
-CACHE_FOLDER = cache.path_cache
+CACHE_FOLDER = os.path.dirname(__file__)
 
 
-def generate_N_M(logN=None, cache_folder=CACHE_FOLDER, **kw):
-    if logN is None:
-        logN = list(range(12, 18))
-    savefile = Path(cache_folder) / "logN_N_M.pkl"
+def MillerRabinPrimalityTest(number, rounds=10):
+    # If the input is an even number, return immediately with False.
+    if number == 2:
+        return True
+    elif number == 1 or number % 2 == 0:
+        return False
 
-    if savefile.exists():
-        with savefile.open("rb") as f:
-            logN_N_M = pickle.load(f)
-            logN = logN_N_M["logN"]
-            N = logN_N_M["N"]
-            M = logN_N_M["M"]
-            return logN, N, M
+    # First we want to express n as : 2^s * r ( were r is odd )
 
-    N = [2**lN for lN in logN]
-    M = [2 * n for n in N]
+    # The odd part of the number
+    oddPartOfNumber = number - 1
 
-    logN_N_M = {"logN": logN, "N": N, "M": M}
+    # The number of time that the number is divided by two
+    timesTwoDividNumber = 0
 
-    with savefile.open("wb") as f:
-        pickle.dump(logN_N_M, f)
+    # while r is even divid by 2 to find the odd part
+    while oddPartOfNumber % 2 == 0:
+        oddPartOfNumber = oddPartOfNumber / 2
+        timesTwoDividNumber = timesTwoDividNumber + 1
+
+    # Make oddPartOfNumber integer.
+    oddPartOfNumber = int(oddPartOfNumber)
+
+    # Since there are number that are cases of "strong liar" we need to check more than one number
+    for time in range(rounds):
+        # Choose "Good" random number
+        while True:
+            # Draw a RANDOM number in range of number ( Z_number )
+            randomNumber = random.randint(2, number) - 1
+            if randomNumber != 0 and randomNumber != 1:
+                break
+
+        # randomNumberWithPower = randomNumber^oddPartOfNumber mod number
+        randomNumberWithPower = pow(randomNumber, oddPartOfNumber, number)
+
+        # If random number is not 1 and not -1 ( in mod n )
+        if (randomNumberWithPower != 1) and (
+            randomNumberWithPower != number - 1
+        ):
+            # number of iteration
+            iterationNumber = 1
+
+            # While we can squre the number and the squered number is not -1 mod number
+            while (iterationNumber <= timesTwoDividNumber - 1) and (
+                randomNumberWithPower != number - 1
+            ):
+                # Squre the number
+                randomNumberWithPower = pow(randomNumberWithPower, 2, number)
+
+                # inc the number of iteration
+                iterationNumber = iterationNumber + 1
+
+            # If x != -1 mod number then it is because we did not find strong witnesses
+            # hence 1 have more then two roots in mod n ==>
+            # n is composite ==> return false for primality
+
+            if randomNumberWithPower != (number - 1):
+                return False
+
+    # The number pass the tests ==> it is probably prime ==> return true for primality
+    return True
+
+
+def generate_N_M(logN: list[int] | None = None):
+    # default to generate logN from 12 to 18
+    logN = list(range(12, 18)) if logN is None else logN
+    logN = sorted(set(logN))  # sort logN and make it unique
+
+    filename = "N_M_" + "_".join([str(lN) for lN in logN]) + ".pkl"
+    filepath = os.path.join(CACHE_FOLDER, filename)
+
+    if not os.path.exists(filepath):
+        N = [2**lN for lN in logN]
+        M = [2 * n for n in N]
+
+        logN_N_M = {"logN": logN, "N": N, "M": M}
+
+        with open(filepath, "wb") as f:
+            pickle.dump(logN_N_M, f)
+
+    with open(filepath, "rb") as f:
+        logN_N_M = pickle.load(f)
+        logN = logN_N_M["logN"]
+        N = logN_N_M["N"]
+        M = logN_N_M["M"]
 
     return logN, N, M
 
@@ -52,19 +115,18 @@ def check_ntt_primality(q: int, M: int):
     return False
 
 
-def generate_message_primes(
-    mbits=None, cache_folder=CACHE_FOLDER, how_many=11, **kw
-):
-    if mbits is None:
-        mbits = [28, 60]
-    savefile = Path(cache_folder) / "message_special_primes.pkl"
+def generate_message_primes(mbits=None, how_many=11):
+    mbits = [28, 60] if mbits is None else mbits
 
-    if savefile.exists():
-        with savefile.open("rb") as f:
+    filename = "message_special_primes.pkl"
+    filepath = os.path.join(CACHE_FOLDER, filename)
+
+    if os.path.exists(filepath):
+        with open(filepath, "rb") as f:
             mprimes = pickle.load(f)
             # return mprimes
     else:
-        logN, N, M = generate_N_M(cache_folder=cache_folder, **kw)
+        logN, N, M = generate_N_M()
 
         mprimes = {}
         for mb in mbits:
@@ -89,7 +151,7 @@ def generate_message_primes(
                     # Move onto the next query.
                     current_query -= 2
 
-        with savefile.open("wb") as f:
+        with open(filepath, "wb") as f:
             pickle.dump(mprimes, f)
 
     return mprimes
@@ -213,33 +275,6 @@ def cum_prod(x: list) -> list:
     return ret[1:]
 
 
-def plot_cumulative_relative_error(
-    sb: int = 40, N: int = 2**15, label: str = "Optimized", **kw
-):
-    how_many: int = maximum_levels(N=N, qbits=sb)
-    p: list = generate_alternating_prime_sequence(
-        sb=sb, N=N, how_many=how_many, **kw
-    )
-
-    # Check every prime in the sequence is unique.
-    unique_p: list = sorted(set(p))
-
-    err_msg = "There are repeating primes in the generate primes set!!!"
-    assert len(unique_p) == len(p), err_msg
-
-    scale: int = 2**sb
-    e: list = [scale / pi for pi in p]
-
-    y: list = cum_prod(e)
-
-    plt.plot(y, label=label)
-    plt.grid()
-    plt.show()
-    # Error propagation.
-    q: np.array = np.array(y) - 1
-    print(f"Error expanded {np.abs(q).max() / np.abs(q)[0]} times.")
-
-
 def pgen_pseq(sb, N, how_many: int) -> list | str:
     # TODO return 정리
     if how_many < 2:
@@ -255,11 +290,9 @@ def pgen_pseq(sb, N, how_many: int) -> list | str:
     return res
 
 
-def generate_scale_primes(
-    cache_folder=CACHE_FOLDER, how_many=64, ncpu_cutdown=32, verbose=0
-):
-    savefile = Path(cache_folder) / "scale_primes.pkl"
-    if savefile.exists():
+def generate_scale_primes(how_many=64, ncpu_cutdown=32, verbose=0):
+    savefile = os.path.join(CACHE_FOLDER, "scale_primes.pkl")
+    if os.path.exists(savefile):
         with open(savefile, "rb") as f:
             result_dict = pickle.load(f)
             return result_dict
@@ -269,7 +302,7 @@ def generate_scale_primes(
     # Cut down the number of n-cpus. It tends to slow down after 32.
     ncpu = min(ncpu, ncpu_cutdown)
 
-    logN, N, M = generate_N_M(cache_folder=cache_folder)
+    logN, N, M = generate_N_M()
 
     # Scale.
     logS = list(range(20, 55, 5))
@@ -281,13 +314,14 @@ def generate_scale_primes(
         for sb in logS:
             inputs.append((sb, n, how_many))
 
+    logger.info(f"Generating {len(inputs)} primes with {ncpu} cpus...")
     result = Parallel(n_jobs=ncpu, verbose=verbose)(
         delayed(pgen_pseq)(*inp) for inp in inputs
     )
 
     result_dict = {(sb, N): pr for (sb, N, how_many), pr in zip(inputs, result)}
 
-    with savefile.open("wb") as f:
+    with open(savefile, "wb") as f:
         pickle.dump(result_dict, f)
 
     return result_dict

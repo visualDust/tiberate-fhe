@@ -2,6 +2,7 @@
 .ignored
 *.pyi
 uv.lock
+tests/FxGraphDrawer/
 
 # poetry
 poetry.lock

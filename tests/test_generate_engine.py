@@ -27,7 +27,6 @@ def ckks_engine(
         "buffer_bit_length": 62,
         "sigma": 3.2,
         "uniform_ternary_secret": True,
-        "cache_folder": "cache/",
         "quantum": "post_quantum",
         "distribution": "uniform",
         "read_cache": read_cache,

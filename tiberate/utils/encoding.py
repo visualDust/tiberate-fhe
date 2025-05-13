@@ -4,6 +4,42 @@ from vdtoys.cache import CachedDict
 
 from tiberate.rng import RandNumGen
 
+
+def padding(
+    m: list | np.ndarray | torch.Tensor, num_slots: int
+) -> torch.Tensor:
+    """
+    Pad the input tensor or list to the specified number of slots.
+
+    Args:
+        m (list | np.ndarray | torch.Tensor): The input tensor or list to be padded.
+        num_slots (int): The number of slots to pad to.
+
+    Returns:
+        torch.Tensor: The padded tensor.
+    """
+    if isinstance(m, (int, float)):
+        m = [m]
+    # TODO raise error if length > num_slots ?
+    if isinstance(m, torch.Tensor):
+        assert (
+            len(m.shape) == 1
+        ), f"Input tensor should be 1D, but got {len(m.shape)}D."
+        m = m.clone()
+        m_len = m.shape[0]
+        device = m.device
+    else:
+        m_len = len(m)
+        device = None
+
+    if isinstance(m, torch.Tensor):
+        return torch.cat((m, torch.zeros(num_slots - m_len, device=device)))
+    else:
+        m_array = np.asarray(m)
+        padded = np.pad(m_array, (0, num_slots - m_len), constant_values=0)
+        return torch.tensor(padded, device=device)
+
+
 # ---------------------------------------------------------------
 # Permutation.
 # ---------------------------------------------------------------
@@ -290,9 +326,9 @@ def encode(
 
     pre_perm, post_perm = prepost_perms_cache[N, device]
 
-    mm = m * deviation  # todo check dtype m * deviation
+    mm = m * deviation  # todo check dtype m * deviation ?
     if isinstance(mm, torch.Tensor):
-        mm = mm.clone().to(device)
+        mm = mm.to(device, copy=True)
     mm = pre_permute(mm, pre_perm)
     twister = twister_cache[(N, device)]
     if return_without_scaling:

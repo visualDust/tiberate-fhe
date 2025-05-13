@@ -1,5 +1,3 @@
-import time
-
 from loguru import logger
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal
@@ -17,6 +15,8 @@ from textual.widgets import (
 
 from .. import BenchmarkBase
 from ..bench import benchreg
+from ..bench.interface import BenchmarkResult
+from .print_bench_result_vis import visualize_benchmark_result
 
 
 class BenchSelector(App):
@@ -127,7 +127,7 @@ class BenchSelector(App):
         if 0 <= index < len(self.bench_names):
             name = self.bench_names[index]
             self.current_bench = self.benches[name]
-            self.current_options = self.current_bench.get_bench_option2desc()
+            self.current_options = self.current_bench.get_option_name2desc()
 
             # Update right panel
             self.update_option_list()
@@ -198,12 +198,9 @@ def main():
         try:
             bench_instance = benchCls()
             available_bench_instances[name] = bench_instance
-            logger.success(f"Created benchmark instance {name}")
         except Exception as e:
             logger.error(f"Failed to initialize benchmark {name}: {e}")
-            continue
-
-    time.sleep(0.5)
+            raise e
 
     app = BenchSelector(available_bench_instances)
     app._should_run_bench = False
@@ -215,7 +212,25 @@ def main():
         logger.info(
             f"Running Benchmark: {app._selected_bench.name} | Option: {app._selected_option}]"
         )
-        app._selected_bench.run(app._selected_option)
+        try:
+            result = app._selected_bench.run(app._selected_option)
+            logger.success(f"Benchmark {app._selected_bench.name} completed.")
+            if result:
+                if not isinstance(result, BenchmarkResult):
+                    raise TypeError(
+                        f"Expected BenchmarkResult, got {type(result)}"
+                    )
+                logger.info("Retrieving result...")
+                visualize_benchmark_result(result)
+            else:
+                logger.warning(
+                    f"Benchmark {app._selected_bench.name} returned no result. Exiting."
+                )
+        except Exception as e:
+            logger.error(
+                f"Failed to run benchmark {app._selected_bench.name}: {e}"
+            )
+            raise e
 
 
 if __name__ == "__main__":

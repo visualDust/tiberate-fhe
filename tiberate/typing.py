@@ -13,7 +13,7 @@ from vdtoys.registry import Registry
 engClsRegistry = Registry("ENGINE_CLASS")
 
 if TYPE_CHECKING:  # avoid circular import
-    from tiberate.fhe.engine.ckks_engine import CkksEngine
+    from tiberate.engine.ckks_engine import CkksEngine
 
 
 def _default_none():
@@ -519,7 +519,9 @@ class Ciphertext(DataStruct):
 
     def level_up(self, dst_level: int, **kwargs):
         engine = self._default_engine
-        return engine.level_up(self, dst_level=dst_level, **kwargs)
+        return engine.level_up(
+            self, dst_level=dst_level, inplace=False, **kwargs
+        )
 
     def decryptcode(
         self, sk: "SecretKey" = None, is_real=False, final_round=True, **kwargs

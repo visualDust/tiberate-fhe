@@ -36,8 +36,7 @@ std::vector<torch::Tensor> randint_fast(std::vector<torch::Tensor> states,
 TORCH_LIBRARY_FRAGMENT(tiberate_csprng_ops, m) {
   m.def("randint(Tensor[](a!) input, int[] q_ptrs) -> ()");
   m.def(
-      "randint_fast(Tensor[] input, int[] q_ptrs, int shift, int step) "
-      "-> "
+      "randint_fast(Tensor[] input, int[] q_ptrs, int shift, int step) -> "
       "Tensor[]");
 }
 
