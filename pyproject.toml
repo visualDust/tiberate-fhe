@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "tiberate"
-version = "0.9.10"
+version = "0.9.11"
 description = "T(yped-l)iberate-fhe: a variant of Liberate-fhe with better typing"
 authors = [
     { name = "Juwhan Kim", email = "juwhan.kim@desilo.ai" },
