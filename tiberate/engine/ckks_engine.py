@@ -1188,7 +1188,7 @@ class CkksEngine:
     # -------------------------------------------------------------------------------------------
 
     # @strictype # enable when debugging
-    # @torch.compiler.disable()
+    @torch.compiler.disable()
     def rescale(self, ct: Ciphertext, exact_rounding=True) -> Ciphertext:
         level = ct.level
         next_level = level + 1
@@ -1300,7 +1300,9 @@ class CkksEngine:
         return EvaluationKey.wrap(self.create_key_switching_key(sk2, sk))
 
     # @strictype # enable when debugging
-    # @torch.compile(backend=tiberate.jit.tiberate_compiler)
+    # @torch.compile(
+    #     backend=tiberate.jit.tiberate_compiler
+    # )  # [INFO] this is disabled temporarily
     def cc_mult(
         self,
         a: Ciphertext,
