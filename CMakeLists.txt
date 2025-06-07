@@ -33,7 +33,14 @@ message(STATUS "Torch include dirs: ${TORCH_INCLUDE_DIRS}")
 set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_INCLUDES OFF)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
-set(MODULE_NAMES chacha20 discrete_gaussian mont ntt randint randround)
+set(MODULE_NAMES
+    chacha20
+    discrete_gaussian
+    mont
+    mont_fused
+    ntt
+    randint
+    randround)
 
 foreach(name IN LISTS MODULE_NAMES)
   add_library(${name} MODULE csrc/${name}.cpp csrc/cuda/${name}_cuda.cu)

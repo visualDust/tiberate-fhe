@@ -764,6 +764,11 @@ class NTTContext:
             a, b, self._2q_prepack[mult_type][lvl][part]
         )
 
+    def mont_add_reduce_2q(self, a, b, lvl=0, mult_type=-1, part=0):
+        return torch.ops.tiberate_fused_ops.mont_add_reduce_2q(
+            a, b, self._2q_prepack[mult_type][lvl][part]
+        )
+
     def mont_sub(self, a, b, lvl=0, mult_type=-1, part=0):
         return torch.ops.tiberate_ntt_ops.mont_sub(
             a, b, self._2q_prepack[mult_type][lvl][part]

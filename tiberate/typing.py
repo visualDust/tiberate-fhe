@@ -70,6 +70,10 @@ class DataStruct:
 
         self.level = level
         self.misc = defaultdict(_default_none)
+        if "misc" in kwargs:
+            # if kwargs has a misc key, update self.misc with it
+            self.misc.update(kwargs["misc"])
+            del kwargs["misc"]
         self.misc.update(kwargs)
 
     def has_flag(self, flag: FLAGS) -> bool:
@@ -125,7 +129,7 @@ class DataStruct:
             data=cls.copy_tensor_to_device_recursive(self.data, self.device),
             flags=self._flags,
             level=self.level,
-            **self.misc,
+            misc=self.misc,
         )
 
     @classmethod
@@ -140,7 +144,8 @@ class DataStruct:
             data=another.data,
             flags=another._flags,
             level=another.level,
-            **{**another.misc, **kwargs},  # another misc and kwargs
+            misc=another.misc,  # copy misc from another
+            **kwargs,
         )
 
     @classmethod

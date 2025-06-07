@@ -276,8 +276,8 @@ def rotate(m, delta):
     N = m.size(-1)
     C = m.numel() // N
 
-    shift = delta % N
-    leap = (3**shift - 1) // 2 % (N * 2)
+    delta = delta % N
+    leap = (3**delta - 1) // 2 % (N * 2)
 
     perm = canon_permutation_torch_cache[N, leap, m.device]
 

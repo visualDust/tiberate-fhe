@@ -15,7 +15,20 @@ from tiberate import errors
 from tiberate.config import CkksConfig, Preset
 from tiberate.context.ntt_context import NTTContext
 from tiberate.rng import Csprng
-from tiberate.typing import *  # noqa: F403
+from tiberate.typing import (
+    FLAGS,
+    Ciphertext,
+    CiphertextTriplet,
+    ConjugationKey,
+    EvaluationKey,
+    GaloisKey,
+    KeySwitchKey,
+    Plaintext,
+    PublicKey,
+    RotationKey,
+    ScalarMessageType,
+    SecretKey,
+)
 from tiberate.utils.massive import decompose_rot_offsets
 
 
@@ -593,11 +606,11 @@ class CkksEngine:
         self.nttCtx.intt_exit(vpk0, level, mult_type)
         self.nttCtx.intt_exit(vpk1, level, mult_type)
 
-        ct0 = self.nttCtx.mont_add(vpk0, pte0, level, mult_type)
-        ct1 = self.nttCtx.mont_add(vpk1, e1_tiled, level, mult_type)
+        ct0 = self.nttCtx.mont_add_reduce_2q(vpk0, pte0, level, mult_type)
+        ct1 = self.nttCtx.mont_add_reduce_2q(vpk1, e1_tiled, level, mult_type)
 
-        self.nttCtx.reduce_2q(ct0, level, mult_type)
-        self.nttCtx.reduce_2q(ct1, level, mult_type)
+        # self.nttCtx.reduce_2q(ct0, level, mult_type)
+        # self.nttCtx.reduce_2q(ct1, level, mult_type)
 
         ct = Ciphertext(
             data=[ct0, ct1],
@@ -1171,8 +1184,8 @@ class CkksEngine:
             a, ksk, level, exit_ntt=ct.has_flag(FLAGS.NTT_STATE)
         )
 
-        new_ct0 = self.nttCtx.mont_add(ct.data[0], d0, level, -1)
-        self.nttCtx.reduce_2q(new_ct0, level, -1)
+        new_ct0 = self.nttCtx.mont_add_reduce_2q(ct.data[0], d0, level, -1)
+        # self.nttCtx.reduce_2q(new_ct0, level, -1)
 
         return Ciphertext(
             data=[new_ct0, d1],
@@ -1181,6 +1194,7 @@ class CkksEngine:
             # following is metadata (not required args)
             logN=self.ckksCfg.logN,
             creator_hash=self.hash,
+            misc=ct.misc,
         )
 
     # -------------------------------------------------------------------------------------------
@@ -1281,6 +1295,7 @@ class CkksEngine:
             # following is metadata (not required args)
             logN=self.ckksCfg.logN,
             creator_hash=self.hash,
+            misc=ct.misc,
         )
 
     # @strictype # enable when debugging
@@ -1349,6 +1364,7 @@ class CkksEngine:
             # following is metadata (not required args)
             logN=self.ckksCfg.logN,
             creator_hash=self.hash,
+            misc=a.misc,  # todo)) what about b.misc? see also @CkksEngineEventTracer
         )
         if post_relin:
             evk = evk or self.evk
@@ -1393,6 +1409,7 @@ class CkksEngine:
             # following is metadata (not required args)
             logN=self.ckksCfg.logN,
             creator_hash=self.hash,
+            misc=ct_triplet.misc,
         )
 
     # -------------------------------------------------------------------------------------------
@@ -1458,6 +1475,7 @@ class CkksEngine:
             # following is metadata (not required args)
             logN=self.ckksCfg.logN,
             creator_hash=self.hash,
+            misc=ct.misc,
         )
         if post_key_switching:
             rotated_ct = self.switch_key(rotated_ct, rotk)
@@ -1565,10 +1583,10 @@ class CkksEngine:
 
         level = a.level
         data = []
-        c0 = self.nttCtx.mont_add(a.data[0], b.data[0], level)
-        c1 = self.nttCtx.mont_add(a.data[1], b.data[1], level)
-        self.nttCtx.reduce_2q(c0, level)
-        self.nttCtx.reduce_2q(c1, level)
+        c0 = self.nttCtx.mont_add_reduce_2q(a.data[0], b.data[0], level)
+        c1 = self.nttCtx.mont_add_reduce_2q(a.data[1], b.data[1], level)
+        # self.nttCtx.reduce_2q(c0, level)
+        # self.nttCtx.reduce_2q(c1, level)
         data.extend([c0, c1])
 
         return Ciphertext(
@@ -1577,6 +1595,7 @@ class CkksEngine:
             # following is metadata (not required args)
             logN=self.ckksCfg.logN,
             creator_hash=self.hash,
+            misc=a.misc,  # todo)) what about b.misc? see also @CkksEngineEventTracer
         )
 
     # @strictype # enable when debugging
@@ -1593,14 +1612,13 @@ class CkksEngine:
             raise errors.MontgomeryStateError(expected=True)
 
         level = a.level
-        data = []
-        c0 = self.nttCtx.mont_add(a.data[0], b.data[0], level)
-        c1 = self.nttCtx.mont_add(a.data[1], b.data[1], level)
-        self.nttCtx.reduce_2q(c0, level)
-        self.nttCtx.reduce_2q(c1, level)
-        data.extend([c0, c1])
-        c2 = self.nttCtx.mont_add(a.data[2], b.data[2], level)
-        self.nttCtx.reduce_2q(c2, level)
+        c0 = self.nttCtx.mont_add_reduce_2q(a.data[0], b.data[0], level)
+        c1 = self.nttCtx.mont_add_reduce_2q(a.data[1], b.data[1], level)
+        # self.nttCtx.reduce_2q(c0, level)
+        # self.nttCtx.reduce_2q(c1, level)
+        data = [c0, c1]
+        c2 = self.nttCtx.mont_add_reduce_2q(a.data[2], b.data[2], level)
+        # self.nttCtx.reduce_2q(c2, level)
         data.append(c2)
 
         return CiphertextTriplet(
@@ -1612,6 +1630,7 @@ class CkksEngine:
             # following is metadata (not required args)
             logN=self.ckksCfg.logN,
             creator_hash=self.hash,
+            misc=a.misc,  # todo)) what about b.misc? see also @CkksEngineEventTracer
         )
 
     def cc_add(
@@ -1657,6 +1676,7 @@ class CkksEngine:
             # following is metadata (not required args)
             logN=self.ckksCfg.logN,
             creator_hash=self.hash,
+            misc=a.misc,  # todo)) what about b.misc? see also @CkksEngineEventTracer
         )
 
     # @strictype # enable when debugging
@@ -1691,6 +1711,7 @@ class CkksEngine:
             # following is metadata (not required args)
             logN=self.ckksCfg.logN,
             creator_hash=self.hash,
+            misc=a.misc,  # todo)) what about b.misc? see also @CkksEngineEventTracer
         )
 
     # @strictype # enable when debugging
@@ -1781,6 +1802,7 @@ class CkksEngine:
             # following is metadata (not required args)
             logN=self.ckksCfg.logN,
             creator_hash=self.hash,
+            misc=new_ct.misc,
         )
 
         return new_ct
@@ -1873,11 +1895,11 @@ class CkksEngine:
         self.nttCtx.intt_exit(vpk0, level, mult_type)
         self.nttCtx.intt_exit(vpk1, level, mult_type)
 
-        ct0 = self.nttCtx.mont_add(vpk0, pte0, level, mult_type)
-        ct1 = self.nttCtx.mont_add(vpk1, e1_tiled, level, mult_type)
+        ct0 = self.nttCtx.mont_add_reduce_2q(vpk0, pte0, level, mult_type)
+        ct1 = self.nttCtx.mont_add_reduce_2q(vpk1, e1_tiled, level, mult_type)
 
-        self.nttCtx.reduce_2q(ct0, level, mult_type)
-        self.nttCtx.reduce_2q(ct1, level, mult_type)
+        # self.nttCtx.reduce_2q(ct0, level, mult_type)
+        # self.nttCtx.reduce_2q(ct1, level, mult_type)
 
         ct = Ciphertext(
             data=[ct0, ct1],

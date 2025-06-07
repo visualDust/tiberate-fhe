@@ -1,6 +1,9 @@
+import datetime
 import time
 
+import click
 from loguru import logger
+from vdtoys.ansi import legal_file_name_of
 from vdtoys.registry import Registry
 
 from tiberate import CkksEngine, Preset, errors
@@ -23,18 +26,17 @@ def test_lat_and_size_until_level_used_up(engine: CkksEngine) -> list[list]:
     result_table.append(
         [
             'level (in->out)',
-            'ct size (MB)',
             'cc_add latency (ms)',
             'cc_mult latency (ms) (no relin)',
             'cc_add_triplet latency (ms)',
             'relin latency (ms)',
             'pt_add latency (ms)',
-            'pt_add cache size (MB)',
             'pt_mult latency (ms) (no rescale)',
             'rescale latency (ms)',
-            'pt_mult cache size (MB)',
             'rotate latency (ms) (no key switching)',
             'key switching latency (ms)',
+            'ct size (MB)',
+            'pt cache size (MB)',
         ]
     )  # append header
     level_list = [0, *list(range(engine.num_levels))]  # first run is warmup
@@ -44,7 +46,7 @@ def test_lat_and_size_until_level_used_up(engine: CkksEngine) -> list[list]:
             ct = engine.encodecrypt([1, 2, 3, 4], level=i)
 
             # ct size
-            size_mb = (
+            ct_size_mb = (
                 calculate_ckks_cipher_datastruct_size_in_list_recursive(ct)
                 / 1e6
             )
@@ -127,18 +129,18 @@ def test_lat_and_size_until_level_used_up(engine: CkksEngine) -> list[list]:
             result_table.append(
                 [
                     f"{ct.level}->{ct_.level}" if idx else "warmup",
-                    size_mb,
                     lat_cadd,
                     lat_cmult_no_relin,
                     lat_cadd_tri,
                     lat_relin,
                     lat_pcadd,
-                    pt_add_cache_size,
                     lat_pcmult_no_rescale,
                     lat_rescale,
-                    pt_mult_cache_size,
                     lat_rotate,
                     lat_key_switch,
+                    ct_size_mb,
+                    pt_add_cache_size,
+                    # pt_mult_cache_size,
                 ]
             )
     except errors.MaximumLevelError as e:
@@ -245,6 +247,27 @@ class ConsumeAllLevelsBenchmark(BenchmarkBase):
             value=lat_table,
             description="Latency and size/level",
         )
+
+        """Prompt the user to optionally save benchmark results to a file."""
+        if click.confirm(
+            "Do you want to save the result after benchmark?", default=False
+        ):
+            default_filename = f"./{self.name}_{option_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            default_filename = legal_file_name_of(default_filename)
+            file_name = click.prompt(
+                "Enter file name to save the benchmark result",
+                default=default_filename,
+                show_default=True,
+            )
+            try:
+                with open(file_name, "w") as f:
+                    for row in lat_table:
+                        f.write(",".join(map(str, row)) + "\n")
+                logger.info(f"Benchmark result saved to {file_name}.")
+            except Exception as e:
+                logger.error(f"Failed to save benchmark result: {e}")
+        else:
+            logger.info("Benchmark result not saved.")
 
         return benchmark_result
 
