@@ -2,6 +2,7 @@ import datetime
 import time
 
 import click
+import torch
 from loguru import logger
 from vdtoys.ansi import legal_file_name_of
 from vdtoys.registry import Registry
@@ -200,17 +201,36 @@ class ConsumeAllLevelsBenchmark(BenchmarkBase):
                 # At current level check the error
                 dec_he_out = engine.decryptcode(packed_ct_1)
                 diff = input_tensor_1 - dec_he_out
-                max_diff = diff.max()
-                mean_diff = diff.mean()
-                max_diff_array.append(max_diff.real)
-                mean_diff_array.append(mean_diff.real)
+                max_diff = diff.float().max()
+                mean_diff = diff.float().mean()
+                max_diff_array.append(max_diff)
+                mean_diff_array.append(mean_diff)
 
-                # Perform the CMult operation to increase the level
+                # Ecrypt the input tensor to ciphertext
                 packed_ct_2 = engine.encodecrypt(
                     input_tensor_2, level=packed_ct_1.level
                 )
+
+                # Perform the CMult operation to increase the level
                 packed_ct_1 = engine.cc_mult(packed_ct_1, packed_ct_2)
                 input_tensor_1 = input_tensor_1 * input_tensor_2
+
+                # Perform CAdd+1 then PAdd+1
+                packed_ct_1 = engine.cc_add(packed_ct_1, packed_ct_2)
+                packed_ct_1 = engine.cc_sub(packed_ct_1, packed_ct_2)
+
+                # Do rotate
+                packed_ct_1 = engine.rotate_single(
+                    ct=packed_ct_1, rotk=engine.rotk[1]
+                )
+                input_tensor_1 = torch.roll(input_tensor_1, shifts=1, dims=0)
+
+                packed_ct_1 = engine.pc_add(
+                    pt=Plaintext([1]),
+                    ct=packed_ct_1,
+                )
+                input_tensor_1[0] += 1
+
         except errors.MaximumLevelError as e:
             pass  # reached max level
         except Exception as e:

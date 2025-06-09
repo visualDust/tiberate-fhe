@@ -764,11 +764,6 @@ class NTTContext:
             a, b, self._2q_prepack[mult_type][lvl][part]
         )
 
-    def mont_add_reduce_2q(self, a, b, lvl=0, mult_type=-1, part=0):
-        return torch.ops.tiberate_fused_ops.mont_add_reduce_2q(
-            a, b, self._2q_prepack[mult_type][lvl][part]
-        )
-
     def mont_sub(self, a, b, lvl=0, mult_type=-1, part=0):
         return torch.ops.tiberate_ntt_ops.mont_sub(
             a, b, self._2q_prepack[mult_type][lvl][part]
@@ -777,6 +772,24 @@ class NTTContext:
     def tile_unsigned(self, a, lvl=0, mult_type=-1, part=0):
         return torch.ops.tiberate_ntt_ops.tile_unsigned(
             a, self._2q_prepack[mult_type][lvl][part]
+        )
+
+    # ===========================================
+    # fused ops
+    # ===========================================
+
+    def mont_add_reduce_2q(self, a, b, lvl=0, mult_type=-1, part=0):
+        return torch.ops.tiberate_fused_ops.mont_add_reduce_2q(
+            a, b, self._2q_prepack[mult_type][lvl][part]
+        )
+
+    def mont_pc_add_fused(self, ct_data, pt_data, lvl=0, mult_type=-1, part=0):
+        return torch.ops.tiberate_fused_ops.pc_add_fused(
+            ct_data,
+            pt_data,
+            self._2q_prepack[mult_type][lvl][part],
+            self.Rs_prepack[mult_type][lvl][part],
+            *self.mont_prepack[mult_type][lvl][part],
         )
 
     def __repr__(self):

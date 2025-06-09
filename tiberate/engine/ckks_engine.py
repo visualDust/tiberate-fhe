@@ -1582,12 +1582,11 @@ class CkksEngine:
             raise errors.MontgomeryStateError(expected=False)
 
         level = a.level
-        data = []
         c0 = self.nttCtx.mont_add_reduce_2q(a.data[0], b.data[0], level)
         c1 = self.nttCtx.mont_add_reduce_2q(a.data[1], b.data[1], level)
         # self.nttCtx.reduce_2q(c0, level)
         # self.nttCtx.reduce_2q(c1, level)
-        data.extend([c0, c1])
+        data = [c0, c1]
 
         return Ciphertext(
             data=data,
@@ -2123,7 +2122,7 @@ class CkksEngine:
     # -------------------------------------------------------------------------------------------
 
     # @strictype # enable when debugging
-    def pc_add(
+    def pc_add_old(
         self,
         pt: Plaintext,
         ct: Ciphertext,
@@ -2141,15 +2140,37 @@ class CkksEngine:
         ]  # todo does rewrite to auto trace impact performance?
 
         # process ct
-
         new_ct = ct.clone() if not inplace else ct
 
         self.nttCtx.mont_enter(new_ct.data[0], ct.level)
-        new_d0 = self.nttCtx.mont_add(pt_, new_ct.data[0], ct.level)
-        self.nttCtx.mont_reduce(new_d0, ct.level)
-        self.nttCtx.reduce_2q(new_d0, ct.level)
-        new_ct.data[0] = new_d0
+        new_ct.data[0] = self.nttCtx.mont_add(new_ct.data[0], pt_, ct.level)
+        self.nttCtx.mont_reduce(new_ct.data[0], ct.level)
+        self.nttCtx.reduce_2q(new_ct.data[0], ct.level)
+
         return new_ct
+
+    def pc_add(self, pt: Plaintext, ct: Ciphertext, inplace: bool = False):
+        # process cache
+        if str(self.pc_add) not in pt.cache[ct.level]:
+            m = pt.src * math.sqrt(self.deviations[ct.level + 1])
+            pt_ = self.encode(m, ct.level, scale=pt.scale)
+            pt_ = self.nttCtx.tile_unsigned(pt_, ct.level)
+            self.nttCtx.mont_enter_scale(pt_, ct.level)
+            pt.cache[ct.level][str(self.pc_add)] = pt_
+        pt_ = pt.cache[ct.level][
+            str(self.pc_add)
+        ]  # todo does rewrite to auto trace impact performance?
+
+        new_d0 = self.nttCtx.mont_pc_add_fused(
+            ct_data=ct.data[0], pt_data=pt_, lvl=ct.level
+        )
+        if inplace:
+            ct.data[0] = new_d0
+            return ct
+        else:
+            new_ct = ct.clone()
+            new_ct.data[0] = new_d0
+            return new_ct
 
     # @strictype # enable when debugging
     def pc_mult(
@@ -2450,7 +2471,7 @@ class CkksEngine:
         decimal_places: int = 10,
         level=0,
         return_src=False,
-    ) -> np.array:
+    ) -> torch.Tensor:
         def integral_bits_available(self):
             base_prime = self.base_prime
             max_bits = math.floor(math.log2(base_prime))
@@ -2465,11 +2486,11 @@ class CkksEngine:
 
         base = 10**decimal_places
         a = (
-            np.random.randint(amin * base, amax * base, self.ckksCfg.N // 2)
+            torch.randint(amin * base, amax * base, (self.ckksCfg.N // 2,))
             / base
         )
         b = (
-            np.random.randint(amin * base, amax * base, self.ckksCfg.N // 2)
+            torch.randint(amin * base, amax * base, (self.ckksCfg.N // 2,))
             / base
         )
 
@@ -2481,6 +2502,46 @@ class CkksEngine:
         )
 
         return (encrypted, sample) if return_src else encrypted
+
+    def zeros(
+        self,
+        level: int = 0,
+    ) -> Ciphertext:
+        """
+        Returns a zero ciphertext at the specified level.
+        """
+        raw = torch.zeros(
+            self.num_slots,
+        )
+        ct = self.encodecrypt(m=raw, level=level)
+        return ct
+
+    # def ones(
+    #     self,
+    #     level: int = 0,
+    # ) -> Ciphertext:
+    #     """
+    #     Returns a one ciphertext at the specified level.
+    #     """
+    #     raw = torch.ones(
+    #         self.num_slots,
+    #     )
+    #     ct = self.encodecrypt(m=raw, level=level)
+    #     return ct
+
+    # def full(self, value, level: int = 0) -> Ciphertext:
+    #     """
+    #     Returns a ciphertext with all slots filled with the specified value.
+    #     """
+    #     if isinstance(value, (int, float)):
+    #         value = [value] * self.num_slots
+    #     elif isinstance(value, list) and len(value) != self.num_slots:
+    #         raise ValueError(
+    #             f"Value must be a list of length {self.num_slots}."
+    #         )
+    #     raw = torch.tensor(value)
+    #     ct = self.encodecrypt(m=raw, level=level)
+    #     return ct
 
     # @strictype # enable when debugging
     def var(
