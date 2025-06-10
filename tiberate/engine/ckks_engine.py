@@ -1202,8 +1202,7 @@ class CkksEngine:
     # -------------------------------------------------------------------------------------------
 
     # @strictype # enable when debugging
-    @torch.compiler.disable()
-    def rescale(self, ct: Ciphertext, exact_rounding=True) -> Ciphertext:
+    def rescale_old(self, ct: Ciphertext, exact_rounding=True) -> Ciphertext:
         level = ct.level
         next_level = level + 1
 
@@ -1260,10 +1259,33 @@ class CkksEngine:
 
             round_at = self.montCtx.q[rescale_channel_prime_id] // 2
 
+            # a copy of data0 for debug
+            data0_copy = [d.clone() for d in data0]
+            torch.ops.tiberate_fused_ops.rescale_exact_rounding_fused(
+                data0_copy,
+                rescaling_scales,
+                rescaler0,
+                round_at,
+                self.nttCtx._2q_prepack[-1][next_level][0],
+                *self.nttCtx.mont_prepack[-1][next_level][0],
+            )
+
+            # a copy of data1 for debug
+            data1_copy = [d.clone() for d in data1]
+            torch.ops.tiberate_fused_ops.rescale_exact_rounding_fused(
+                data1_copy,
+                rescaling_scales,
+                rescaler1,
+                round_at,
+                self.nttCtx._2q_prepack[-1][next_level][0],
+                *self.nttCtx.mont_prepack[-1][next_level][0],
+            )
+
             rounder0 = [[] for _ in range(len_devices_before)]
             rounder1 = [[] for _ in range(len_devices_before)]
 
             for device_id in range(len_devices_after):
+                # create mask tensor rounder[] that contains 1 wherever rescaler[device_id] > round_at, and 0 elsewhere.
                 rounder0[device_id] = torch.where(
                     rescaler0[device_id] > round_at, 1, 0
                 )
@@ -1274,13 +1296,9 @@ class CkksEngine:
         data0 = [(d - s) for d, s in zip(data0, rescaler0)]
         data1 = [(d - s) for d, s in zip(data1, rescaler1)]
 
-        self.nttCtx.mont_enter_scalar(
-            data0, self.rescale_scales[level], next_level
-        )
+        self.nttCtx.mont_enter_scalar(data0, rescaling_scales, next_level)
 
-        self.nttCtx.mont_enter_scalar(
-            data1, self.rescale_scales[level], next_level
-        )
+        self.nttCtx.mont_enter_scalar(data1, rescaling_scales, next_level)
 
         if exact_rounding:
             data0 = [(d + r) for d, r in zip(data0, rounder0)]
@@ -1288,6 +1306,116 @@ class CkksEngine:
 
         self.nttCtx.reduce_2q(data0, next_level)
         self.nttCtx.reduce_2q(data1, next_level)
+
+        diff0 = data0[0] - data0_copy[0]
+        diff1 = data1[0] - data1_copy[0]
+        assert torch.allclose(diff0, torch.zeros_like(diff0), atol=1e-5)
+        assert torch.allclose(diff1, torch.zeros_like(diff1), atol=1e-5)
+
+        return Ciphertext(
+            data=[data0, data1],
+            level=next_level,
+            # following is metadata (not required args)
+            logN=self.ckksCfg.logN,
+            creator_hash=self.hash,
+            misc=ct.misc,
+        )
+
+    # @strictype # enable when debugging
+    def rescale(
+        self, ct: Ciphertext, exact_rounding=True, inplace=False
+    ) -> Ciphertext:
+        ct = ct.clone() if not inplace else ct
+        level = ct.level
+        next_level = level + 1
+
+        if next_level >= self.num_levels:
+            raise errors.MaximumLevelError(
+                level=ct.level, level_max=self.num_levels
+            )
+
+        rescaler_device_id = self.rnsPart.rescaler_loc[level]
+        neighbor_devices_before = self.neighbor_devices[level]
+        neighbor_devices_after = self.neighbor_devices[next_level]
+        len_devices_after = len(neighbor_devices_after)
+        len_devices_before = len(neighbor_devices_before)
+
+        rescaling_scales = self.rescale_scales[level]
+        data0 = [[] for _ in range(len_devices_after)]
+        data1 = [[] for _ in range(len_devices_after)]
+
+        rescaler0 = [[] for _ in range(len_devices_before)]
+        rescaler1 = [[] for _ in range(len_devices_before)]
+
+        rescaler0_at = ct.data[0][rescaler_device_id][0]
+        rescaler0[rescaler_device_id] = rescaler0_at
+
+        rescaler1_at = ct.data[1][rescaler_device_id][0]
+        rescaler1[rescaler_device_id] = rescaler1_at
+
+        if rescaler_device_id < len_devices_after:
+            data0[rescaler_device_id] = ct.data[0][rescaler_device_id][1:]
+            data1[rescaler_device_id] = ct.data[1][rescaler_device_id][1:]
+
+        CPU_rescaler0 = self.ksk_buffers[0][0][0]
+        CPU_rescaler1 = self.ksk_buffers[0][1][0]
+
+        CPU_rescaler0.copy_(rescaler0_at, non_blocking=True)
+        CPU_rescaler1.copy_(rescaler1_at, non_blocking=True)
+
+        for device_id in neighbor_devices_before[rescaler_device_id]:
+            device = self.nttCtx.devices[device_id]
+            CUDA_rescaler0 = CPU_rescaler0.cuda(device)
+            CUDA_rescaler1 = CPU_rescaler1.cuda(device)
+
+            rescaler0[device_id] = CUDA_rescaler0
+            rescaler1[device_id] = CUDA_rescaler1
+
+            if device_id < len_devices_after:
+                data0[device_id] = ct.data[0][device_id]
+                data1[device_id] = ct.data[1][device_id]
+
+        # ========== kernel start from here ==========
+        # one kernel for exact rounding and one for non-exact rounding
+
+        if exact_rounding:
+            rescale_channel_prime_id = self.rnsPart.destination_arrays[level][
+                rescaler_device_id
+            ][0]
+
+            round_at = self.montCtx.q[rescale_channel_prime_id] // 2
+            torch.ops.tiberate_fused_ops.rescale_exact_rounding_fused(
+                data0,
+                rescaling_scales,
+                rescaler0,
+                round_at,
+                self.nttCtx._2q_prepack[-1][next_level][0],
+                *self.nttCtx.mont_prepack[-1][next_level][0],
+            )
+            torch.ops.tiberate_fused_ops.rescale_exact_rounding_fused(
+                data1,
+                rescaling_scales,
+                rescaler1,
+                round_at,
+                self.nttCtx._2q_prepack[-1][next_level][0],
+                *self.nttCtx.mont_prepack[-1][next_level][0],
+            )
+
+        else:
+            torch.ops.tiberate_fused_ops.rescale_non_exact_rounding_fused(
+                data0,
+                rescaling_scales,
+                rescaler0,
+                self.nttCtx._2q_prepack[-1][next_level][0],
+                *self.nttCtx.mont_prepack[-1][next_level][0],
+            )
+            torch.ops.tiberate_fused_ops.rescale_non_exact_rounding_fused(
+                data1,
+                rescaling_scales,
+                rescaler1,
+                self.nttCtx._2q_prepack[-1][next_level][0],
+                *self.nttCtx.mont_prepack[-1][next_level][0],
+            )
 
         return Ciphertext(
             data=[data0, data1],

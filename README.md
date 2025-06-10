@@ -1,6 +1,6 @@
 # What is this
 
-This is a variant of [Desilo/liberate-fhe](https://github.com/Desilo/liberate-fhe) with better typing and some user friendly features. This fork has left fork network and will not return to the original branch.
+This is a variant of [Desilo/liberate-fhe](https://github.com/Desilo/liberate-fhe) with better typing, optimized GPU kernels and some user friendly features. This fork has left fork network and will not return to the original branch.
 
 > [!CAUTION]
 > This might not be a drop-in replacement for the original one, but it should be compatible with most of the code.

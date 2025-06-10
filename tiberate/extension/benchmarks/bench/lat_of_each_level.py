@@ -231,6 +231,9 @@ class ConsumeAllLevelsBenchmark(BenchmarkBase):
                 )
                 input_tensor_1[0] += 1
 
+                packed_ct_1 = engine.pc_mult(pt=Plaintext([1]), ct=packed_ct_1)
+                input_tensor_1[0] *= 1
+
         except errors.MaximumLevelError as e:
             pass  # reached max level
         except Exception as e:
