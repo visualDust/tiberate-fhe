@@ -39,6 +39,7 @@ set(MODULE_NAMES
     mont
     mont_fused
     ntt
+    ntt_fused
     randint
     randround)
 

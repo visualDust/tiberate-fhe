@@ -730,17 +730,17 @@ class NTTContext:
         )
 
     def intt_exit(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.intt_exit(
+        torch.ops.tiberate_fused_ops.intt_exit(
             a, *self.intt_prepack[mult_type][lvl][part]
         )
 
     def intt_exit_reduce(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.intt_exit_reduce(
+        torch.ops.tiberate_fused_ops.intt_exit_reduce(
             a, *self.intt_prepack[mult_type][lvl][part]
         )
 
     def intt_exit_reduce_signed(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.intt_exit_reduce_signed(
+        torch.ops.tiberate_fused_ops.intt_exit_reduce_signed(
             a, *self.intt_prepack[mult_type][lvl][part]
         )
 
