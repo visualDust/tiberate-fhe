@@ -1609,6 +1609,52 @@ class CkksEngine:
             rotated_ct = self.switch_key(rotated_ct, rotk)
         return rotated_ct
 
+    def rotate_single_new(
+        self,
+        ct: Ciphertext,
+        rotk: RotationKey,
+        post_key_switching=True,
+    ) -> Ciphertext:
+
+        level = ct.level
+        mult_type = -2 if ct.has_flag(FLAGS.INCLUDE_SPECIAL) else -1
+
+        N = ct.data[0][0].size(-1)
+        # C = ct.data[0][0].numel() // N
+        delta = rotk.delta % N
+        leap = (3**delta - 1) // 2 % (N * 2)
+
+        perm = [
+            codec.canon_permutation_torch_cache[N, leap, ct.data[0][i].device]
+            for i in range(len(ct.data[0]))
+        ]  # perm for all devices
+
+        rotated_ct_data = []
+
+        for ct_data in ct.data:
+            rotated_ct_data.append(
+                [
+                    torch.ops.tiberate_fused_ops.codec_rotate_make_unsigned_reduce_2q(
+                        ct_data,
+                        perm,
+                        self.nttCtx._2q_prepack[mult_type][level][0],
+                    )
+                ]
+            )
+
+        rotated_ct = Ciphertext(
+            data=rotated_ct_data,
+            flags=ct._flags,
+            level=level,
+            # following is metadata (not required args)
+            logN=self.ckksCfg.logN,
+            creator_hash=self.hash,
+            misc=ct.misc,
+        )
+        if post_key_switching:
+            rotated_ct = self.switch_key(rotated_ct, rotk)
+        return rotated_ct
+
     # @strictype # enable when debugging
     def _create_galois_key(self, sk: SecretKey = None) -> GaloisKey:
         sk = sk or self.sk
@@ -1789,13 +1835,9 @@ class CkksEngine:
             raise errors.MontgomeryStateError(expected=False)
 
         level = a.level
-        data = []
-
-        c0 = self.nttCtx.mont_sub(a.data[0], b.data[0], level)
-        c1 = self.nttCtx.mont_sub(a.data[1], b.data[1], level)
-        self.nttCtx.reduce_2q(c0, level)
-        self.nttCtx.reduce_2q(c1, level)
-        data.extend([c0, c1])
+        c0 = self.nttCtx.mont_sub_reduce_2q(a.data[0], b.data[0], level)
+        c1 = self.nttCtx.mont_sub_reduce_2q(a.data[1], b.data[1], level)
+        data = [c0, c1]
 
         return Ciphertext(
             data=data,
@@ -1820,14 +1862,10 @@ class CkksEngine:
             raise errors.MontgomeryStateError(expected=True)
 
         level = a.level
-        data = []
-        c0 = self.nttCtx.mont_sub(a.data[0], b.data[0], level)
-        c1 = self.nttCtx.mont_sub(a.data[1], b.data[1], level)
-        c2 = self.nttCtx.mont_sub(a.data[2], b.data[2], level)
-        self.nttCtx.reduce_2q(c0, level)
-        self.nttCtx.reduce_2q(c1, level)
-        self.nttCtx.reduce_2q(c2, level)
-        data.extend([c0, c1, c2])
+        c0 = self.nttCtx.mont_sub_reduce_2q(a.data[0], b.data[0], level)
+        c1 = self.nttCtx.mont_sub_reduce_2q(a.data[1], b.data[1], level)
+        c2 = self.nttCtx.mont_sub_reduce_2q(a.data[2], b.data[2], level)
+        data = [c0, c1, c2]
 
         return CiphertextTriplet(
             data=data,

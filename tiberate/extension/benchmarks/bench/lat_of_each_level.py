@@ -215,7 +215,7 @@ class ConsumeAllLevelsBenchmark(BenchmarkBase):
                 packed_ct_1 = engine.cc_mult(packed_ct_1, packed_ct_2)
                 input_tensor_1 = input_tensor_1 * input_tensor_2
 
-                # Perform CAdd+1 then PAdd+1
+                # Perform CAdd+1 then CSub-1
                 packed_ct_1 = engine.cc_add(packed_ct_1, packed_ct_2)
                 packed_ct_1 = engine.cc_sub(packed_ct_1, packed_ct_2)
 
