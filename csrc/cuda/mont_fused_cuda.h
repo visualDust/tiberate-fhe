@@ -45,7 +45,3 @@ void rescale_non_exact_rounding_fused_cuda(
     const torch::Tensor qh,
     const torch::Tensor kl,
     const torch::Tensor kh);
-
-// torch::Tensor codec_rotate_make_unsigned_reduce_2q_cuda(
-//     const torch::Tensor in, const torch::Tensor perm, const torch::Tensor
-//     _2q);

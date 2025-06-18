@@ -916,7 +916,9 @@ class CkksEngine:
         return state
 
     # @torch.compile(backend=tiberate_compiler)
-    def extend(self, state, device_id, level, part_id, target_device_id=None):
+    def extend_old(
+        self, state, device_id, level, part_id, target_device_id=None
+    ):
         # Note that device_id, level, and part_id is from
         # where the state has been originally calculated at.
         # The state can reside in a different GPU than
@@ -957,8 +959,39 @@ class CkksEngine:
                 [Y], [L_enter[i][start:]], level, target_device_id, -2
             )
             extended = self.nttCtx.mont_add(
-                [extended], [Y], level, target_device_id, -2
+                [Y], [extended], level, target_device_id, -2
             )[0]
+
+        # Returned extended is in the Montgomery format.
+        return extended
+
+    def extend(self, state, device_id, level, part_id, target_device_id=None):
+        # Note that device_id, level, and part_id is from
+        # where the state has been originally calculated at.
+        # The state can reside in a different GPU than
+        # the original one.
+
+        if target_device_id is None:
+            target_device_id = device_id
+
+        # Generate the search key to find the L_enter.
+        part = self.rnsPart.p[level][device_id][part_id]
+        key = tuple(part)
+        # Extract the L_enter in the target device.
+        L_enter = self.nttCtx.parts_pack[device_id][key]["L_enter"][
+            target_device_id
+        ]
+        start = self.nttCtx.starts[level][target_device_id]
+        extended = (
+            torch.ops.tiberate_fused_ops.switch_key_switch_later_part_extend(
+                state,
+                torch.stack(L_enter) if L_enter else torch.empty(0),
+                start,
+                self.nttCtx._2q_prepack[target_device_id][level][-2],
+                self.nttCtx.Rs_prepack[target_device_id][level][-2],
+                *self.nttCtx.mont_prepack[target_device_id][level][-2],
+            )
+        )
 
         # Returned extended is in the Montgomery format.
         return extended
@@ -1595,52 +1628,6 @@ class CkksEngine:
         for ct_data in rotated_ct_data:
             self.nttCtx.make_unsigned(ct_data, level, mult_type)
             self.nttCtx.reduce_2q(ct_data, level, mult_type)
-
-        rotated_ct = Ciphertext(
-            data=rotated_ct_data,
-            flags=ct._flags,
-            level=level,
-            # following is metadata (not required args)
-            logN=self.ckksCfg.logN,
-            creator_hash=self.hash,
-            misc=ct.misc,
-        )
-        if post_key_switching:
-            rotated_ct = self.switch_key(rotated_ct, rotk)
-        return rotated_ct
-
-    def rotate_single_new(
-        self,
-        ct: Ciphertext,
-        rotk: RotationKey,
-        post_key_switching=True,
-    ) -> Ciphertext:
-
-        level = ct.level
-        mult_type = -2 if ct.has_flag(FLAGS.INCLUDE_SPECIAL) else -1
-
-        N = ct.data[0][0].size(-1)
-        # C = ct.data[0][0].numel() // N
-        delta = rotk.delta % N
-        leap = (3**delta - 1) // 2 % (N * 2)
-
-        perm = [
-            codec.canon_permutation_torch_cache[N, leap, ct.data[0][i].device]
-            for i in range(len(ct.data[0]))
-        ]  # perm for all devices
-
-        rotated_ct_data = []
-
-        for ct_data in ct.data:
-            rotated_ct_data.append(
-                [
-                    torch.ops.tiberate_fused_ops.codec_rotate_make_unsigned_reduce_2q(
-                        ct_data,
-                        perm,
-                        self.nttCtx._2q_prepack[mult_type][level][0],
-                    )
-                ]
-            )
 
         rotated_ct = Ciphertext(
             data=rotated_ct_data,

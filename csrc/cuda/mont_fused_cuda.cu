@@ -205,9 +205,9 @@ void pc_add_fused_cuda_typed(const torch::Tensor ct_data,
   dim3 dim_grid(C, N / BLOCK_SIZE);
 
   // Run the cuda kernel.
-  auto ct_acc = ct_data.packed_accessor32<scalar_t, 2>();
-  auto pt_acc = pt_data.packed_accessor32<scalar_t, 2>();
   auto out_acc = out.packed_accessor32<scalar_t, 2>();
+  const auto ct_acc = ct_data.packed_accessor32<scalar_t, 2>();
+  const auto pt_acc = pt_data.packed_accessor32<scalar_t, 2>();
   const auto _2q_acc = _2q.packed_accessor32<scalar_t, 1>();
   const auto Rs_acc = Rs.packed_accessor32<scalar_t, 1>();
   const auto ql_acc = ql.packed_accessor32<scalar_t, 1>();
@@ -438,79 +438,3 @@ void rescale_non_exact_rounding_fused_cuda(
             a, Rs, rescaler, _2q, ql, qh, kl, kh);
       }));
 }
-
-// ------------------------------------------------------------------
-// codec.rotate
-// ------------------------------------------------------------------
-
-// template <typename scalar_t>
-// __global__ void codec_rotate_make_unsigned_reduce_2q_kernel(
-//     const torch::PackedTensorAccessor32<scalar_t, 2> in_acc,
-//     torch::PackedTensorAccessor32<scalar_t, 2> out_acc,
-//     const torch::PackedTensorAccessor32<scalar_t, 1> perm_acc,
-//     const torch::PackedTensorAccessor32<scalar_t, 1> _2q_acc) {
-//   const int i = blockIdx.x;                             // batch index
-//   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;  // within-row index
-
-//   // if (j >= in_acc.size(1)) {
-//   //   printf("j >= in_acc.size(1) %d >= %d\n", j, in_acc.size(1));  // debug
-//   //   return;
-//   // }
-
-//   const scalar_t in_val = in_acc[i][j];
-//   const scalar_t p = perm_acc[j];  // permutation index
-//   const scalar_t folded_j = p % in_acc.size(1);
-//   const scalar_t sign = (p / in_acc.size(1)) % 2 == 0 ? 1 : -1;
-//   const scalar_t q = _2q_acc[i] >> 1;
-
-//   scalar_t rotated = sign * in_val;
-
-//   // Make unsigned
-//   rotated += q;
-
-//   // Reduce to q
-//   rotated = (rotated < q) ? rotated : rotated - q;
-
-//   // Store result
-//   out_acc[i][folded_j] = rotated;
-// }
-
-// template <typename scalar_t>
-// void codec_rotate_make_unsigned_reduce_2q_cuda_typed(const torch::Tensor in,
-//                                                      torch::Tensor out,
-//                                                      const torch::Tensor
-//                                                      perm, const
-//                                                      torch::Tensor _2q) {
-//   auto device_id = in.device().index();
-//   cudaSetDevice(device_id);
-//   auto stream = at::cuda::getCurrentCUDAStream(device_id);
-
-//   const int C = in.size(0);
-//   const int N = in.size(1);
-
-//   int dim_block = BLOCK_SIZE;
-//   dim3 dim_grid(C, N / BLOCK_SIZE);
-
-//   auto out_acc = out.packed_accessor32<scalar_t, 2>();
-//   auto in_acc = in.packed_accessor32<scalar_t, 2>();
-//   auto _2q_acc = _2q.packed_accessor32<scalar_t, 1>();
-//   auto perm_acc = perm.packed_accessor32<scalar_t, 1>();
-
-//   codec_rotate_make_unsigned_reduce_2q_kernel<scalar_t>
-//       <<<dim_grid, dim_block, 0, stream>>>(in_acc, out_acc, perm_acc,
-//       _2q_acc);
-// }
-
-// torch::Tensor codec_rotate_make_unsigned_reduce_2q_cuda(
-//     const torch::Tensor in, const torch::Tensor perm, const torch::Tensor
-//     _2q) {
-//   torch::Tensor out = torch::empty_like(in);
-
-//   AT_DISPATCH_INTEGRAL_TYPES(
-//       in.scalar_type(), "typed_codec_rotate_unsigned_reduce_2q", ([&] {
-//         codec_rotate_make_unsigned_reduce_2q_cuda_typed<scalar_t>(
-//             in, out, perm, _2q);
-//       }));
-
-//   return out;
-// }
