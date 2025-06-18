@@ -973,7 +973,11 @@ class CkksEngine:
 
         if target_device_id is None:
             target_device_id = device_id
-
+        rns_len = len(
+            self.rnsPart.destination_arrays_with_special[level][
+                target_device_id
+            ]
+        )
         # Generate the search key to find the L_enter.
         part = self.rnsPart.p[level][device_id][part_id]
         key = tuple(part)
@@ -984,8 +988,13 @@ class CkksEngine:
         start = self.nttCtx.starts[level][target_device_id]
         extended = (
             torch.ops.tiberate_fused_ops.switch_key_switch_later_part_extend(
+                rns_len,
                 state,
-                torch.stack(L_enter) if L_enter else torch.empty(0),
+                (
+                    torch.stack(L_enter)
+                    if L_enter
+                    else torch.zeros(1, 1, dtype=state.dtype)
+                ),
                 start,
                 self.nttCtx._2q_prepack[target_device_id][level][-2],
                 self.nttCtx.Rs_prepack[target_device_id][level][-2],

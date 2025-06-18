@@ -3,6 +3,7 @@
 #include "extensions.h"
 
 torch::Tensor switch_key_switch_later_part_extend(
+    const int64_t rns_len,
     const torch::Tensor state,
     const torch::Tensor l_enter,
     const int64_t l_enter_start_offset,
@@ -12,8 +13,8 @@ torch::Tensor switch_key_switch_later_part_extend(
     const std::vector<torch::Tensor> qh,
     const std::vector<torch::Tensor> kl,
     const std::vector<torch::Tensor> kh) {
-  printf("11111");
-  auto out = switch_key_switch_later_part_extend_cuda(state,
+  auto out = switch_key_switch_later_part_extend_cuda(rns_len,
+                                                      state,
                                                       l_enter,
                                                       l_enter_start_offset,
                                                       _2q[0],
@@ -27,7 +28,8 @@ torch::Tensor switch_key_switch_later_part_extend(
 
 TORCH_LIBRARY_FRAGMENT(tiberate_fused_ops, m) {
   m.def(
-      "switch_key_switch_later_part_extend(Tensor state, Tensor l_enter, int "
+      "switch_key_switch_later_part_extend(int rns_len, Tensor state, Tensor "
+      "l_enter, int "
       "l_enter_start_offset, Tensor[] _2q, Tensor[] Rs, Tensor[] ql, Tensor[] "
       "qh, Tensor[] kl, Tensor[] kh) -> Tensor");
 }

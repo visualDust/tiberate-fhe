@@ -65,7 +65,7 @@ void switch_key_switch_later_part_extend_cuda_typed(
   auto device_id = state.device().index();
   cudaSetDevice(device_id);
   auto stream = at::cuda::getCurrentCUDAStream(device_id);
-  auto C = l_enter.size(0);
+  auto C = out.size(0);
   auto N = state.size(1);
 
   int dim_block = BLOCK_SIZE;
@@ -95,6 +95,7 @@ void switch_key_switch_later_part_extend_cuda_typed(
 }
 
 torch::Tensor switch_key_switch_later_part_extend_cuda(
+    const int64_t rns_len,
     const torch::Tensor state,
     const torch::Tensor l_enter,
     const int64_t l_enter_start_offset,
@@ -104,8 +105,7 @@ torch::Tensor switch_key_switch_later_part_extend_cuda(
     const torch::Tensor qh,
     const torch::Tensor kl,
     const torch::Tensor kh) {
-  torch::Tensor out =
-      torch::empty({l_enter.size(1), state.size(1)}, state.options());
+  torch::Tensor out = torch::empty({rns_len, state.size(1)}, state.options());
 
   AT_DISPATCH_INTEGRAL_TYPES(
       state.scalar_type(), "switch_key_switch_later_part_extend_cuda", [&] {
