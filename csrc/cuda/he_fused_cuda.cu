@@ -3,6 +3,7 @@
 #include <c10/cuda/CUDAStream.h>
 #include <torch/csrc/autograd/generated/variable_factories.h>
 #include <cstdint>
+#include <cstdio>
 #include "../extensions.h"
 #include "mont_common.cuh"
 
@@ -111,6 +112,82 @@ torch::Tensor switch_key_switch_later_part_extend_cuda(
       state.scalar_type(), "switch_key_switch_later_part_extend_cuda", [&] {
         switch_key_switch_later_part_extend_cuda_typed<scalar_t>(
             out, state, l_enter, l_enter_start_offset, _2q, Rs, ql, qh, kl, kh);
+      });
+
+  return out;
+}
+
+// ------------------------------------------------------------------
+// rotate_single - codec_rotate
+// ------------------------------------------------------------------
+
+template <typename scalar_t>
+__global__ void codec_rotate_make_unsigned_reduce_2q_cuda_kernel(
+    torch::PackedTensorAccessor32<scalar_t, 2> out_acc,
+    const torch::PackedTensorAccessor32<scalar_t, 2> a_acc,
+    const torch::PackedTensorAccessor32<scalar_t, 1> perm_acc,
+    const torch::PackedTensorAccessor32<scalar_t, 1> _2q_acc) {
+  const int i = blockIdx.x;                             // batch index
+  const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;  // position index
+
+  const int N = a_acc.size(1);
+  if (j >= N) {
+    printf("debug: j >= N, j: %d, N: %d\n", j, N);
+    return;
+  }
+
+  const scalar_t perm = perm_acc[j];
+  const scalar_t perm_folded = perm % N;
+
+  // Compute sign = (-1)^(perm // N)
+  const scalar_t perm_sign = ((perm / N) & 1) ? -1 : 1;
+
+  // Read input
+  scalar_t x = a_acc[i][j];
+  x *= perm_sign;
+
+  // Load 2q
+  const scalar_t _2q = _2q_acc[i];
+
+  // Apply unsigned conversion and reduction
+  x = make_unsigned_scalar_cuda_kernel(x, _2q);
+  x = reduce_2q_scalar_cuda_kernel(x, _2q);
+
+  // Write output
+  out_acc[i][perm_folded] = x;
+}
+
+template <typename scalar_t>
+void codec_rotate_make_unsigned_reduce_2q_cuda_typed(torch::Tensor out,
+                                                     const torch::Tensor a,
+                                                     const torch::Tensor perm,
+                                                     const torch::Tensor _2q) {
+  auto device_id = a.device().index();
+  cudaSetDevice(device_id);
+  auto stream = at::cuda::getCurrentCUDAStream(device_id);
+  auto C = out.size(0);
+  auto N = a.size(1);
+
+  int dim_block = BLOCK_SIZE;
+  dim3 dim_grid(C, (N + BLOCK_SIZE - 1) / BLOCK_SIZE);
+
+  auto out_acc = out.packed_accessor32<scalar_t, 2>();
+  const auto a_acc = a.packed_accessor32<scalar_t, 2>();
+  const auto perm_acc = perm.packed_accessor32<scalar_t, 1>();
+  const auto _2q_acc = _2q.packed_accessor32<scalar_t, 1>();
+
+  codec_rotate_make_unsigned_reduce_2q_cuda_kernel<scalar_t>
+      <<<dim_grid, dim_block, 0, stream>>>(out_acc, a_acc, perm_acc, _2q_acc);
+}
+
+torch::Tensor codec_rotate_make_unsigned_reduce_2q_cuda(
+    const torch::Tensor a, const torch::Tensor perm, const torch::Tensor _2q) {
+  torch::Tensor out = torch::empty_like(a);
+
+  AT_DISPATCH_INTEGRAL_TYPES(
+      a.scalar_type(), "codec_rotate_make_unsigned_reduce_2q_cuda", [&] {
+        codec_rotate_make_unsigned_reduce_2q_cuda_typed<scalar_t>(
+            out, a, perm, _2q);
       });
 
   return out;

@@ -993,12 +993,19 @@ class CkksEngine:
                 (
                     torch.stack(L_enter)
                     if L_enter
-                    else torch.zeros(1, 1, dtype=state.dtype)
+                    else torch.empty(
+                        0, 0, dtype=state.dtype
+                    )  # todo)) just pass None cause error
                 ),
                 start,
-                self.nttCtx._2q_prepack[target_device_id][level][-2],
-                self.nttCtx.Rs_prepack[target_device_id][level][-2],
-                *self.nttCtx.mont_prepack[target_device_id][level][-2],
+                self.nttCtx._2q_prepack[target_device_id][level][-2][0],
+                self.nttCtx.Rs_prepack[target_device_id][level][-2][0],
+                *[
+                    t[0]
+                    for t in self.nttCtx.mont_prepack[target_device_id][level][
+                        -2
+                    ]
+                ],
             )
         )
 
@@ -1615,7 +1622,7 @@ class CkksEngine:
         return rotk
 
     # @strictype # enable when debugging
-    def rotate_single(
+    def rotate_single_old(
         self,
         ct: Ciphertext,
         rotk: RotationKey,
@@ -1637,6 +1644,45 @@ class CkksEngine:
         for ct_data in rotated_ct_data:
             self.nttCtx.make_unsigned(ct_data, level, mult_type)
             self.nttCtx.reduce_2q(ct_data, level, mult_type)
+
+        rotated_ct = Ciphertext(
+            data=rotated_ct_data,
+            flags=ct._flags,
+            level=level,
+            # following is metadata (not required args)
+            logN=self.ckksCfg.logN,
+            creator_hash=self.hash,
+            misc=ct.misc,
+        )
+        if post_key_switching:
+            rotated_ct = self.switch_key(rotated_ct, rotk)
+        return rotated_ct
+
+    # @strictype # enable when debugging
+    def rotate_single(
+        self,
+        ct: Ciphertext,
+        rotk: RotationKey,
+        post_key_switching=True,
+    ) -> Ciphertext:
+        level = ct.level
+        # Rotated ct may contain negative numbers.
+        mult_type = -2 if ct.has_flag(FLAGS.INCLUDE_SPECIAL) else -1
+        rotated_ct_data = []
+        for ct_data in ct.data:
+            perms = []
+            for d in ct_data:
+                N = d.size(-1)
+                delta = rotk.delta % N
+                leap = (3**delta - 1) // 2 % (N * 2)
+                perm = codec.canon_permutation_torch_cache[N, leap, d.device]
+                perms.append(perm)
+            data_rotated = torch.ops.tiberate_fused_ops.codec_rotate_make_unsigned_reduce_2q(
+                ct_data,
+                perms,
+                self.nttCtx._2q_prepack[mult_type][level][0],
+            )
+            rotated_ct_data.append(data_rotated)
 
         rotated_ct = Ciphertext(
             data=rotated_ct_data,

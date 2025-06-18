@@ -224,8 +224,7 @@ __global__ void mont_add_cuda_kernel(
   const scalar_t _2q = _2q_acc[i];
 
   // Add.
-  const scalar_t aplusb = a + b;
-  out_acc[i][j] = (aplusb < _2q) ? aplusb : aplusb - _2q;
+  out_acc[i][j] = mont_add_scalar_cuda_kernel(a, b, _2q);
 }
 
 template <typename scalar_t>
@@ -245,8 +244,7 @@ __global__ void mont_sub_cuda_kernel(
   const scalar_t _2q = _2q_acc[i];
 
   // Sub.
-  const scalar_t aminusb = a + _2q - b;
-  out_acc[i][j] = (aminusb < _2q) ? aminusb : aminusb - _2q;
+  out_acc[i][j] = mont_sub_scalar_cuda_kernel(a, b, _2q);
 }
 
 template <typename scalar_t>
@@ -334,7 +332,7 @@ __global__ void make_unsigned_cuda_kernel(
   const scalar_t q = _2q_acc[i] >> one;
 
   // Make unsigned.
-  a_acc[i][j] += q;
+  a_acc[i][j] = make_unsigned_scalar_cuda_kernel(a_acc[i][j], q);
 }
 
 template <typename scalar_t>

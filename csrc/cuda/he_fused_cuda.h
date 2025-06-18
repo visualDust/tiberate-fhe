@@ -15,3 +15,6 @@ torch::Tensor switch_key_switch_later_part_extend_cuda(
     const torch::Tensor qh,
     const torch::Tensor kl,
     const torch::Tensor kh);
+
+torch::Tensor codec_rotate_make_unsigned_reduce_2q_cuda(
+    const torch::Tensor a, const torch::Tensor perm, const torch::Tensor _2q);

@@ -1,3 +1,4 @@
+#pragma once
 
 // ------------------------------------------------------------------
 // mont scalar cuda kernels
@@ -126,4 +127,13 @@ make_signed_scalar_cuda_kernel(const scalar_t a, const scalar_t _2q) {
   const scalar_t q = _2q >> one;
   const scalar_t q_half = q >> one;
   return (a <= q_half) ? a : a - q;
+}
+
+template <typename scalar_t>
+__device__ __forceinline__ scalar_t
+make_unsigned_scalar_cuda_kernel(const scalar_t a, const scalar_t _2q) {
+  // Masks.
+  constexpr scalar_t one = 1;
+  const scalar_t q = _2q >> one;
+  return a + q;
 }
