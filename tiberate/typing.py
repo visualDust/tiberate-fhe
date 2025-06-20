@@ -126,7 +126,7 @@ class DataStruct:
         """
         cls = self.__class__  # Get the class of the current instance
         return cls(
-            data=cls.copy_tensor_to_device_recursive(self.data, self.device),
+            data=cls.copy_tensor_to_device_recursive(self.data),
             flags=self._flags,
             level=self.level,
             misc=self.misc,
@@ -188,7 +188,7 @@ class DataStruct:
 
     @classmethod
     def copy_tensor_to_device_recursive(
-        cls, data, device: str, non_blocking=True
+        cls, data, device: str | None = None, non_blocking: bool = True
     ):
         """Recursively move tensors in the data structure to a specified device.
         Args:
@@ -199,6 +199,7 @@ class DataStruct:
         """
         # Recursively move tensors in the data structure to the specified device
         if isinstance(data, Tensor):
+            device = data.device if not device else device
             return data.to(device=device, non_blocking=non_blocking, copy=True)
         elif isinstance(data, list):
             return [
@@ -353,7 +354,7 @@ class Plaintext(DataStruct):
 
     def clone(self):
         cls = self.__class__
-        cache = cls.copy_tensor_to_device_recursive(self.cache, self.device)
+        cache = cls.copy_tensor_to_device_recursive(self.cache)
         return cls(self.src, cache=cache)
 
     @property
