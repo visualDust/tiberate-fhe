@@ -75,7 +75,6 @@ __global__ void reduce_2q_cuda_kernel(
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
 
   // Inputs.
-  constexpr scalar_t one = 1;
   const scalar_t a = a_acc[i][j];
   const scalar_t _2q = _2q_acc[i];
   // Reduce. bound 2q → q

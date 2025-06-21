@@ -7,7 +7,7 @@
 // -------------------------------------------------------------------
 
 template <typename scalar_t>
-__global__ void mont_enter_reduce_cuda_kernel(
+__global__ void mont_enter_mont_reduce_cuda_kernel(
     torch::PackedTensorAccessor32<scalar_t, 2> a_acc,
     const torch::PackedTensorAccessor32<scalar_t, 1> Rs_acc,
     const torch::PackedTensorAccessor32<scalar_t, 1> ql_acc,
@@ -46,7 +46,7 @@ __global__ void mont_enter_reduce_cuda_kernel(
 // -------------------------------------------------------------------
 
 template <typename scalar_t>
-__global__ void mont_enter_reduce_2q_cuda_kernel(
+__global__ void mont_enter_mont_reduce_reduce_2q_cuda_kernel(
     torch::PackedTensorAccessor32<scalar_t, 2> a_acc,
     const torch::PackedTensorAccessor32<scalar_t, 1> Rs_acc,
     const torch::PackedTensorAccessor32<scalar_t, 1> ql_acc,
@@ -89,7 +89,7 @@ __global__ void mont_enter_reduce_2q_cuda_kernel(
 // -------------------------------------------------------------------
 
 template <typename scalar_t>
-__global__ void mont_enter_reduce_2q_make_signed_cuda_kernel(
+__global__ void mont_enter_mont_reduce_reduce_2q_make_signed_cuda_kernel(
     torch::PackedTensorAccessor32<scalar_t, 2> a_acc,
     const torch::PackedTensorAccessor32<scalar_t, 1> Rs_acc,
     const torch::PackedTensorAccessor32<scalar_t, 1> ql_acc,
@@ -235,7 +235,7 @@ void intt_exit_cuda_typed(torch::Tensor a,
   }
 
   // Normalize and Exit
-  mont_enter_reduce_cuda_kernel<scalar_t>
+  mont_enter_mont_reduce_cuda_kernel<scalar_t>
       <<<dim_grid_enter, dim_block, 0, stream>>>(
           a_acc, Ninv_acc, ql_acc, qh_acc, kl_acc, kh_acc);
 }
@@ -319,7 +319,7 @@ void intt_exit_reduce_cuda_typed(torch::Tensor a,
   }
 
   // Normalize, Exit and Reduce.
-  mont_enter_reduce_2q_cuda_kernel<scalar_t>
+  mont_enter_mont_reduce_reduce_2q_cuda_kernel<scalar_t>
       <<<dim_grid_enter, dim_block, 0, stream>>>(
           a_acc, Ninv_acc, ql_acc, qh_acc, kl_acc, kh_acc, _2q_acc);
 }
@@ -403,7 +403,7 @@ void intt_exit_reduce_signed_cuda_typed(torch::Tensor a,
   }
 
   // Normalize.
-  mont_enter_reduce_2q_make_signed_cuda_kernel<scalar_t>
+  mont_enter_mont_reduce_reduce_2q_make_signed_cuda_kernel<scalar_t>
       <<<dim_grid_enter, dim_block, 0, stream>>>(
           a_acc, Ninv_acc, ql_acc, qh_acc, kl_acc, kh_acc, _2q_acc);
 }

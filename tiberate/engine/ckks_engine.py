@@ -864,6 +864,7 @@ class CkksEngine:
         # Carve out the partition.
         alpha = len(text_part)
         a_part = a[device_id][text_part[0] : text_part[-1] + 1]
+        # a is typically ct.data[1] in key switching.
 
         # Release ntt.
         if exit_ntt:
@@ -905,6 +906,7 @@ class CkksEngine:
                 ]
                 state_2q = self.nttCtx.parts_pack[device_id][state_key]["_2q"]
                 L_scalar = self.nttCtx.parts_pack[device_id][key]["L_scalar"][i]
+                print(type(L_scalar))
                 new_state_len = alpha - (i + 2)
                 new_state = Y.repeat(new_state_len, 1)
                 torch.ops.tiberate_ntt_ops.mont_enter(
@@ -1228,9 +1230,8 @@ class CkksEngine:
     # @strictype # enable when debugging
     def switch_key(self, ct: Ciphertext, ksk: KeySwitchKey) -> Ciphertext:
         level = ct.level
-        a = ct.data[1]
         d0, d1 = self.create_switcher(
-            a, ksk, level, exit_ntt=ct.has_flag(FLAGS.NTT_STATE)
+            ct.data[1], ksk, level, exit_ntt=ct.has_flag(FLAGS.NTT_STATE)
         )
 
         new_ct0 = self.nttCtx.mont_add_reduce_2q(ct.data[0], d0, level, -1)
@@ -1942,14 +1943,14 @@ class CkksEngine:
     # -------------------------------------------------------------------------------------------
     # @strictype # enable when debugging
     def level_up(
-        self, ct: Ciphertext, dst_level: int, inplace=True
+        self, ct: Ciphertext, dst_level: int, inplace=False
     ) -> Ciphertext:
         if ct.level == dst_level:
             return ct if inplace else ct.clone()
 
         current_level = ct.level
 
-        new_ct = self.rescale(ct)
+        new_ct = self.rescale(ct, inplace=inplace)
 
         src_level = current_level + 1
 
@@ -1996,6 +1997,20 @@ class CkksEngine:
                 device=self.nttCtx.devices[device_id],
             )
             multipliers.append(multiplier)
+
+        # new_ct_data0 = torch.ops.tiberate_fused_ops.mont_enter_reduce_2q(
+        #     new_ct_data0,
+        #     multipliers,
+        #     self.nttCtx._2q_prepack[-1][dst_level][0],
+        #     *self.nttCtx.mont_prepack[-1][dst_level][0],
+        # )
+
+        # new_ct_data1 = torch.ops.tiberate_fused_ops.mont_enter_reduce_2q(
+        #     new_ct_data1,
+        #     multipliers,
+        #     self.nttCtx._2q_prepack[-1][dst_level][0],
+        #     *self.nttCtx.mont_prepack[-1][dst_level][0],
+        # )
 
         self.nttCtx.mont_enter_scalar(new_ct_data0, multipliers, dst_level)
         self.nttCtx.mont_enter_scalar(new_ct_data1, multipliers, dst_level)
@@ -2365,6 +2380,7 @@ class CkksEngine:
             pt_ = self.nttCtx.tile_unsigned(pt_, ct.level)
             self.nttCtx.mont_enter_scale(pt_, ct.level)
             pt.cache[ct.level][str(self.pc_add)] = pt_
+
         pt_ = pt.cache[ct.level][
             str(self.pc_add)
         ]  # todo does rewrite to auto trace impact performance?
@@ -2376,8 +2392,9 @@ class CkksEngine:
             ct.data[0] = new_d0
             return ct
         else:
-            new_ct = ct.clone()
-            new_ct.data[0] = new_d0
+            new_ct = ct.clone(clone_data=False)
+            new_ct.data.append(new_d0)
+            new_ct.data.append([d.clone() for d in ct.data[1]])
             return new_ct
 
     # @strictype # enable when debugging
@@ -2416,11 +2433,11 @@ class CkksEngine:
         new_ct.data[1] = new_d1
 
         if post_rescale:
-            new_ct = self.rescale(new_ct)
+            new_ct = self.rescale(new_ct, inplace=True)
         return new_ct
 
     # @strictype # enable when debugging
-    def mult_int_scalar(self, ct: Ciphertext, scalar) -> Ciphertext:
+    def mult_int_scalar_old(self, ct: Ciphertext, scalar) -> Ciphertext:
         device_len = len(ct.data[0])
 
         int_scalar = int(scalar)
@@ -2449,6 +2466,39 @@ class CkksEngine:
                 new_data[i], tensorized_scalar, ct.level
             )
             self.nttCtx.reduce_2q(new_data[i], ct.level)
+
+        return new_ct
+
+    def mult_int_scalar(self, ct: Ciphertext, int_scalar: int) -> Ciphertext:
+        device_len = len(ct.data[0])
+
+        mont_scalar = [
+            (int_scalar * self.montCtx.R) % qi for qi in self.montCtx.q
+        ]
+
+        dest = self.rnsPart.destination_arrays[ct.level]
+
+        partitioned_mont_scalar = [
+            [mont_scalar[i] for i in desti] for desti in dest
+        ]
+        tensorized_scalar = []
+        for device_id in range(device_len):
+            scal_tensor = torch.tensor(
+                partitioned_mont_scalar[device_id],
+                dtype=self.ckksCfg.torch_dtype,
+                device=self.nttCtx.devices[device_id],
+            )
+            tensorized_scalar.append(scal_tensor)
+
+        new_ct = ct.clone(clone_data=False)
+        for i in [0, 1]:
+            new_data_i = torch.ops.tiberate_fused_ops.mont_enter_reduce_2q(
+                new_ct.data[i],
+                tensorized_scalar,
+                self.nttCtx._2q_prepack[-1][ct.level][0],
+                *self.nttCtx.mont_prepack[-1][ct.level][0],
+            )
+            new_ct.data.append(new_data_i)
 
         return new_ct
 
@@ -2481,7 +2531,7 @@ class CkksEngine:
             )
             tensorized_scalar.append(scal_tensor)
 
-        new_ct = ct if inplace else ct.clone()
+        new_ct = ct if inplace else ct.clone()  # todo)) is this useful?
         new_data = new_ct.data
 
         for i in [0, 1]:

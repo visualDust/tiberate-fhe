@@ -50,9 +50,35 @@ class FLAGS(Flag):
 
 
 class DataStruct:
+    """A generic data structure for holding data with flags and metadata.
+    Variants:
+        - Ciphertext: For holding encrypted data.
+        - Plaintext: For holding unencrypted data.
+        - CiphertextTriplet: For holding a triplet of ciphertexts.
+        - SecretKey, PublicKey, EvaluationKey, KeySwitchKey, RotationKey, GaloisKey, ConjugationKey: For holding various cryptographic keys.
+
+    Attributes:
+        data (list[Tensor] | Tensor | dict[str, Any] | CachedDict | None): The data contained in the structure.
+        flags (FLAGS | list[FLAGS] | None): Flags indicating properties of the data.
+        level (int): The level of the data structure, used for encryption levels.
+        misc (dict): A dictionary for storing additional metadata.
+
+    Methods:
+        has_flag(flag: FLAGS) -> bool: Check if a specific flag is set.
+        set_flag(flag: FLAGS): Set a specific flag.
+        rm_flag(flag: FLAGS): Clear a specific flag.
+        toggle_flag(flag: FLAGS): Toggle a specific flag.
+        flags(only_set: bool = True) -> list[FLAGS]: Get a list of all flags, optionally only those that are set.
+        clone(clone_data: bool = True): Create a clone of the data structure.
+        wrap(another: DataStruct, **kwargs): Wrap another data structure into a new instance of the same class.
+        get_device_of_tensor(data): Get the device of the tensor in the data structure.
+        copy_tensor_to_device_recursive(data, device: str | None = None, non_blocking: bool = True): Recursively move tensors in the data structure to a specified device.
+        copy_to(device: str, non_blocking=True): Copy the data structure to a specified device and return a new instance.
+    """
+
     def __init__(
         self,
-        data,
+        data: list[Tensor] | Tensor | dict[str, Any] | CachedDict | None = None,
         *,
         flags: FLAGS | list[FLAGS] | None = None,
         level: int,
@@ -118,7 +144,7 @@ class DataStruct:
         for flag in value:
             self.set_flag(flag)
 
-    def clone(self):
+    def clone(self, clone_data: bool = True):
         """Clone the data structure.
 
         Returns:
@@ -126,7 +152,11 @@ class DataStruct:
         """
         cls = self.__class__  # Get the class of the current instance
         return cls(
-            data=cls.copy_tensor_to_device_recursive(self.data),
+            data=(
+                cls.copy_tensor_to_device_recursive(self.data)
+                if clone_data
+                else []
+            ),
             flags=self._flags,
             level=self.level,
             misc=self.misc,
@@ -386,7 +416,6 @@ class Plaintext(DataStruct):
 
 class Ciphertext(DataStruct):
     DEFAULT_NEG_INPLACE = False
-    DEFAULT_ROTATE_INPLACE = False
     DEFAULT_PCOP_INPLACE = False
     DEFAULT_MCOP_INPLACE = False
     DEFAULT_ROTATE_MEMORY_SAVING = True
@@ -494,13 +523,11 @@ class Ciphertext(DataStruct):
             return engine.rotate_offset(
                 ct=self,
                 offset=other,
-                inplace=self.__class__.DEFAULT_ROTATE_INPLACE,
             )
         else:  # using single rotation
             return engine.rotate_single(
                 ct=self,
                 rotk=engine.rotk[other],
-                inplace=self.__class__.DEFAULT_ROTATE_INPLACE,
             )
 
     def __rrshift__(self, other: int):

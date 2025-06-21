@@ -192,3 +192,18 @@ torch::Tensor codec_rotate_make_unsigned_reduce_2q_cuda(
 
   return out;
 }
+
+// ------------------------------------------------------------------
+// create_switcher - pre_extend
+// ------------------------------------------------------------------
+
+// template <typename scalar_t>
+// __global__ void create_switcher_pre_extend_cuda_kernel(
+//     torch::PackedTensorAccessor32<scalar_t, 2> out_acc,
+//     const torch::PackedTensorAccessor32<scalar_t, 2> a_part_acc,
+//     const torch::PackedTensorAccessor32<scalar_t, 1> perm_acc,
+//     const torch::PackedTensorAccessor32<scalar_t, 1> Rs_acc,  // Rs_prepack
+//     const torch::PackedTensorAccessor32<scalar_t, 1> ql_acc,  //
+//     *mont_prepack const torch::PackedTensorAccessor32<scalar_t, 1> qh_acc,
+//     const torch::PackedTensorAccessor32<scalar_t, 1> kl_acc,
+//     const torch::PackedTensorAccessor32<scalar_t, 1> kh_acc) {

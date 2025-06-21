@@ -135,6 +135,94 @@ torch::Tensor mont_sub_reduce_2q_cuda(const torch::Tensor a,
 }
 
 // ------------------------------------------------------------------
+// mont_enter + reduce 2q
+// ------------------------------------------------------------------
+
+template <typename scalar_t>
+__global__ void mont_enter_reduce_2q_cuda_kernel(
+    torch::PackedTensorAccessor32<scalar_t, 2> out_acc,
+    const torch::PackedTensorAccessor32<scalar_t, 2> a_acc,
+    const torch::PackedTensorAccessor32<scalar_t, 1> Rs_acc,
+    const torch::PackedTensorAccessor32<scalar_t, 1> _2q_acc,
+    const torch::PackedTensorAccessor32<scalar_t, 1> ql_acc,
+    const torch::PackedTensorAccessor32<scalar_t, 1> qh_acc,
+    const torch::PackedTensorAccessor32<scalar_t, 1> kl_acc,
+    const torch::PackedTensorAccessor32<scalar_t, 1> kh_acc) {
+  // Indexing
+  const int i = blockIdx.x;
+  const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
+
+  // Inputs.
+  const scalar_t a = a_acc[i][j];
+  const scalar_t Rs = Rs_acc[i];
+  const scalar_t _2q = _2q_acc[i];
+  const scalar_t ql = ql_acc[i];
+  const scalar_t qh = qh_acc[i];
+  const scalar_t kl = kl_acc[i];
+  const scalar_t kh = kh_acc[i];
+
+  // mont_enter
+  scalar_t x = mont_mult_scalar_cuda_kernel(a, Rs, ql, qh, kl, kh);
+
+  // Reduce. bound 2q → q
+  x = reduce_2q_scalar_cuda_kernel(x, _2q);
+
+  // Write the result.
+  out_acc[i][j] = x;
+}
+
+template <typename scalar_t>
+void mont_enter_reduce_2q_cuda_typed(torch::Tensor out,
+                                     const torch::Tensor a,
+                                     const torch::Tensor Rs,
+                                     const torch::Tensor _2q,
+                                     const torch::Tensor ql,
+                                     const torch::Tensor qh,
+                                     const torch::Tensor kl,
+                                     const torch::Tensor kh) {
+  auto device_id = a.device().index();
+  cudaSetDevice(device_id);
+  auto stream = at::cuda::getCurrentCUDAStream(device_id);
+
+  auto C = a.size(0);
+  auto N = a.size(1);
+
+  int dim_block = BLOCK_SIZE;
+  dim3 dim_grid(C, N / BLOCK_SIZE);
+
+  // Run the cuda kernel.
+  auto out_acc = out.packed_accessor32<scalar_t, 2>();
+  const auto a_acc = a.packed_accessor32<scalar_t, 2>();
+  const auto Rs_acc = Rs.packed_accessor32<scalar_t, 1>();
+  const auto _2q_acc = _2q.packed_accessor32<scalar_t, 1>();
+  const auto ql_acc = ql.packed_accessor32<scalar_t, 1>();
+  const auto qh_acc = qh.packed_accessor32<scalar_t, 1>();
+  const auto kl_acc = kl.packed_accessor32<scalar_t, 1>();
+  const auto kh_acc = kh.packed_accessor32<scalar_t, 1>();
+
+  mont_enter_reduce_2q_cuda_kernel<scalar_t>
+      <<<dim_grid, dim_block, 0, stream>>>(
+          out_acc, a_acc, Rs_acc, _2q_acc, ql_acc, qh_acc, kl_acc, kh_acc);
+}
+
+torch::Tensor mont_enter_reduce_2q_cuda(torch::Tensor a,
+                                        const torch::Tensor Rs,
+                                        const torch::Tensor _2q,
+                                        const torch::Tensor ql,
+                                        const torch::Tensor qh,
+                                        const torch::Tensor kl,
+                                        const torch::Tensor kh) {
+  auto out = torch::empty_like(a);
+  // Dispatch to the correct data type.
+  AT_DISPATCH_INTEGRAL_TYPES(
+      a.scalar_type(), "typed_mont_enter_reduce_2q_cuda", ([&] {
+        mont_enter_reduce_2q_cuda_typed<scalar_t>(
+            out, a, Rs, _2q, ql, qh, kl, kh);
+      }));
+  return a;
+}
+
+// ------------------------------------------------------------------
 // pc_add_fused_cuda_kernel
 // ------------------------------------------------------------------
 
