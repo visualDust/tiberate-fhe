@@ -1110,16 +1110,15 @@ class CkksEngine:
                     part_results[storage_id][1][dst_device_id] = d1
 
         # 7. Sum up.
-        summed0 = part_results[0][0]
-        summed1 = part_results[0][1]
+        stacked0 = []
+        stacked1 = []
+        for i in range(len(part_results[0][0])):
+            # shape: [K, C, N]
+            stacked0.append(torch.stack([x[0][i] for x in part_results]))
+            stacked1.append(torch.stack([x[1][i] for x in part_results]))
 
-        for i in range(1, len(part_results)):
-            summed0 = self.nttCtx.mont_add(
-                summed0, part_results[i][0], level, -2
-            )
-            summed1 = self.nttCtx.mont_add(
-                summed1, part_results[i][1], level, -2
-            )
+        summed0 = self.nttCtx.mont_add_many_3d(stacked0, level, -2)
+        summed1 = self.nttCtx.mont_add_many_3d(stacked1, level, -2)
 
         # Rename summed's.
         d0 = summed0

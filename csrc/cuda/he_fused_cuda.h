@@ -4,6 +4,16 @@
 
 #define BLOCK_SIZE 256
 
+torch::Tensor pc_add_fused_cuda(
+    const torch::Tensor a,  // a is typically ct_data
+    const torch::Tensor b,  // b is typically pt_data
+    const torch::Tensor _2q,
+    const torch::Tensor Rs,
+    const torch::Tensor ql,
+    const torch::Tensor qh,
+    const torch::Tensor kl,
+    const torch::Tensor kh);
+
 torch::Tensor switch_key_switch_later_part_extend_cuda(
     const int64_t rns_len,
     const torch::Tensor state,

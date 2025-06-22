@@ -228,26 +228,6 @@ __global__ void mont_add_cuda_kernel(
 }
 
 template <typename scalar_t>
-__global__ void mont_sub_cuda_kernel(
-    const torch::PackedTensorAccessor32<scalar_t, 2> a_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 2> b_acc,
-    torch::PackedTensorAccessor32<scalar_t, 2> out_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> _2q_acc) {
-  // Where am I?
-  const int i = blockIdx.x;
-  const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
-
-  // Inputs.
-  constexpr scalar_t one = 1;
-  const scalar_t a = a_acc[i][j];
-  const scalar_t b = b_acc[i][j];
-  const scalar_t _2q = _2q_acc[i];
-
-  // Sub.
-  out_acc[i][j] = mont_sub_scalar_cuda_kernel(a, b, _2q);
-}
-
-template <typename scalar_t>
 void mont_add_cuda_typed(const torch::Tensor a,
                          const torch::Tensor b,
                          torch::Tensor out,
@@ -269,6 +249,26 @@ void mont_add_cuda_typed(const torch::Tensor a,
   const auto _2q_acc = _2q.packed_accessor32<scalar_t, 1>();
   mont_add_cuda_kernel<scalar_t>
       <<<dim_grid, dim_block, 0, stream>>>(a_acc, b_acc, out_acc, _2q_acc);
+}
+
+template <typename scalar_t>
+__global__ void mont_sub_cuda_kernel(
+    const torch::PackedTensorAccessor32<scalar_t, 2> a_acc,
+    const torch::PackedTensorAccessor32<scalar_t, 2> b_acc,
+    torch::PackedTensorAccessor32<scalar_t, 2> out_acc,
+    const torch::PackedTensorAccessor32<scalar_t, 1> _2q_acc) {
+  // Where am I?
+  const int i = blockIdx.x;
+  const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
+
+  // Inputs.
+  constexpr scalar_t one = 1;
+  const scalar_t a = a_acc[i][j];
+  const scalar_t b = b_acc[i][j];
+  const scalar_t _2q = _2q_acc[i];
+
+  // Sub.
+  out_acc[i][j] = mont_sub_scalar_cuda_kernel(a, b, _2q);
 }
 
 template <typename scalar_t>
