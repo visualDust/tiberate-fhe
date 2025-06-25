@@ -14,9 +14,9 @@
 
 template <typename scalar_t>
 __global__ void mont_add_many_3d_cuda_kernel(
-    const torch::PackedTensorAccessor32<scalar_t, 3> input_acc,  // [K, C, N]
-    torch::PackedTensorAccessor32<scalar_t, 2> out_acc,          // [C, N]
-    const torch::PackedTensorAccessor32<scalar_t, 1> _2q_acc) {
+    TensorAcc32Restrict<scalar_t, 2> out_acc,          // [C, N]
+    const TensorAcc32Restrict<scalar_t, 3> input_acc,  // [K, C, N]
+    const TensorAcc32Restrict<scalar_t, 1> _2q_acc) {
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
 
@@ -44,12 +44,12 @@ void mont_add_many_3d_cuda_typed(const torch::Tensor input,
   int dim_block = BLOCK_SIZE;
   dim3 dim_grid(C, N / BLOCK_SIZE);
 
-  const auto input_acc = input.packed_accessor32<scalar_t, 3>();
-  auto out_acc = out.packed_accessor32<scalar_t, 2>();
-  const auto _2q_acc = _2q.packed_accessor32<scalar_t, 1>();
+  const auto input_acc = makeAcc32Restrict(input, scalar_t, 3);
+  auto out_acc = makeAcc32Restrict(out, scalar_t, 2);
+  const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
 
   mont_add_many_3d_cuda_kernel<scalar_t>
-      <<<dim_grid, dim_block, 0, stream>>>(input_acc, out_acc, _2q_acc);
+      <<<dim_grid, dim_block, 0, stream>>>(out_acc, input_acc, _2q_acc);
 }
 
 torch::Tensor mont_add_many_3d_cuda(const torch::Tensor input,
@@ -70,10 +70,10 @@ torch::Tensor mont_add_many_3d_cuda(const torch::Tensor input,
 
 template <typename scalar_t>
 __global__ void mont_add_reduce_2q_cuda_kernel(
-    const torch::PackedTensorAccessor32<scalar_t, 2> a_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 2> b_acc,
-    torch::PackedTensorAccessor32<scalar_t, 2> out_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> _2q_acc) {
+    TensorAcc32Restrict<scalar_t, 2> out_acc,
+    const TensorAcc32Restrict<scalar_t, 2> a_acc,
+    const TensorAcc32Restrict<scalar_t, 2> b_acc,
+    const TensorAcc32Restrict<scalar_t, 1> _2q_acc) {
   // Indexing
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
@@ -109,12 +109,12 @@ void mont_add_reduce_2q_cuda_typed(const torch::Tensor a,
   dim3 dim_grid(C, N / BLOCK_SIZE);
 
   // Run the cuda kernel.
-  const auto a_acc = a.packed_accessor32<scalar_t, 2>();
-  const auto b_acc = b.packed_accessor32<scalar_t, 2>();
-  auto out_acc = out.packed_accessor32<scalar_t, 2>();
-  const auto _2q_acc = _2q.packed_accessor32<scalar_t, 1>();
+  auto out_acc = makeAcc32Restrict(out, scalar_t, 2);
+  const auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
+  const auto b_acc = makeAcc32Restrict(b, scalar_t, 2);
+  const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
   mont_add_reduce_2q_cuda_kernel<scalar_t>
-      <<<dim_grid, dim_block, 0, stream>>>(a_acc, b_acc, out_acc, _2q_acc);
+      <<<dim_grid, dim_block, 0, stream>>>(out_acc, a_acc, b_acc, _2q_acc);
 }
 
 torch::Tensor mont_add_reduce_2q_cuda(const torch::Tensor a,
@@ -134,10 +134,10 @@ torch::Tensor mont_add_reduce_2q_cuda(const torch::Tensor a,
 
 template <typename scalar_t>
 __global__ void mont_sub_reduce_2q_cuda_kernel(
-    const torch::PackedTensorAccessor32<scalar_t, 2> a_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 2> b_acc,
-    torch::PackedTensorAccessor32<scalar_t, 2> out_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> _2q_acc) {
+    TensorAcc32Restrict<scalar_t, 2> out_acc,
+    const TensorAcc32Restrict<scalar_t, 2> a_acc,
+    const TensorAcc32Restrict<scalar_t, 2> b_acc,
+    const TensorAcc32Restrict<scalar_t, 1> _2q_acc) {
   // Indexing
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
@@ -173,12 +173,12 @@ void mont_sub_reduce_2q_cuda_typed(const torch::Tensor a,
   dim3 dim_grid(C, N / BLOCK_SIZE);
 
   // Run the cuda kernel.
-  const auto a_acc = a.packed_accessor32<scalar_t, 2>();
-  const auto b_acc = b.packed_accessor32<scalar_t, 2>();
-  auto out_acc = out.packed_accessor32<scalar_t, 2>();
-  const auto _2q_acc = _2q.packed_accessor32<scalar_t, 1>();
+  auto out_acc = makeAcc32Restrict(out, scalar_t, 2);
+  const auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
+  const auto b_acc = makeAcc32Restrict(b, scalar_t, 2);
+  const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
   mont_sub_reduce_2q_cuda_kernel<scalar_t>
-      <<<dim_grid, dim_block, 0, stream>>>(a_acc, b_acc, out_acc, _2q_acc);
+      <<<dim_grid, dim_block, 0, stream>>>(out_acc, a_acc, b_acc, _2q_acc);
 }
 
 torch::Tensor mont_sub_reduce_2q_cuda(const torch::Tensor a,
@@ -198,14 +198,14 @@ torch::Tensor mont_sub_reduce_2q_cuda(const torch::Tensor a,
 
 template <typename scalar_t>
 __global__ void mont_enter_reduce_2q_cuda_kernel(
-    torch::PackedTensorAccessor32<scalar_t, 2> out_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 2> a_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> Rs_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> _2q_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> ql_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> qh_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> kl_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> kh_acc) {
+    TensorAcc32Restrict<scalar_t, 2> out_acc,
+    const TensorAcc32Restrict<scalar_t, 2> a_acc,
+    const TensorAcc32Restrict<scalar_t, 1> Rs_acc,
+    const TensorAcc32Restrict<scalar_t, 1> _2q_acc,
+    const TensorAcc32Restrict<scalar_t, 1> ql_acc,
+    const TensorAcc32Restrict<scalar_t, 1> qh_acc,
+    const TensorAcc32Restrict<scalar_t, 1> kl_acc,
+    const TensorAcc32Restrict<scalar_t, 1> kh_acc) {
   // Indexing
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
@@ -249,14 +249,14 @@ void mont_enter_reduce_2q_cuda_typed(torch::Tensor out,
   dim3 dim_grid(C, N / BLOCK_SIZE);
 
   // Run the cuda kernel.
-  auto out_acc = out.packed_accessor32<scalar_t, 2>();
-  const auto a_acc = a.packed_accessor32<scalar_t, 2>();
-  const auto Rs_acc = Rs.packed_accessor32<scalar_t, 1>();
-  const auto _2q_acc = _2q.packed_accessor32<scalar_t, 1>();
-  const auto ql_acc = ql.packed_accessor32<scalar_t, 1>();
-  const auto qh_acc = qh.packed_accessor32<scalar_t, 1>();
-  const auto kl_acc = kl.packed_accessor32<scalar_t, 1>();
-  const auto kh_acc = kh.packed_accessor32<scalar_t, 1>();
+  auto out_acc = makeAcc32Restrict(out, scalar_t, 2);
+  const auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
+  const auto Rs_acc = makeAcc32Restrict(Rs, scalar_t, 1);
+  const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
+  const auto ql_acc = makeAcc32Restrict(ql, scalar_t, 1);
+  const auto qh_acc = makeAcc32Restrict(qh, scalar_t, 1);
+  const auto kl_acc = makeAcc32Restrict(kl, scalar_t, 1);
+  const auto kh_acc = makeAcc32Restrict(kh, scalar_t, 1);
 
   mont_enter_reduce_2q_cuda_kernel<scalar_t>
       <<<dim_grid, dim_block, 0, stream>>>(
@@ -286,15 +286,15 @@ torch::Tensor mont_enter_reduce_2q_cuda(torch::Tensor a,
 
 template <typename scalar_t>
 __global__ void rescale_exact_rounding_fused_cuda_kernel(
-    torch::PackedTensorAccessor32<scalar_t, 2> a_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> Rs_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> rescaler,  // rescaler0
+    TensorAcc32Restrict<scalar_t, 2> a_acc,
+    const TensorAcc32Restrict<scalar_t, 1> Rs_acc,
+    const TensorAcc32Restrict<scalar_t, 1> rescaler,  // rescaler0
     const int64_t round_at,
-    const torch::PackedTensorAccessor32<scalar_t, 1> _2q_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> ql_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> qh_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> kl_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> kh_acc) {
+    const TensorAcc32Restrict<scalar_t, 1> _2q_acc,
+    const TensorAcc32Restrict<scalar_t, 1> ql_acc,
+    const TensorAcc32Restrict<scalar_t, 1> qh_acc,
+    const TensorAcc32Restrict<scalar_t, 1> kl_acc,
+    const TensorAcc32Restrict<scalar_t, 1> kh_acc) {
   // Indexing
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
@@ -349,14 +349,14 @@ void rescale_exact_rounding_fused_cuda_typed(
   dim3 dim_grid(C, N / BLOCK_SIZE);
 
   // Run the cuda kernel.
-  auto a_acc = a.packed_accessor32<scalar_t, 2>();
-  const auto Rs_acc = Rs.packed_accessor32<scalar_t, 1>();
-  const auto rescaler_acc = rescaler.packed_accessor32<scalar_t, 1>();
-  const auto _2q_acc = _2q.packed_accessor32<scalar_t, 1>();
-  const auto ql_acc = ql.packed_accessor32<scalar_t, 1>();
-  const auto qh_acc = qh.packed_accessor32<scalar_t, 1>();
-  const auto kl_acc = kl.packed_accessor32<scalar_t, 1>();
-  const auto kh_acc = kh.packed_accessor32<scalar_t, 1>();
+  auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
+  const auto Rs_acc = makeAcc32Restrict(Rs, scalar_t, 1);
+  const auto rescaler_acc = makeAcc32Restrict(rescaler, scalar_t, 1);
+  const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
+  const auto ql_acc = makeAcc32Restrict(ql, scalar_t, 1);
+  const auto qh_acc = makeAcc32Restrict(qh, scalar_t, 1);
+  const auto kl_acc = makeAcc32Restrict(kl, scalar_t, 1);
+  const auto kh_acc = makeAcc32Restrict(kh, scalar_t, 1);
 
   rescale_exact_rounding_fused_cuda_kernel<scalar_t>
       <<<dim_grid, dim_block, 0, stream>>>(a_acc,
@@ -394,14 +394,14 @@ void rescale_exact_rounding_fused_cuda(
 
 template <typename scalar_t>
 __global__ void rescale_non_exact_rounding_fused_cuda_kernel(
-    torch::PackedTensorAccessor32<scalar_t, 2> a_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> Rs_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> rescaler,  // rescaler0
-    const torch::PackedTensorAccessor32<scalar_t, 1> _2q_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> ql_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> qh_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> kl_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> kh_acc) {
+    TensorAcc32Restrict<scalar_t, 2> a_acc,
+    const TensorAcc32Restrict<scalar_t, 1> Rs_acc,
+    const TensorAcc32Restrict<scalar_t, 1> rescaler,  // rescaler0
+    const TensorAcc32Restrict<scalar_t, 1> _2q_acc,
+    const TensorAcc32Restrict<scalar_t, 1> ql_acc,
+    const TensorAcc32Restrict<scalar_t, 1> qh_acc,
+    const TensorAcc32Restrict<scalar_t, 1> kl_acc,
+    const TensorAcc32Restrict<scalar_t, 1> kh_acc) {
   // Indexing
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
@@ -452,14 +452,14 @@ void rescale_non_exact_rounding_fused_cuda_typed(
   dim3 dim_grid(C, N / BLOCK_SIZE);
 
   // Run the cuda kernel.
-  auto a_acc = a.packed_accessor32<scalar_t, 2>();
-  const auto Rs_acc = Rs.packed_accessor32<scalar_t, 1>();
-  const auto rescaler_acc = rescaler.packed_accessor32<scalar_t, 1>();
-  const auto _2q_acc = _2q.packed_accessor32<scalar_t, 1>();
-  const auto ql_acc = ql.packed_accessor32<scalar_t, 1>();
-  const auto qh_acc = qh.packed_accessor32<scalar_t, 1>();
-  const auto kl_acc = kl.packed_accessor32<scalar_t, 1>();
-  const auto kh_acc = kh.packed_accessor32<scalar_t, 1>();
+  auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
+  const auto Rs_acc = makeAcc32Restrict(Rs, scalar_t, 1);
+  const auto rescaler_acc = makeAcc32Restrict(rescaler, scalar_t, 1);
+  const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
+  const auto ql_acc = makeAcc32Restrict(ql, scalar_t, 1);
+  const auto qh_acc = makeAcc32Restrict(qh, scalar_t, 1);
+  const auto kl_acc = makeAcc32Restrict(kl, scalar_t, 1);
+  const auto kh_acc = makeAcc32Restrict(kh, scalar_t, 1);
 
   rescale_non_exact_rounding_fused_cuda_kernel<scalar_t>
       <<<dim_grid, dim_block, 0, stream>>>(

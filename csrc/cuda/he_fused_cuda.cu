@@ -1,7 +1,6 @@
 #include "he_fused_cuda.h"
 #include <ATen/core/TensorAccessor.h>
 #include <c10/cuda/CUDAStream.h>
-#include <torch/csrc/autograd/generated/variable_factories.h>
 #include <cstdint>
 #include <cstdio>
 #include "../extensions.h"
@@ -13,15 +12,15 @@
 
 template <typename scalar_t>
 __global__ void pc_add_fused_cuda_kernel(
-    torch::PackedTensorAccessor32<scalar_t, 2> ct_acc,
-    torch::PackedTensorAccessor32<scalar_t, 2> pt_acc,
-    torch::PackedTensorAccessor32<scalar_t, 2> out_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> _2q_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> Rs_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> ql_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> qh_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> kl_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> kh_acc) {
+    TensorAcc32Restrict<scalar_t, 2> out_acc,
+    const TensorAcc32Restrict<scalar_t, 2> ct_acc,
+    const TensorAcc32Restrict<scalar_t, 2> pt_acc,
+    const TensorAcc32Restrict<scalar_t, 1> _2q_acc,
+    const TensorAcc32Restrict<scalar_t, 1> Rs_acc,
+    const TensorAcc32Restrict<scalar_t, 1> ql_acc,
+    const TensorAcc32Restrict<scalar_t, 1> qh_acc,
+    const TensorAcc32Restrict<scalar_t, 1> kl_acc,
+    const TensorAcc32Restrict<scalar_t, 1> kh_acc) {
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
 
@@ -78,18 +77,18 @@ void pc_add_fused_cuda_typed(const torch::Tensor ct_data,
   dim3 dim_grid(C, N / BLOCK_SIZE);
 
   // Run the cuda kernel.
-  auto out_acc = out.packed_accessor32<scalar_t, 2>();
-  const auto ct_acc = ct_data.packed_accessor32<scalar_t, 2>();
-  const auto pt_acc = pt_data.packed_accessor32<scalar_t, 2>();
-  const auto _2q_acc = _2q.packed_accessor32<scalar_t, 1>();
-  const auto Rs_acc = Rs.packed_accessor32<scalar_t, 1>();
-  const auto ql_acc = ql.packed_accessor32<scalar_t, 1>();
-  const auto qh_acc = qh.packed_accessor32<scalar_t, 1>();
-  const auto kl_acc = kl.packed_accessor32<scalar_t, 1>();
-  const auto kh_acc = kh.packed_accessor32<scalar_t, 1>();
+  auto out_acc = makeAcc32Restrict(out, scalar_t, 2);
+  const auto ct_acc = makeAcc32Restrict(ct_data, scalar_t, 2);
+  const auto pt_acc = makeAcc32Restrict(pt_data, scalar_t, 2);
+  const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
+  const auto Rs_acc = makeAcc32Restrict(Rs, scalar_t, 1);
+  const auto ql_acc = makeAcc32Restrict(ql, scalar_t, 1);
+  const auto qh_acc = makeAcc32Restrict(qh, scalar_t, 1);
+  const auto kl_acc = makeAcc32Restrict(kl, scalar_t, 1);
+  const auto kh_acc = makeAcc32Restrict(kh, scalar_t, 1);
 
   pc_add_fused_cuda_kernel<scalar_t><<<dim_grid, dim_block, 0, stream>>>(
-      ct_acc, pt_acc, out_acc, _2q_acc, Rs_acc, ql_acc, qh_acc, kl_acc, kh_acc);
+      out_acc, ct_acc, pt_acc, _2q_acc, Rs_acc, ql_acc, qh_acc, kl_acc, kh_acc);
 }
 
 torch::Tensor pc_add_fused_cuda(const torch::Tensor a,  // ct_data
@@ -115,16 +114,16 @@ torch::Tensor pc_add_fused_cuda(const torch::Tensor a,  // ct_data
 
 template <typename scalar_t>
 __global__ void switch_key_switch_later_part_extend(
-    torch::PackedTensorAccessor32<scalar_t, 2> out_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 2> state_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 2> l_enter_acc,
+    TensorAcc32Restrict<scalar_t, 2> out_acc,
+    const TensorAcc32Restrict<scalar_t, 2> state_acc,
+    const TensorAcc32Restrict<scalar_t, 2> l_enter_acc,
     const int64_t l_enter_start_offset,
-    const torch::PackedTensorAccessor32<scalar_t, 1> _2q_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> Rs_acc,  // Rs_prepack
-    const torch::PackedTensorAccessor32<scalar_t, 1> ql_acc,  // *mont_prepack
-    const torch::PackedTensorAccessor32<scalar_t, 1> qh_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> kl_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> kh_acc) {
+    const TensorAcc32Restrict<scalar_t, 1> _2q_acc,
+    const TensorAcc32Restrict<scalar_t, 1> Rs_acc,  // Rs_prepack
+    const TensorAcc32Restrict<scalar_t, 1> ql_acc,  // *mont_prepack
+    const TensorAcc32Restrict<scalar_t, 1> qh_acc,
+    const TensorAcc32Restrict<scalar_t, 1> kl_acc,
+    const TensorAcc32Restrict<scalar_t, 1> kh_acc) {
   // Indexing
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
@@ -174,15 +173,15 @@ void switch_key_switch_later_part_extend_cuda_typed(
   int dim_block = BLOCK_SIZE;
   dim3 dim_grid(C, N / BLOCK_SIZE);
 
-  auto out_acc = out.packed_accessor32<scalar_t, 2>();
-  const auto state_acc = state.packed_accessor32<scalar_t, 2>();
-  const auto l_enter_acc = l_enter.packed_accessor32<scalar_t, 2>();
-  const auto _2q_acc = _2q.packed_accessor32<scalar_t, 1>();
-  const auto Rs_acc = Rs.packed_accessor32<scalar_t, 1>();
-  const auto ql_acc = ql.packed_accessor32<scalar_t, 1>();
-  const auto qh_acc = qh.packed_accessor32<scalar_t, 1>();
-  const auto kl_acc = kl.packed_accessor32<scalar_t, 1>();
-  const auto kh_acc = kh.packed_accessor32<scalar_t, 1>();
+  auto out_acc = makeAcc32Restrict(out, scalar_t, 2);
+  const auto state_acc = makeAcc32Restrict(state, scalar_t, 2);
+  const auto l_enter_acc = makeAcc32Restrict(l_enter, scalar_t, 2);
+  const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
+  const auto Rs_acc = makeAcc32Restrict(Rs, scalar_t, 1);
+  const auto ql_acc = makeAcc32Restrict(ql, scalar_t, 1);
+  const auto qh_acc = makeAcc32Restrict(qh, scalar_t, 1);
+  const auto kl_acc = makeAcc32Restrict(kl, scalar_t, 1);
+  const auto kh_acc = makeAcc32Restrict(kh, scalar_t, 1);
 
   switch_key_switch_later_part_extend<scalar_t>
       <<<dim_grid, dim_block, 0, stream>>>(out_acc,
@@ -225,10 +224,10 @@ torch::Tensor switch_key_switch_later_part_extend_cuda(
 
 template <typename scalar_t>
 __global__ void codec_rotate_make_unsigned_reduce_2q_cuda_kernel(
-    torch::PackedTensorAccessor32<scalar_t, 2> out_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 2> a_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> perm_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> _2q_acc) {
+    TensorAcc32Restrict<scalar_t, 2> out_acc,
+    const TensorAcc32Restrict<scalar_t, 2> a_acc,
+    const TensorAcc32Restrict<scalar_t, 1> perm_acc,
+    const TensorAcc32Restrict<scalar_t, 1> _2q_acc) {
   const int i = blockIdx.x;                             // batch index
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;  // position index
 
@@ -273,10 +272,10 @@ void codec_rotate_make_unsigned_reduce_2q_cuda_typed(torch::Tensor out,
   int dim_block = BLOCK_SIZE;
   dim3 dim_grid(C, (N + BLOCK_SIZE - 1) / BLOCK_SIZE);
 
-  auto out_acc = out.packed_accessor32<scalar_t, 2>();
-  const auto a_acc = a.packed_accessor32<scalar_t, 2>();
-  const auto perm_acc = perm.packed_accessor32<scalar_t, 1>();
-  const auto _2q_acc = _2q.packed_accessor32<scalar_t, 1>();
+  auto out_acc = makeAcc32Restrict(out, scalar_t, 2);
+  const auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
+  const auto perm_acc = makeAcc32Restrict(perm, scalar_t, 1);
+  const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
 
   codec_rotate_make_unsigned_reduce_2q_cuda_kernel<scalar_t>
       <<<dim_grid, dim_block, 0, stream>>>(out_acc, a_acc, perm_acc, _2q_acc);
@@ -294,18 +293,3 @@ torch::Tensor codec_rotate_make_unsigned_reduce_2q_cuda(
 
   return out;
 }
-
-// ------------------------------------------------------------------
-// create_switcher - pre_extend
-// ------------------------------------------------------------------
-
-// template <typename scalar_t>
-// __global__ void create_switcher_pre_extend_cuda_kernel(
-//     torch::PackedTensorAccessor32<scalar_t, 2> out_acc,
-//     const torch::PackedTensorAccessor32<scalar_t, 2> a_part_acc,
-//     const torch::PackedTensorAccessor32<scalar_t, 1> perm_acc,
-//     const torch::PackedTensorAccessor32<scalar_t, 1> Rs_acc,  // Rs_prepack
-//     const torch::PackedTensorAccessor32<scalar_t, 1> ql_acc,  //
-//     *mont_prepack const torch::PackedTensorAccessor32<scalar_t, 1> qh_acc,
-//     const torch::PackedTensorAccessor32<scalar_t, 1> kl_acc,
-//     const torch::PackedTensorAccessor32<scalar_t, 1> kh_acc) {

@@ -28,3 +28,14 @@ torch::Tensor switch_key_switch_later_part_extend_cuda(
 
 torch::Tensor codec_rotate_make_unsigned_reduce_2q_cuda(
     const torch::Tensor a, const torch::Tensor perm, const torch::Tensor _2q);
+
+torch::Tensor create_switcher_divide_by_p_cuda(
+    const torch::Tensor c,  // d[: -self.ckksCfg.num_special_primes]
+    const torch::Tensor p,  // d[-self.ckksCfg.num_special_primes:]
+    const torch::Tensor _2q,
+    const torch::Tensor Rs,
+    const torch::Tensor PiRi,
+    const torch::Tensor ql,
+    const torch::Tensor qh,
+    const torch::Tensor kl,
+    const torch::Tensor kh);

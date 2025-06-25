@@ -1,5 +1,26 @@
 #pragma once
 
+#include <torch/torch.h>
+
+// ------------------------------------------------------------------
+// macros and type definitions
+// ------------------------------------------------------------------
+
+#define BLOCK_SIZE 256
+
+#define makeAcc32Restrict(tensor, scalar_t, dim) \
+  tensor.packed_accessor32<scalar_t, dim, torch::RestrictPtrTraits>()
+
+#define makeAcc32(tensor, scalar_t, dim) \
+  tensor.packed_accessor32<scalar_t, dim>()
+
+template <typename scalar_t, int dim>
+using TensorAcc32Restrict =
+    torch::PackedTensorAccessor32<scalar_t, dim, torch::RestrictPtrTraits>;
+
+template <typename scalar_t, int dim>
+using TensorAcc32 = torch::PackedTensorAccessor32<scalar_t, dim>;
+
 // ------------------------------------------------------------------
 // mont scalar cuda kernels
 // ------------------------------------------------------------------
@@ -91,20 +112,22 @@ mont_reduce_scalar_cuda_kernel(const scalar_t a,
                                const scalar_t kh) {
   // Masks.
   constexpr scalar_t one = 1;
+  // nbits is set to 2 bits less than the full width for overflow safety
   constexpr scalar_t nbits = sizeof(scalar_t) * 8 - 2;
   constexpr scalar_t half_nbits = sizeof(scalar_t) * 4 - 1;
-  constexpr scalar_t fb_mask = ((one << nbits) - one);
+  // lb_mask: mask for the lower half (like 0xFFFF)
   constexpr scalar_t lb_mask = (one << half_nbits) - one;
+  // fb_mask: mask to chop the result below 2^nbits to avoid overflow
+  constexpr scalar_t fb_mask = ((one << nbits) - one);
 
-  // s= xk mod R
+  // s = (a * k) mod R, with k = -q^{-1} mod R
   const scalar_t xl = a & lb_mask;
   const scalar_t xh = a >> half_nbits;
   const scalar_t xkb = xh * kl + xl * kh;
   scalar_t s = (xkb << half_nbits) + xl * kl;
   s = s & fb_mask;
 
-  // t = x + sq
-  // u = t/R
+  // t = a + s * q, then u = t / R
   // Note that x gets erased in t/R operation if x < R.
   const scalar_t sl = s & lb_mask;
   const scalar_t sh = s >> half_nbits;
@@ -114,9 +137,11 @@ mont_reduce_scalar_cuda_kernel(const scalar_t a,
   scalar_t carry = (a + sl * ql) >> half_nbits;
   carry = (carry + sqbl) >> half_nbits;
 
-  // Assume we have satisfied the condition 4*q < R.
-  // Return the calculated value directly without conditional subtraction.
+  // The final result is approximated by skipping an actual full a + s * q and
+  // >> r division Assume we have satisfied the condition 4*q < R. Return the
+  // calculated value directly without conditional subtraction.
   return sqbh + carry + sh * qh;
+  // result within [0,2q)
 }
 
 template <typename scalar_t>
