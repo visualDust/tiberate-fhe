@@ -313,25 +313,39 @@ torch::Tensor codec_rotate_make_unsigned_reduce_2q_cuda(
 
 template <typename scalar_t>
 __global__ void mont_chain_backward_cuda_kernel(
-    TensorAcc32Restrict<scalar_t, 2> a_acc,
-    const TensorAcc32Restrict<scalar_t, 1> PiRi_acc) {
-  const int tid = threadIdx.x;
-  const int N = a_acc.size(1);
-  const int C = a_acc.size(0);
+    TensorAcc32Restrict<scalar_t, 2> p_acc,
+    const int prime_row_offset,
+    const TensorAcc32Restrict<scalar_t, 1> _2q_acc,
+    const scalar_t** PiRi_ptr,
+    const TensorAcc32Restrict<scalar_t, 1> ql_acc,
+    const TensorAcc32Restrict<scalar_t, 1> qh_acc,
+    const TensorAcc32Restrict<scalar_t, 1> kl_acc,
+    const TensorAcc32Restrict<scalar_t, 1> kh_acc) {
+  const int i = blockIdx.x;
+  const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
+  const int num_primes = p_acc.size(0);
 
-  if (tid >= N) return;
-
-  for (int row = C - 2; row >= 0; --row) {
-    scalar_t val = a_acc[row][tid];
-    scalar_t PiRi = PiRi_acc[row];
+  for (int row = num_primes - 2; row >= 0; --row) {
+    scalar_t x = p_acc[row][j];
+    const scalar_t _2q = _2q_acc[row + prime_row_offset];
+    const scalar_t ql = ql_acc[row + prime_row_offset];
+    const scalar_t qh = qh_acc[row + prime_row_offset];
+    const scalar_t kl = kl_acc[row + prime_row_offset];
+    const scalar_t kh = kh_acc[row + prime_row_offset];
 
     // Loop over all rows below
-    for (int k = C - 1; k > row; --k) {
-      val = mont_mult_scalar_cuda_kernel(val - a_acc[k][tid], PiRi);
+    for (int k = num_primes - 1; k > row; --k) {
+      const scalar_t PiRi =
+          PiRi_ptr[num_primes - k - 1][row + prime_row_offset];
+      const scalar_t after_sub =
+          mont_sub_scalar_cuda_kernel(x, p_acc[k][j], _2q);  // mont sub
+      const scalar_t after_mult = mont_mult_scalar_cuda_kernel(
+          after_sub, PiRi, ql, qh, kl, kh);  // mont enter scalar PiRi
+      x = after_mult;
     }
 
-    a_acc[row][tid] = val;
-    __syncthreads();  // ensure that row is finished before the next uses it
+    p_acc[row][j] = x;
+    // __syncthreads();  // previous row depends on the next row
   }
 }
 
@@ -345,8 +359,7 @@ __global__ void create_switcher_d_divide_by_p_cuda_kernel(
                 // processed with create_switcher_p_self_divide_iter_cuda_kernel
     const TensorAcc32Restrict<scalar_t, 1> _2q_acc,
     const TensorAcc32Restrict<scalar_t, 1> Rs_acc,
-    const TensorAcc32Restrict<scalar_t, 1>
-        PiRi_acc,  // same shape as c_acc.size(0)
+    const scalar_t** PiRi_ptr,
     const TensorAcc32Restrict<scalar_t, 1> ql_acc,
     const TensorAcc32Restrict<scalar_t, 1> qh_acc,
     const TensorAcc32Restrict<scalar_t, 1> kl_acc,
@@ -359,7 +372,6 @@ __global__ void create_switcher_d_divide_by_p_cuda_kernel(
   scalar_t x = c_acc[i][j];
   const scalar_t _2q = _2q_acc[i];
   const scalar_t Rs = Rs_acc[i];
-  const scalar_t PiRi = PiRi_acc[i];
   const scalar_t ql = ql_acc[i];
   const scalar_t qh = qh_acc[i];
   const scalar_t kl = kl_acc[i];
@@ -369,7 +381,9 @@ __global__ void create_switcher_d_divide_by_p_cuda_kernel(
   x = mont_mult_scalar_cuda_kernel(x, Rs, ql, qh, kl, kh);
 
   // iterate from last p_acc to first
+  const int num_primes = p_acc.size(0);
   for (int k = p_acc.size(0) - 1; k >= 0; --k) {
+    const scalar_t PiRi = PiRi_ptr[num_primes - k - 1][i];
     const scalar_t p = p_acc[k][j];
     const scalar_t p_enter =
         mont_mult_scalar_cuda_kernel(p, Rs, ql, qh, kl, kh);  // mont enter
@@ -386,16 +400,17 @@ __global__ void create_switcher_d_divide_by_p_cuda_kernel(
 }
 
 template <typename scalar_t>
-void create_switcher_divide_by_p_cuda_typed(torch::Tensor out,
-                                            const torch::Tensor c,
-                                            const torch::Tensor p,
-                                            const torch::Tensor _2q,
-                                            const torch::Tensor Rs,
-                                            const torch::Tensor PiRi,
-                                            const torch::Tensor ql,
-                                            const torch::Tensor qh,
-                                            const torch::Tensor kl,
-                                            const torch::Tensor kh) {
+void create_switcher_divide_by_p_cuda_typed(
+    torch::Tensor out,
+    const torch::Tensor c,
+    const torch::Tensor p,
+    const torch::Tensor _2q,
+    const torch::Tensor Rs,
+    const std::vector<torch::Tensor> PiRi,
+    const torch::Tensor ql,
+    const torch::Tensor qh,
+    const torch::Tensor kl,
+    const torch::Tensor kh) {
   auto device_id = c.device().index();
   cudaSetDevice(device_id);
   auto stream = at::cuda::getCurrentCUDAStream(device_id);
@@ -403,30 +418,58 @@ void create_switcher_divide_by_p_cuda_typed(torch::Tensor out,
   auto C = out.size(0);
   auto N = c.size(1);  // c.size(1) == p.size(1)
   int dim_block = BLOCK_SIZE;
-  dim3 dim_grid(C, N / BLOCK_SIZE);
+  dim3 dim_grid_p_back(1, N / BLOCK_SIZE);
+  dim3 dim_grid_divide_p(C, N / BLOCK_SIZE);
 
   auto out_acc = makeAcc32Restrict(out, scalar_t, 2);
   const auto c_acc = makeAcc32Restrict(c, scalar_t, 2);
   const auto p_acc = makeAcc32Restrict(p, scalar_t, 2);
   const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
   const auto Rs_acc = makeAcc32Restrict(Rs, scalar_t, 1);
-  const auto PiRi_acc = makeAcc32Restrict(PiRi, scalar_t, 1);
+
+  // need to create pointer for PiRi
+  std::vector<scalar_t*> PiRi_ptr_h(PiRi.size());
+  for (size_t i = 0; i < PiRi.size(); ++i)
+    PiRi_ptr_h[i] = PiRi[i].data_ptr<scalar_t>();
+  scalar_t** PiRi_ptr_d = nullptr;
+  cudaMalloc(&PiRi_ptr_d, PiRi.size() * sizeof(scalar_t*));
+  cudaMemcpyAsync(PiRi_ptr_d,
+                  PiRi_ptr_h.data(),
+                  PiRi.size() * sizeof(scalar_t*),
+                  cudaMemcpyHostToDevice,
+                  stream);
+
+  // const auto PiRi_acc = makeAcc32Restrict(PiRi, scalar_t, 1);
   const auto ql_acc = makeAcc32Restrict(ql, scalar_t, 1);
   const auto qh_acc = makeAcc32Restrict(qh, scalar_t, 1);
   const auto kl_acc = makeAcc32Restrict(kl, scalar_t, 1);
   const auto kh_acc = makeAcc32Restrict(kh, scalar_t, 1);
 
+  // process primes
+  mont_chain_backward_cuda_kernel<scalar_t>
+      <<<dim_grid_p_back, dim_block, 0, stream>>>(
+          p_acc,
+          c.size(0),  // others are for both c and p
+          _2q_acc,
+          (const scalar_t**)PiRi_ptr_d,
+          ql_acc,
+          qh_acc,
+          kl_acc,
+          kh_acc);
+
+  // run the main kernel
   create_switcher_d_divide_by_p_cuda_kernel<scalar_t>
-      <<<dim_grid, dim_block, 0, stream>>>(out_acc,
-                                           c_acc,
-                                           p_acc,
-                                           _2q_acc,
-                                           Rs_acc,
-                                           PiRi_acc,
-                                           ql_acc,
-                                           qh_acc,
-                                           kl_acc,
-                                           kh_acc);
+      <<<dim_grid_divide_p, dim_block, 0, stream>>>(
+          out_acc,
+          c_acc,
+          p_acc,
+          _2q_acc,
+          Rs_acc,
+          (const scalar_t**)PiRi_ptr_d,
+          ql_acc,
+          qh_acc,
+          kl_acc,
+          kh_acc);
 }
 
 torch::Tensor create_switcher_divide_by_p_cuda(
@@ -434,7 +477,7 @@ torch::Tensor create_switcher_divide_by_p_cuda(
     const torch::Tensor p,  // d[-self.ckksCfg.num_special_primes:]
     const torch::Tensor _2q,
     const torch::Tensor Rs,
-    const torch::Tensor PiRi,  // same shape as c.size(0)
+    const std::vector<torch::Tensor> PiRi,
     const torch::Tensor ql,
     const torch::Tensor qh,
     const torch::Tensor kl,

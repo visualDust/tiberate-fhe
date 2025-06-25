@@ -51,6 +51,27 @@ std::vector<torch::Tensor> codec_rotate_make_unsigned_reduce_2q(
   return outputs;
 }
 
+std::vector<torch::Tensor> create_switcher_divide_by_p(
+    const std::vector<torch::Tensor>
+        c,  // d[: -self.ckksCfg.num_special_primes]
+    const std::vector<torch::Tensor> p,  // d[-self.ckksCfg.num_special_primes:]
+    const std::vector<torch::Tensor> _2q,
+    const std::vector<torch::Tensor> Rs,
+    const std::vector<std::vector<torch::Tensor>> PiRi,
+    const std::vector<torch::Tensor> ql,
+    const std::vector<torch::Tensor> qh,
+    const std::vector<torch::Tensor> kl,
+    const std::vector<torch::Tensor> kh) {
+  std::vector<torch::Tensor> outputs;
+  const auto num_devices = c.size();
+  for (size_t i = 0; i < num_devices; ++i) {
+    auto out = create_switcher_divide_by_p_cuda(
+        c[i], p[i], _2q[i], Rs[i], PiRi[i], ql[i], qh[i], kl[i], kh[i]);
+    outputs.push_back(out);
+  }
+  return outputs;
+}
+
 TORCH_LIBRARY_FRAGMENT(tiberate_fused_ops, m) {
   m.def(
       "pc_add_fused(Tensor[] ct_data, Tensor[] pt_data, "
@@ -64,6 +85,10 @@ TORCH_LIBRARY_FRAGMENT(tiberate_fused_ops, m) {
   m.def(
       "codec_rotate_make_unsigned_reduce_2q(Tensor[] a, Tensor[] perm, "
       "Tensor[] _2q) -> Tensor[]");
+  m.def(
+      "create_switcher_divide_by_p(Tensor[] c, Tensor[] p, "
+      "Tensor[] _2q, Tensor[] Rs, Tensor[][] PiRi, "
+      "Tensor[] ql, Tensor[] qh, Tensor[] kl, Tensor[] kh) -> Tensor[]");
 }
 
 TORCH_LIBRARY_IMPL(tiberate_fused_ops, CUDA, m) {
@@ -72,4 +97,5 @@ TORCH_LIBRARY_IMPL(tiberate_fused_ops, CUDA, m) {
          &switch_key_switch_later_part_extend);
   m.impl("codec_rotate_make_unsigned_reduce_2q",
          &codec_rotate_make_unsigned_reduce_2q);
+  m.impl("create_switcher_divide_by_p", &create_switcher_divide_by_p);
 }

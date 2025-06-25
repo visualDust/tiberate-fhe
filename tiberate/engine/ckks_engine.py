@@ -1015,6 +1015,192 @@ class CkksEngine:
         return extended
 
     # @nvtx.annotate() # todo see why memory copy with only one device
+    def create_switcher_old(
+        self,
+        a: list[torch.Tensor],
+        ksk: KeySwitchKey,
+        level: int,
+        exit_ntt: bool = False,
+    ) -> tuple:
+        # ksk parts allocation.
+        ksk_alloc = self.parts_alloc[level]
+
+        # Device lens and neighbor devices.
+        len_devices = self.len_devices[level]
+        neighbor_devices = self.neighbor_devices[level]
+
+        # Iterate over source device ids, and then part ids.
+        num_parts = sum([len(alloc) for alloc in ksk_alloc])
+        part_results = [
+            [
+                [[] for _ in range(len_devices)],
+                [[] for _ in range(len_devices)],
+            ]
+            for _ in range(num_parts)
+        ]
+
+        # 1. Generate states.
+        states = [[] for _ in range(num_parts)]
+        for src_device_id in range(len_devices):
+            for part_id in range(len(self.rnsPart.p[level][src_device_id])):
+                storage_id = self.stor_ids[level][src_device_id][part_id]
+                state = self.pre_extend(
+                    a, src_device_id, level, part_id, exit_ntt
+                )
+                states[storage_id] = state
+
+        # 2. Copy to CPU.
+        CPU_states = [[] for _ in range(num_parts)]
+        for src_device_id in range(len_devices):
+            for part_id, part in enumerate(
+                self.rnsPart.p[level][src_device_id]
+            ):
+                storage_id = self.stor_ids[level][src_device_id][part_id]
+                alpha = len(part)
+                CPU_state = self.ksk_buffers[src_device_id][part_id][:alpha]
+                CPU_state.copy_(states[storage_id], non_blocking=True)
+                CPU_states[storage_id] = CPU_state
+
+        # 3. Continue on with the follow ups on source devices.
+        for src_device_id in range(len_devices):
+            for part_id in range(len(self.rnsPart.p[level][src_device_id])):
+                storage_id = self.stor_ids[level][src_device_id][part_id]
+                state = states[storage_id]
+                d0, d1 = self.switcher_later_part(
+                    state, ksk, src_device_id, src_device_id, level, part_id
+                )
+
+                part_results[storage_id][0][src_device_id] = d0
+                part_results[storage_id][1][src_device_id] = d1
+
+        # 4. Copy onto neighbor GPUs the states.
+        CUDA_states = [[] for _ in range(num_parts)]
+        for src_device_id in range(len_devices):
+            for j, dst_device_id in enumerate(neighbor_devices[src_device_id]):
+                for part_id, part in enumerate(
+                    self.rnsPart.p[level][src_device_id]
+                ):
+                    storage_id = self.stor_ids[level][src_device_id][part_id]
+                    CPU_state = CPU_states[storage_id]
+                    CUDA_states[storage_id] = CPU_state.cuda(
+                        self.nttCtx.devices[dst_device_id],
+                        non_blocking=True,
+                    )
+
+        # 5. Synchronize.
+        # torch.cuda.synchronize()
+
+        # 6. Do follow ups on neighbors.
+        for src_device_id in range(len_devices):
+            for j, dst_device_id in enumerate(neighbor_devices[src_device_id]):
+                for part_id, part in enumerate(
+                    self.rnsPart.p[level][src_device_id]
+                ):
+                    storage_id = self.stor_ids[level][src_device_id][part_id]
+                    CUDA_state = CUDA_states[storage_id]
+                    d0, d1 = self.switcher_later_part(
+                        CUDA_state,
+                        ksk,
+                        src_device_id,
+                        dst_device_id,
+                        level,
+                        part_id,
+                    )
+                    part_results[storage_id][0][dst_device_id] = d0
+                    part_results[storage_id][1][dst_device_id] = d1
+
+        # 7. Sum up.
+        stacked0 = []
+        stacked1 = []
+        for i in range(len(part_results[0][0])):
+            # shape: [K, C, N]
+            stacked0.append(torch.stack([x[0][i] for x in part_results]))
+            stacked1.append(torch.stack([x[1][i] for x in part_results]))
+
+        summed0 = self.nttCtx.mont_add_many_3d(stacked0, level, -2)
+        summed1 = self.nttCtx.mont_add_many_3d(stacked1, level, -2)
+
+        # Rename summed's.
+        d0 = summed0
+        d1 = summed1
+
+        # intt to prepare for division by P.
+        self.nttCtx.intt_exit_reduce(d0, level, -2)
+        self.nttCtx.intt_exit_reduce(d1, level, -2)
+
+        # 6. Divide by P.
+        # This is actually done in successive order.
+        # Rescale from the most outer prime channel.
+        # Start from the special len and drop channels one by one.
+
+        # Pre-montgomery enter the ordinary part.
+        # Note that special prime channels remain intact.
+        c0 = [d[: -self.ckksCfg.num_special_primes] for d in d0]
+        c1 = [d[: -self.ckksCfg.num_special_primes] for d in d1]
+
+        current_len = [
+            len(d) for d in self.rnsPart.destination_arrays_with_special[level]
+        ]
+
+        # self.nttCtx.mont_enter(c0, level, -1)
+        # self.nttCtx.mont_enter(c1, level, -1)
+        self.nttCtx.mont_enter(c0, level, -2)
+        self.nttCtx.mont_enter(c1, level, -2)
+
+        for prime_idx in range(self.ckksCfg.num_special_primes):
+            PiRi = self.PiRs[level][prime_idx]
+
+            # Tile.
+            P0 = [
+                d[-1 - prime_idx].repeat(current_len[di], 1)
+                for di, d in enumerate(d0)
+            ]
+            P1 = [
+                d[-1 - prime_idx].repeat(current_len[di], 1)
+                for di, d in enumerate(d1)
+            ]
+
+            # mont enter only the ordinary part.
+            Q0 = [d[: -self.ckksCfg.num_special_primes] for d in P0]
+            Q1 = [d[: -self.ckksCfg.num_special_primes] for d in P1]
+
+            # self.nttCtx.mont_enter(Q0, level, -1)
+            # self.nttCtx.mont_enter(Q1, level, -1)
+            self.nttCtx.mont_enter(Q0, level, -2)
+            self.nttCtx.mont_enter(Q1, level, -2)
+
+            # subtract P0 and P1.
+            # Note that by the consequence of the above mont_enter
+            # ordinary parts will be in montgomery form,
+            # while the special part remains plain.
+            d0 = self.nttCtx.mont_sub(d0, P0, level, -2)
+            d1 = self.nttCtx.mont_sub(d1, P1, level, -2)
+
+            self.nttCtx.mont_enter_scalar(d0, PiRi, level, -2)
+            self.nttCtx.mont_enter_scalar(d1, PiRi, level, -2)
+
+        # Carve out again, since d0 and d1 are fresh new.
+        c0 = [d[: -self.ckksCfg.num_special_primes] for d in d0]
+        c1 = [d[: -self.ckksCfg.num_special_primes] for d in d1]
+
+        # Exit the montgomery.
+        # self.nttCtx.mont_reduce(c0, level, -1)
+        # self.nttCtx.mont_reduce(c1, level, -1)
+        self.nttCtx.mont_reduce(c0, level, -2)
+        self.nttCtx.mont_reduce(c1, level, -2)
+
+        # self.nttCtx.reduce_2q(c0, level, -1)
+        # self.nttCtx.reduce_2q(c1, level, -1)
+        self.nttCtx.reduce_2q(
+            c0, level, -2
+        )  # ??? I removed this but its not exploding why?
+        self.nttCtx.reduce_2q(
+            c1, level, -2
+        )  # ??? I removed this but its not exploding why?
+
+        # 7. Return
+        return c0, c1
+
     def create_switcher(
         self,
         a: list[torch.Tensor],
@@ -1117,12 +1303,8 @@ class CkksEngine:
             stacked0.append(torch.stack([x[0][i] for x in part_results]))
             stacked1.append(torch.stack([x[1][i] for x in part_results]))
 
-        summed0 = self.nttCtx.mont_add_many_3d(stacked0, level, -2)
-        summed1 = self.nttCtx.mont_add_many_3d(stacked1, level, -2)
-
-        # Rename summed's.
-        d0 = summed0
-        d1 = summed1
+        d0 = self.nttCtx.mont_add_many_3d(stacked0, level, -2)
+        d1 = self.nttCtx.mont_add_many_3d(stacked1, level, -2)
 
         # intt to prepare for division by P.
         self.nttCtx.intt_exit_reduce(d0, level, -2)
@@ -1138,246 +1320,38 @@ class CkksEngine:
         c0 = [d[: -self.ckksCfg.num_special_primes] for d in d0]
         c1 = [d[: -self.ckksCfg.num_special_primes] for d in d1]
 
-        # self.nttCtx.mont_enter(c0, level, -1)
-        # self.nttCtx.mont_enter(c1, level, -1)
-        self.nttCtx.mont_enter(c0, level, -2)
-        self.nttCtx.mont_enter(c1, level, -2)
+        p0 = [d[-self.ckksCfg.num_special_primes :] for d in d0]
+        p1 = [d[-self.ckksCfg.num_special_primes :] for d in d1]
 
-        current_len = [
-            len(d) for d in self.rnsPart.destination_arrays_with_special[level]
-        ]
+        PiRi = []  # switch prime index dim in and device dim out
+        for dev_idx in range(len(self.PiRs[level][0])):
+            PiRi.append(
+                [
+                    self.PiRs[level][prime_idx][dev_idx]
+                    for prime_idx in range(len(self.PiRs[level]))
+                ]
+            )  # now PiRi is [device_idx][prime_idx] for current level
 
-        for prime_idx in range(self.ckksCfg.num_special_primes):
-            PiRi = self.PiRs[level][prime_idx]
+        out0 = torch.ops.tiberate_fused_ops.create_switcher_divide_by_p(
+            c0,
+            p0,
+            self.nttCtx._2q_prepack[-2][level][0],
+            self.nttCtx.Rs_prepack[-2][level][0],
+            PiRi,
+            *self.nttCtx.mont_prepack[-2][level][0],
+        )
 
-            # Tile.
-            P0 = [
-                d[-1 - prime_idx].repeat(current_len[di], 1)
-                for di, d in enumerate(d0)
-            ]
-            P1 = [
-                d[-1 - prime_idx].repeat(current_len[di], 1)
-                for di, d in enumerate(d1)
-            ]
-
-            # mont enter only the ordinary part.
-            Q0 = [d[: -self.ckksCfg.num_special_primes] for d in P0]
-            Q1 = [d[: -self.ckksCfg.num_special_primes] for d in P1]
-
-            # self.nttCtx.mont_enter(Q0, level, -1)
-            # self.nttCtx.mont_enter(Q1, level, -1)
-            self.nttCtx.mont_enter(Q0, level, -2)
-            self.nttCtx.mont_enter(Q1, level, -2)
-
-            # subtract P0 and P1.
-            # Note that by the consequence of the above mont_enter
-            # ordinary parts will be in montgomery form,
-            # while the special part remains plain.
-            d0 = self.nttCtx.mont_sub(d0, P0, level, -2)
-            d1 = self.nttCtx.mont_sub(d1, P1, level, -2)
-
-            self.nttCtx.mont_enter_scalar(d0, PiRi, level, -2)
-            self.nttCtx.mont_enter_scalar(d1, PiRi, level, -2)
-
-        # Carve out again, since d0 and d1 are fresh new.
-        c0 = [d[: -self.ckksCfg.num_special_primes] for d in d0]
-        c1 = [d[: -self.ckksCfg.num_special_primes] for d in d1]
-
-        # Exit the montgomery.
-        # self.nttCtx.mont_reduce(c0, level, -1)
-        # self.nttCtx.mont_reduce(c1, level, -1)
-        self.nttCtx.mont_reduce(c0, level, -2)
-        self.nttCtx.mont_reduce(c1, level, -2)
-
-        # self.nttCtx.reduce_2q(c0, level, -1)
-        # self.nttCtx.reduce_2q(c1, level, -1)
-        # self.nttCtx.reduce_2q(c0, level, -2) # ??? I removed this but its not exploding why?
-        # self.nttCtx.reduce_2q(c1, level, -2) # ??? I removed this but its not exploding why?
+        out1 = torch.ops.tiberate_fused_ops.create_switcher_divide_by_p(
+            c1,
+            p1,
+            self.nttCtx._2q_prepack[-2][level][0],
+            self.nttCtx.Rs_prepack[-2][level][0],
+            PiRi,
+            *self.nttCtx.mont_prepack[-2][level][0],
+        )
 
         # 7. Return
-        return c0, c1
-
-    def create_switcher_new(
-        self,
-        a: list[torch.Tensor],
-        ksk: KeySwitchKey,
-        level: int,
-        exit_ntt: bool = False,
-    ) -> tuple:
-        # ksk parts allocation.
-        ksk_alloc = self.parts_alloc[level]
-
-        # Device lens and neighbor devices.
-        len_devices = self.len_devices[level]
-        neighbor_devices = self.neighbor_devices[level]
-
-        # Iterate over source device ids, and then part ids.
-        num_parts = sum([len(alloc) for alloc in ksk_alloc])
-        part_results = [
-            [
-                [[] for _ in range(len_devices)],
-                [[] for _ in range(len_devices)],
-            ]
-            for _ in range(num_parts)
-        ]
-
-        # 1. Generate states.
-        states = [[] for _ in range(num_parts)]
-        for src_device_id in range(len_devices):
-            for part_id in range(len(self.rnsPart.p[level][src_device_id])):
-                storage_id = self.stor_ids[level][src_device_id][part_id]
-                state = self.pre_extend(
-                    a, src_device_id, level, part_id, exit_ntt
-                )
-                states[storage_id] = state
-
-        # 2. Copy to CPU.
-        CPU_states = [[] for _ in range(num_parts)]
-        for src_device_id in range(len_devices):
-            for part_id, part in enumerate(
-                self.rnsPart.p[level][src_device_id]
-            ):
-                storage_id = self.stor_ids[level][src_device_id][part_id]
-                alpha = len(part)
-                CPU_state = self.ksk_buffers[src_device_id][part_id][:alpha]
-                CPU_state.copy_(states[storage_id], non_blocking=True)
-                CPU_states[storage_id] = CPU_state
-
-        # 3. Continue on with the follow ups on source devices.
-        for src_device_id in range(len_devices):
-            for part_id in range(len(self.rnsPart.p[level][src_device_id])):
-                storage_id = self.stor_ids[level][src_device_id][part_id]
-                state = states[storage_id]
-                d0, d1 = self.switcher_later_part(
-                    state, ksk, src_device_id, src_device_id, level, part_id
-                )
-
-                part_results[storage_id][0][src_device_id] = d0
-                part_results[storage_id][1][src_device_id] = d1
-
-        # 4. Copy onto neighbor GPUs the states.
-        CUDA_states = [[] for _ in range(num_parts)]
-        for src_device_id in range(len_devices):
-            for j, dst_device_id in enumerate(neighbor_devices[src_device_id]):
-                for part_id, part in enumerate(
-                    self.rnsPart.p[level][src_device_id]
-                ):
-                    storage_id = self.stor_ids[level][src_device_id][part_id]
-                    CPU_state = CPU_states[storage_id]
-                    CUDA_states[storage_id] = CPU_state.cuda(
-                        self.nttCtx.devices[dst_device_id],
-                        non_blocking=True,
-                    )
-
-        # 5. Synchronize.
-        # torch.cuda.synchronize()
-
-        # 6. Do follow ups on neighbors.
-        for src_device_id in range(len_devices):
-            for j, dst_device_id in enumerate(neighbor_devices[src_device_id]):
-                for part_id, part in enumerate(
-                    self.rnsPart.p[level][src_device_id]
-                ):
-                    storage_id = self.stor_ids[level][src_device_id][part_id]
-                    CUDA_state = CUDA_states[storage_id]
-                    d0, d1 = self.switcher_later_part(
-                        CUDA_state,
-                        ksk,
-                        src_device_id,
-                        dst_device_id,
-                        level,
-                        part_id,
-                    )
-                    part_results[storage_id][0][dst_device_id] = d0
-                    part_results[storage_id][1][dst_device_id] = d1
-
-        # 7. Sum up.
-        stacked0 = []
-        stacked1 = []
-        for i in range(len(part_results[0][0])):
-            # shape: [K, C, N]
-            stacked0.append(torch.stack([x[0][i] for x in part_results]))
-            stacked1.append(torch.stack([x[1][i] for x in part_results]))
-
-        summed0 = self.nttCtx.mont_add_many_3d(stacked0, level, -2)
-        summed1 = self.nttCtx.mont_add_many_3d(stacked1, level, -2)
-
-        # Rename summed's.
-        d0 = summed0
-        d1 = summed1
-
-        # intt to prepare for division by P.
-        self.nttCtx.intt_exit_reduce(d0, level, -2)
-        self.nttCtx.intt_exit_reduce(d1, level, -2)
-
-        # 6. Divide by P.
-        # This is actually done in successive order.
-        # Rescale from the most outer prime channel.
-        # Start from the special len and drop channels one by one.
-
-        # Pre-montgomery enter the ordinary part.
-        # Note that special prime channels remain intact.
-        c0 = [d[: -self.ckksCfg.num_special_primes] for d in d0]
-        c1 = [d[: -self.ckksCfg.num_special_primes] for d in d1]
-
-        # self.nttCtx.mont_enter(c0, level, -1)
-        # self.nttCtx.mont_enter(c1, level, -1)
-        self.nttCtx.mont_enter(c0, level, -2)
-        self.nttCtx.mont_enter(c1, level, -2)
-
-        current_len = [
-            len(d) for d in self.rnsPart.destination_arrays_with_special[level]
-        ]
-
-        for prime_idx in range(self.ckksCfg.num_special_primes):
-            PiRi = self.PiRs[level][prime_idx]
-
-            # Tile.
-            P0 = [
-                d[-1 - prime_idx].repeat(current_len[di], 1)
-                for di, d in enumerate(d0)
-            ]
-            P1 = [
-                d[-1 - prime_idx].repeat(current_len[di], 1)
-                for di, d in enumerate(d1)
-            ]
-
-            # mont enter only the ordinary part.
-            Q0 = [d[: -self.ckksCfg.num_special_primes] for d in P0]
-            Q1 = [d[: -self.ckksCfg.num_special_primes] for d in P1]
-
-            # self.nttCtx.mont_enter(Q0, level, -1)
-            # self.nttCtx.mont_enter(Q1, level, -1)
-            self.nttCtx.mont_enter(Q0, level, -2)
-            self.nttCtx.mont_enter(Q1, level, -2)
-
-            # subtract P0 and P1.
-            # Note that by the consequence of the above mont_enter
-            # ordinary parts will be in montgomery form,
-            # while the special part remains plain.
-            d0 = self.nttCtx.mont_sub(d0, P0, level, -2)
-            d1 = self.nttCtx.mont_sub(d1, P1, level, -2)
-
-            self.nttCtx.mont_enter_scalar(d0, PiRi, level, -2)
-            self.nttCtx.mont_enter_scalar(d1, PiRi, level, -2)
-
-        # Carve out again, since d0 and d1 are fresh new.
-        c0 = [d[: -self.ckksCfg.num_special_primes] for d in d0]
-        c1 = [d[: -self.ckksCfg.num_special_primes] for d in d1]
-
-        # Exit the montgomery.
-        # self.nttCtx.mont_reduce(c0, level, -1)
-        # self.nttCtx.mont_reduce(c1, level, -1)
-        self.nttCtx.mont_reduce(c0, level, -2)
-        self.nttCtx.mont_reduce(c1, level, -2)
-
-        # self.nttCtx.reduce_2q(c0, level, -1)
-        # self.nttCtx.reduce_2q(c1, level, -1)
-        self.nttCtx.reduce_2q(c0, level, -2)
-        self.nttCtx.reduce_2q(c1, level, -2)
-
-        # 7. Return
-        return c0, c1
+        return out0, out1
 
     def switcher_later_part(
         self,

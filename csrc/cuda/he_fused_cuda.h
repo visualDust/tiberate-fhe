@@ -32,7 +32,7 @@ torch::Tensor create_switcher_divide_by_p_cuda(
     const torch::Tensor p,  // d[-self.ckksCfg.num_special_primes:]
     const torch::Tensor _2q,
     const torch::Tensor Rs,
-    const torch::Tensor PiRi,
+    const std::vector<torch::Tensor> PiRi,
     const torch::Tensor ql,
     const torch::Tensor qh,
     const torch::Tensor kl,
