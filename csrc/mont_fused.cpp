@@ -1,6 +1,4 @@
-#include <torch/library.h>
 #include "cuda/mont_fused_cuda.h"
-#include "extensions.h"
 
 std::vector<torch::Tensor> mont_add_many_3d(
     const std::vector<torch::Tensor> inputs,

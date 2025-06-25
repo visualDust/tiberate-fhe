@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../extensions.h"
+#include <torch/torch.h>
 
 void randint_cuda(torch::Tensor rand_bytes, uint64_t *q);
 torch::Tensor randint_fast_cuda(torch::Tensor states,

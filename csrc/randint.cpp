@@ -1,6 +1,7 @@
+#include <torch/torch.h>
 #include <vector>
 #include "cuda/randint_cuda.h"
-#include "extensions.h"
+#include "macros.h"
 
 // The main function.
 //----------------

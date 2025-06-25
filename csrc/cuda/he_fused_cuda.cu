@@ -1,10 +1,8 @@
 #include "he_fused_cuda.h"
-#include <ATen/core/TensorAccessor.h>
-#include <c10/cuda/CUDAStream.h>
 #include <cstdint>
 #include <cstdio>
-#include "../extensions.h"
-#include "mont_common.cuh"
+#include "extensions.cuh"
+#include "mont_scalar_kernel.cuh"
 
 // ------------------------------------------------------------------
 // pc_add_fused_cuda_kernel
@@ -289,6 +287,165 @@ torch::Tensor codec_rotate_make_unsigned_reduce_2q_cuda(
       a.scalar_type(), "codec_rotate_make_unsigned_reduce_2q_cuda", [&] {
         codec_rotate_make_unsigned_reduce_2q_cuda_typed<scalar_t>(
             out, a, perm, _2q);
+      });
+
+  return out;
+}
+
+// ------------------------------------------------------------------
+// create_switcher - pre_extend
+// ------------------------------------------------------------------
+
+// template <typename scalar_t>
+// __global__ void create_switcher_pre_extend_cuda_kernel(
+//     TensorAcc32Restrict<scalar_t, 2> out_acc,
+//     const TensorAcc32Restrict<scalar_t, 2> a_part_acc,
+//     const TensorAcc32Restrict<scalar_t, 1> perm_acc,
+//     const TensorAcc32Restrict<scalar_t, 1> Rs_acc,  // Rs_prepack
+//     const TensorAcc32Restrict<scalar_t, 1> ql_acc,  //
+//     *mont_prepack const TensorAcc32Restrict<scalar_t, 1> qh_acc,
+//     const TensorAcc32Restrict<scalar_t, 1> kl_acc,
+//     const TensorAcc32Restrict<scalar_t, 1> kh_acc) {
+
+// ----------------------------------------------------------------------
+// create_switcher Divide by P
+// ----------------------------------------------------------------------
+
+template <typename scalar_t>
+__global__ void mont_chain_backward_cuda_kernel(
+    TensorAcc32Restrict<scalar_t, 2> a_acc,
+    const TensorAcc32Restrict<scalar_t, 1> PiRi_acc) {
+  const int tid = threadIdx.x;
+  const int N = a_acc.size(1);
+  const int C = a_acc.size(0);
+
+  if (tid >= N) return;
+
+  for (int row = C - 2; row >= 0; --row) {
+    scalar_t val = a_acc[row][tid];
+    scalar_t PiRi = PiRi_acc[row];
+
+    // Loop over all rows below
+    for (int k = C - 1; k > row; --k) {
+      val = mont_mult_scalar_cuda_kernel(val - a_acc[k][tid], PiRi);
+    }
+
+    a_acc[row][tid] = val;
+    __syncthreads();  // ensure that row is finished before the next uses it
+  }
+}
+
+template <typename scalar_t>
+__global__ void create_switcher_d_divide_by_p_cuda_kernel(
+    TensorAcc32Restrict<scalar_t, 2> out_acc,  // same shape as c_acc
+    const TensorAcc32Restrict<scalar_t, 2>
+        c_acc,  // d[: -self.ckksCfg.num_special_primes]
+    const TensorAcc32Restrict<scalar_t, 2>
+        p_acc,  // d[-self.ckksCfg.num_special_primes:], assume p_acc is already
+                // processed with create_switcher_p_self_divide_iter_cuda_kernel
+    const TensorAcc32Restrict<scalar_t, 1> _2q_acc,
+    const TensorAcc32Restrict<scalar_t, 1> Rs_acc,
+    const TensorAcc32Restrict<scalar_t, 1>
+        PiRi_acc,  // same shape as c_acc.size(0)
+    const TensorAcc32Restrict<scalar_t, 1> ql_acc,
+    const TensorAcc32Restrict<scalar_t, 1> qh_acc,
+    const TensorAcc32Restrict<scalar_t, 1> kl_acc,
+    const TensorAcc32Restrict<scalar_t, 1> kh_acc) {
+  // Where am I?
+  const int i = blockIdx.x;
+  const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
+
+  // Inputs.
+  scalar_t x = c_acc[i][j];
+  const scalar_t _2q = _2q_acc[i];
+  const scalar_t Rs = Rs_acc[i];
+  const scalar_t PiRi = PiRi_acc[i];
+  const scalar_t ql = ql_acc[i];
+  const scalar_t qh = qh_acc[i];
+  const scalar_t kl = kl_acc[i];
+  const scalar_t kh = kh_acc[i];
+
+  // mont_enter
+  x = mont_mult_scalar_cuda_kernel(x, Rs, ql, qh, kl, kh);
+
+  // iterate from last p_acc to first
+  for (int k = p_acc.size(0) - 1; k >= 0; --k) {
+    const scalar_t p = p_acc[k][j];
+    const scalar_t p_enter =
+        mont_mult_scalar_cuda_kernel(p, Rs, ql, qh, kl, kh);  // mont enter
+    x = mont_sub_scalar_cuda_kernel(x, p_enter, _2q);         // mont sub
+    x = mont_mult_scalar_cuda_kernel(
+        x, PiRi, ql, qh, kl, kh);  // mont enter scalar PiRi
+  }
+
+  x = mont_reduce_scalar_cuda_kernel(x, ql, qh, kl, kh);  // mont reduce
+  x = reduce_2q_scalar_cuda_kernel(x, _2q);               // reduce 2q
+
+  // Store the result.
+  out_acc[i][j] = x;
+}
+
+template <typename scalar_t>
+void create_switcher_divide_by_p_cuda_typed(torch::Tensor out,
+                                            const torch::Tensor c,
+                                            const torch::Tensor p,
+                                            const torch::Tensor _2q,
+                                            const torch::Tensor Rs,
+                                            const torch::Tensor PiRi,
+                                            const torch::Tensor ql,
+                                            const torch::Tensor qh,
+                                            const torch::Tensor kl,
+                                            const torch::Tensor kh) {
+  auto device_id = c.device().index();
+  cudaSetDevice(device_id);
+  auto stream = at::cuda::getCurrentCUDAStream(device_id);
+
+  auto C = out.size(0);
+  auto N = c.size(1);  // c.size(1) == p.size(1)
+  int dim_block = BLOCK_SIZE;
+  dim3 dim_grid(C, N / BLOCK_SIZE);
+
+  auto out_acc = makeAcc32Restrict(out, scalar_t, 2);
+  const auto c_acc = makeAcc32Restrict(c, scalar_t, 2);
+  const auto p_acc = makeAcc32Restrict(p, scalar_t, 2);
+  const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
+  const auto Rs_acc = makeAcc32Restrict(Rs, scalar_t, 1);
+  const auto PiRi_acc = makeAcc32Restrict(PiRi, scalar_t, 1);
+  const auto ql_acc = makeAcc32Restrict(ql, scalar_t, 1);
+  const auto qh_acc = makeAcc32Restrict(qh, scalar_t, 1);
+  const auto kl_acc = makeAcc32Restrict(kl, scalar_t, 1);
+  const auto kh_acc = makeAcc32Restrict(kh, scalar_t, 1);
+
+  create_switcher_d_divide_by_p_cuda_kernel<scalar_t>
+      <<<dim_grid, dim_block, 0, stream>>>(out_acc,
+                                           c_acc,
+                                           p_acc,
+                                           _2q_acc,
+                                           Rs_acc,
+                                           PiRi_acc,
+                                           ql_acc,
+                                           qh_acc,
+                                           kl_acc,
+                                           kh_acc);
+}
+
+torch::Tensor create_switcher_divide_by_p_cuda(
+    const torch::Tensor c,  // d[: -self.ckksCfg.num_special_primes]
+    const torch::Tensor p,  // d[-self.ckksCfg.num_special_primes:]
+    const torch::Tensor _2q,
+    const torch::Tensor Rs,
+    const torch::Tensor PiRi,  // same shape as c.size(0)
+    const torch::Tensor ql,
+    const torch::Tensor qh,
+    const torch::Tensor kl,
+    const torch::Tensor kh) {
+  // Create output tensor.
+  torch::Tensor out = torch::empty_like(c);
+
+  AT_DISPATCH_INTEGRAL_TYPES(
+      c.scalar_type(), "create_switcher_divide_by_p_cuda", [&] {
+        create_switcher_divide_by_p_cuda_typed<scalar_t>(
+            out, c, p, _2q, Rs, PiRi, ql, qh, kl, kh);
       });
 
   return out;

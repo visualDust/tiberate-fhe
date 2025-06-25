@@ -1,8 +1,6 @@
 #include "ntt_cuda.h"
-#include <c10/cuda/CUDAStream.h>
+#include "extensions.cuh"
 #include "mont_used_in_ntt.cuh"
-
-#define BLOCK_SIZE 256
 
 //------------------------------------------------------------------
 // ntt

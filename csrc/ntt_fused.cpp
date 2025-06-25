@@ -1,5 +1,4 @@
 #include "cuda/ntt_fused_cuda.h"  // inside is forward declarations for cuda kernels
-#include "extensions.h"
 
 void intt_exit(std::vector<torch::Tensor> a,
                const std::vector<torch::Tensor> even,

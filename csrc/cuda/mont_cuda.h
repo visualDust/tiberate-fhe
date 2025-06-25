@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../extensions.h"
+#include <torch/torch.h>
 
 torch::Tensor mont_mult_cuda(const torch::Tensor a,
                              const torch::Tensor b,

@@ -1,7 +1,5 @@
 #include "randround_cuda.h"
-#include <c10/cuda/CUDAStream.h>
-
-#define BLOCK_SIZE 256
+#include "extensions.cuh"
 
 __global__ void randint_cuda_kernel(
     const torch::PackedTensorAccessor32<double, 1> input,

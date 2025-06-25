@@ -1,8 +1,6 @@
 #pragma once
 
-#include "../extensions.h"
-
-#define BLOCK_SIZE 256
+#include <torch/torch.h>
 
 torch::Tensor pc_add_fused_cuda(
     const torch::Tensor a,  // a is typically ct_data

@@ -1,7 +1,5 @@
 #include "chacha20_cuda.h"
-#include <c10/cuda/CUDAStream.h>
-
-#define BLOCK_SIZE 256
+#include "extensions.cuh"
 
 __global__ void chacha20_cuda_kernel(
     torch::PackedTensorAccessor32<int64_t, 2> input,

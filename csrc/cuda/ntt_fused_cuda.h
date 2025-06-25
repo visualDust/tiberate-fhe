@@ -1,8 +1,6 @@
 #pragma once
 
-#include "../extensions.h"
-
-#define BLOCK_SIZE 256
+#include <torch/torch.h>
 
 // -------------------------------------------------------------------
 // forward definitions

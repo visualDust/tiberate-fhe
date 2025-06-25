@@ -1,6 +1,5 @@
 #pragma once
-
-#include "../extensions.h"
+#include <torch/torch.h>
 
 #define GE(x_high, x_low, y_high, y_low) \
   (((x_high) > (y_high)) | (((x_high) == (y_high)) & ((x_low) >= (y_low))))

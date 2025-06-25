@@ -1,6 +1,7 @@
+#include <torch/torch.h>
 #include <vector>
 #include "cuda/randround_cuda.h"
-#include "extensions.h"
+#include "macros.h"
 
 // The main function.
 // rand_bytes are N 1D uint64_t tensors.

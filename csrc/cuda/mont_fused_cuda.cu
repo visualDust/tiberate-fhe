@@ -1,10 +1,7 @@
 #include "mont_fused_cuda.h"
-#include <ATen/core/TensorAccessor.h>
-#include <c10/cuda/CUDAStream.h>
 #include <cstdint>
-#include "mont_common.cuh"
-
-#define BLOCK_SIZE 256
+#include "extensions.cuh"
+#include "mont_scalar_kernel.cuh"
 
 // ------------------------------------------------------------------
 // mont_add_many_cuda_kernel, it adds up on 1st dimension of a 3D tensor

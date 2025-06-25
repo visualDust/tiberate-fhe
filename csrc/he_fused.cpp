@@ -1,6 +1,6 @@
 #include <torch/library.h>
+#include <torch/torch.h>
 #include "cuda/he_fused_cuda.h"
-#include "extensions.h"
 
 std::vector<torch::Tensor> pc_add_fused(
     const std::vector<torch::Tensor> ct_data,

@@ -1,6 +1,7 @@
+#include <torch/torch.h>
 #include <vector>
 #include "cuda/chacha20_cuda.h"
-#include "extensions.h"
+#include "macros.h"
 
 // chacha20 is a mutating function.
 // That means the input is mutated and there's no need to return a value.

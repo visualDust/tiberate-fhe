@@ -1,7 +1,4 @@
-#include <torch/library.h>
-#include <vector>
 #include "cuda/mont_cuda.h"
-#include "extensions.h"
 
 //------------------------------------------------------------------
 // Wrap functions for Montgomery space operations

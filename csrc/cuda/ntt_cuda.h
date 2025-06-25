@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../extensions.h"
+#include <torch/torch.h>
 
 // ------------------------------------------------------------------
 // CUDA forward declarations

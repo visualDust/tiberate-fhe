@@ -1,6 +1,6 @@
 #include "ntt_fused_cuda.h"
-#include <c10/cuda/CUDAStream.h>
-#include "mont_common.cuh"
+#include "extensions.cuh"
+#include "mont_scalar_kernel.cuh"
 
 // -------------------------------------------------------------------
 // mont enter + mont reduce

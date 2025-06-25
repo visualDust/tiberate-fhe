@@ -1,7 +1,8 @@
+#include <torch/torch.h>
 #include <cstdint>
 #include <vector>
 #include "cuda/discrete_gaussian_cuda.h"
-#include "extensions.h"
+#include "macros.h"
 
 // The main function.
 //----------------

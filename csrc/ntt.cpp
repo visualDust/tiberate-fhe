@@ -1,5 +1,4 @@
-#include "cuda/ntt_cuda.h"  // inside is forward declarations for cuda kernels
-#include "extensions.h"
+#include "cuda/ntt_cuda.h"
 
 //------------------------------------------------------------------
 // Wrap functions for ntt transformation

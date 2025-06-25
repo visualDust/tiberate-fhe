@@ -1,9 +1,7 @@
 #pragma once
 
-#include "../extensions.h"
-#include "mont_common.cuh"
-
-#define BLOCK_SIZE 256
+#include "extensions.cuh"
+#include "mont_scalar_kernel.cuh"
 
 //------------------------------------------------------------------
 // mont enter

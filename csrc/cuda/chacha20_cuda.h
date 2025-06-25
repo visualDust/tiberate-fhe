@@ -1,6 +1,5 @@
 #pragma once
-
-#include "../extensions.h"
+#include <torch/torch.h>
 
 void chacha20_cuda(torch::Tensor input, torch::Tensor dest, size_t step);
 
