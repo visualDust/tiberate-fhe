@@ -12,8 +12,8 @@ from tiberate.typing import *  # noqa: F403
 
 class CkksEngineEventTracer:
     @property
-    def ntt(self):
-        return self.engine.ntt
+    def nttCtx(self):
+        return self.engine.nttCtx
 
     def as_vertex(func):
         """Decorator to mark a function as a vertex in the computation graph.

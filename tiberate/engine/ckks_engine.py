@@ -484,7 +484,7 @@ class CkksEngine:
         unsigned_ternary = self.nttCtx.tile_unsigned(
             uniform_ternary, lvl=0, mult_type=mult_type
         )
-        self.nttCtx.enter_ntt(unsigned_ternary, 0, mult_type)
+        self.nttCtx.enter_ntt_radix2(unsigned_ternary, 0, mult_type)
 
         return SecretKey(
             data=unsigned_ternary,
@@ -523,7 +523,7 @@ class CkksEngine:
         e = self.rng.discrete_gaussian(repeats=1)
         e = self.nttCtx.tile_unsigned(e, level, mult_type)
 
-        self.nttCtx.enter_ntt(e, level, mult_type)
+        self.nttCtx.enter_ntt_radix2(e, level, mult_type)
         repeats = (
             self.ckksCfg.num_special_primes
             if sk.has_flag(FLAGS.INCLUDE_SPECIAL)
@@ -598,13 +598,13 @@ class CkksEngine:
         v = self.rng.randint(amax=2, shift=0, repeats=1)
 
         v = self.nttCtx.tile_unsigned(v, level, mult_type)
-        self.nttCtx.enter_ntt(v, level, mult_type)
+        self.nttCtx.enter_ntt_radix2(v, level, mult_type)
 
         vpk0 = self.nttCtx.mont_mult(v, pk0, level, mult_type)
         vpk1 = self.nttCtx.mont_mult(v, pk1, level, mult_type)
 
-        self.nttCtx.intt_exit(vpk0, level, mult_type)
-        self.nttCtx.intt_exit(vpk1, level, mult_type)
+        self.nttCtx.intt_radix2_exit(vpk0, level, mult_type)
+        self.nttCtx.intt_radix2_exit(vpk1, level, mult_type)
 
         ct0 = self.nttCtx.mont_add_reduce_2q(vpk0, pte0, level, mult_type)
         ct1 = self.nttCtx.mont_add_reduce_2q(vpk1, e1_tiled, level, mult_type)
@@ -654,7 +654,7 @@ class CkksEngine:
         d1 = [ct_mult.data[1][0]]
         d2 = [ct_mult.data[2][0]]
 
-        self.nttCtx.intt_exit_reduce(d0, level)
+        self.nttCtx.intt_radix2_exit_reduce(d0, level)
 
         sk_data = [sk.data[0][self.nttCtx.starts[level][0] :]]
 
@@ -663,8 +663,8 @@ class CkksEngine:
         s2 = self.nttCtx.mont_mult(sk_data, sk_data, level)
         d2_s2 = self.nttCtx.mont_mult(d2, s2, level)
 
-        self.nttCtx.intt_exit(d1_s, level)
-        self.nttCtx.intt_exit(d2_s2, level)
+        self.nttCtx.intt_radix2_exit(d1_s, level)
+        self.nttCtx.intt_radix2_exit(d2_s2, level)
 
         pt = self.nttCtx.mont_add(d0, d1_s, level)
         pt = self.nttCtx.mont_add(pt, d2_s2, level)
@@ -717,9 +717,9 @@ class CkksEngine:
         sk_data = sk.data[0][self.nttCtx.starts[level][0] :]
         a = ct.data[1][0].clone()
 
-        self.nttCtx.enter_ntt([a], level)
+        self.nttCtx.enter_ntt_radix2([a], level)
         sa = self.nttCtx.mont_mult([a], [sk_data], level)
-        self.nttCtx.intt_exit(sa, level)
+        self.nttCtx.intt_radix2_exit(sa, level)
 
         pt = self.nttCtx.mont_add([ct0], sa, level)
         self.nttCtx.reduce_2q(pt, level)
@@ -868,7 +868,9 @@ class CkksEngine:
 
         # Release ntt.
         if exit_ntt:
-            self.nttCtx.intt_exit_reduce([a_part], level, device_id, part_id)
+            self.nttCtx.intt_radix2_exit_reduce(
+                [a_part], level, device_id, part_id
+            )
 
         # Prepare a state.
         # Initially, it is x[0] % m[i].
@@ -1125,8 +1127,8 @@ class CkksEngine:
         d1 = summed1
 
         # intt to prepare for division by P.
-        self.nttCtx.intt_exit_reduce(d0, level, -2)
-        self.nttCtx.intt_exit_reduce(d1, level, -2)
+        self.nttCtx.intt_radix2_exit_reduce(d0, level, -2)
+        self.nttCtx.intt_radix2_exit_reduce(d1, level, -2)
 
         # 6. Divide by P.
         # This is actually done in successive order.
@@ -1307,20 +1309,18 @@ class CkksEngine:
         d1 = self.nttCtx.mont_add_many_3d(stacked1, level, -2)
 
         # intt to prepare for division by P.
-        self.nttCtx.intt_exit_reduce(d0, level, -2)
-        self.nttCtx.intt_exit_reduce(d1, level, -2)
+        self.nttCtx.intt_radix2_exit_reduce(d0, level, -2)
+        self.nttCtx.intt_radix2_exit_reduce(d1, level, -2)
 
         # 6. Divide by P.
-        # This is actually done in successive order.
-        # Rescale from the most outer prime channel.
-        # Start from the special len and drop channels one by one.
-
-        # Pre-montgomery enter the ordinary part.
-        # Note that special prime channels remain intact.
-        c0 = [d[: -self.ckksCfg.num_special_primes] for d in d0]
+        c0 = [
+            d[: -self.ckksCfg.num_special_primes] for d in d0
+        ]  # d[: -self.ckksCfg.num_special_primes] is the ordinary part
         c1 = [d[: -self.ckksCfg.num_special_primes] for d in d1]
 
-        p0 = [d[-self.ckksCfg.num_special_primes :] for d in d0]
+        p0 = [
+            d[-self.ckksCfg.num_special_primes :] for d in d0
+        ]  # d[-self.ckksCfg.num_special_primes :] is the special part
         p1 = [d[-self.ckksCfg.num_special_primes :] for d in d1]
 
         PiRi = []  # switch prime index dim in and device dim out
@@ -1369,7 +1369,7 @@ class CkksEngine:
 
         # ntt extended to prepare polynomial multiplication.
         # extended is in the Montgomery format already.
-        self.nttCtx.ntt([extended], level, dst_device_id, -2)
+        self.nttCtx.ntt_radix2([extended], level, dst_device_id, -2)
 
         # Extract the ksk.
         ksk_loc = self.parts_alloc[level][src_device_id][part_id]
@@ -1683,10 +1683,10 @@ class CkksEngine:
         y0 = y.data[0]
         y1 = y.data[1]
 
-        self.nttCtx.enter_ntt(x0, level)
-        self.nttCtx.enter_ntt(x1, level)
-        self.nttCtx.enter_ntt(y0, level)
-        self.nttCtx.enter_ntt(y1, level)
+        self.nttCtx.enter_ntt_radix2(x0, level)
+        self.nttCtx.enter_ntt_radix2(x1, level)
+        self.nttCtx.enter_ntt_radix2(y0, level)
+        self.nttCtx.enter_ntt_radix2(y1, level)
 
         d0 = self.nttCtx.mont_mult(x0, y0, level)
 
@@ -1728,9 +1728,9 @@ class CkksEngine:
         level = ct_triplet.level
 
         # intt.
-        self.nttCtx.intt_exit_reduce(d0, level)
-        self.nttCtx.intt_exit_reduce(d1, level)
-        self.nttCtx.intt_exit_reduce(d2, level)
+        self.nttCtx.intt_radix2_exit_reduce(d0, level)
+        self.nttCtx.intt_radix2_exit_reduce(d1, level)
+        self.nttCtx.intt_radix2_exit_reduce(d2, level)
 
         # Key switch the x1y1.
         d2_0, d2_1 = self.create_switcher(d2, evk, level)
@@ -1766,9 +1766,9 @@ class CkksEngine:
     ) -> RotationKey:
         sk = sk or self.sk
         sk_new_data = [s.clone() for s in sk.data]
-        self.nttCtx.intt(sk_new_data)
+        self.nttCtx.intt_radix2(sk_new_data)
         sk_new_data = [codec.rotate(s, delta) for s in sk_new_data]
-        self.nttCtx.ntt(sk_new_data)
+        self.nttCtx.ntt_radix2(sk_new_data)
         sk_rotated = SecretKey(
             data=sk_new_data,
             flags=FLAGS.MONTGOMERY_STATE | FLAGS.NTT_STATE,
@@ -2272,13 +2272,13 @@ class CkksEngine:
         v = self.rng.randint(amax=2, shift=0, repeats=1)
 
         v = self.nttCtx.tile_unsigned(v, level, mult_type)
-        self.nttCtx.enter_ntt(v, level, mult_type)
+        self.nttCtx.enter_ntt_radix2(v, level, mult_type)
 
         vpk0 = self.nttCtx.mont_mult(v, pk0, level, mult_type)
         vpk1 = self.nttCtx.mont_mult(v, pk1, level, mult_type)
 
-        self.nttCtx.intt_exit(vpk0, level, mult_type)
-        self.nttCtx.intt_exit(vpk1, level, mult_type)
+        self.nttCtx.intt_radix2_exit(vpk0, level, mult_type)
+        self.nttCtx.intt_radix2_exit(vpk1, level, mult_type)
 
         ct0 = self.nttCtx.mont_add_reduce_2q(vpk0, pte0, level, mult_type)
         ct1 = self.nttCtx.mont_add_reduce_2q(vpk1, e1_tiled, level, mult_type)
@@ -2329,7 +2329,7 @@ class CkksEngine:
             d1 = [ct.data[1][0]]
             d2 = [ct.data[2][0]]
 
-            self.nttCtx.intt_exit_reduce(d0, level)
+            self.nttCtx.intt_radix2_exit_reduce(d0, level)
 
             sk_data = [sk.data[0][self.nttCtx.starts[level][0] :]]
 
@@ -2338,8 +2338,8 @@ class CkksEngine:
             s2 = self.nttCtx.mont_mult(sk_data, sk_data, level)
             d2_s2 = self.nttCtx.mont_mult(d2, s2, level)
 
-            self.nttCtx.intt_exit(d1_s, level)
-            self.nttCtx.intt_exit(d2_s2, level)
+            self.nttCtx.intt_radix2_exit(d1_s, level)
+            self.nttCtx.intt_radix2_exit(d2_s2, level)
 
             pt = self.nttCtx.mont_add(d0, d1_s, level)
             pt = self.nttCtx.mont_add(pt, d2_s2, level)
@@ -2357,10 +2357,10 @@ class CkksEngine:
             ct0 = ct.data[0][0]
             a = ct.data[1][0].clone()
 
-            self.nttCtx.enter_ntt([a], level)
+            self.nttCtx.enter_ntt_radix2([a], level)
 
             sa = self.nttCtx.mont_mult([a], [sk_data], level)
-            self.nttCtx.intt_exit(sa, level)
+            self.nttCtx.intt_radix2_exit(sa, level)
 
             pt = self.nttCtx.mont_add([ct0], sa, level)
             self.nttCtx.reduce_2q(pt, level)
@@ -2457,9 +2457,9 @@ class CkksEngine:
             raise errors.MontgomeryStateError(expected=True)
 
         sk_new_data = [s.clone() for s in sk.data]
-        self.nttCtx.intt(sk_new_data)
+        self.nttCtx.intt_radix2(sk_new_data)
         sk_new_data = [codec.conjugate(s) for s in sk_new_data]
-        self.nttCtx.ntt(sk_new_data)
+        self.nttCtx.ntt_radix2(sk_new_data)
         sk_rotated = SecretKey(
             data=sk_new_data,
             flags=FLAGS.MONTGOMERY_STATE | FLAGS.NTT_STATE,
@@ -2573,7 +2573,7 @@ class CkksEngine:
             m = pt.src * math.sqrt(self.deviations[ct.level + 1])
             pt_ = self.encode(m, ct.level, scale=pt.scale)
             pt_ = self.nttCtx.tile_unsigned(pt_, ct.level)
-            self.nttCtx.enter_ntt(pt_, ct.level)
+            self.nttCtx.enter_ntt_radix2(pt_, ct.level)
             pt.cache[ct.level][str(self.pc_mult)] = pt_
         pt_ = pt.cache[ct.level][
             str(self.pc_mult)
@@ -2583,14 +2583,14 @@ class CkksEngine:
 
         new_ct = ct if inplace else ct.clone()
 
-        self.nttCtx.enter_ntt(new_ct.data[0], ct.level)
-        self.nttCtx.enter_ntt(new_ct.data[1], ct.level)
+        self.nttCtx.enter_ntt_radix2(new_ct.data[0], ct.level)
+        self.nttCtx.enter_ntt_radix2(new_ct.data[1], ct.level)
 
         new_d0 = self.nttCtx.mont_mult(pt_, new_ct.data[0], ct.level)
         new_d1 = self.nttCtx.mont_mult(pt_, new_ct.data[1], ct.level)
 
-        self.nttCtx.intt_exit_reduce(new_d0, ct.level)
-        self.nttCtx.intt_exit_reduce(new_d1, ct.level)
+        self.nttCtx.intt_radix2_exit_reduce(new_d0, ct.level)
+        self.nttCtx.intt_radix2_exit_reduce(new_d1, ct.level)
 
         new_ct.data[0] = new_d0
         new_ct.data[1] = new_d1

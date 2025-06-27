@@ -1,4 +1,4 @@
-#include "ntt_cuda.h"
+#include "ntt_radix2_cuda.h"
 #include "extensions.cuh"
 #include "mont_used_in_ntt.cuh"
 
@@ -7,7 +7,7 @@
 //------------------------------------------------------------------
 
 template <typename scalar_t>
-__global__ void ntt_cuda_kernel(
+__global__ void ntt_radix2_cuda_kernel(
     torch::PackedTensorAccessor32<scalar_t, 2> a_acc,
     const torch::PackedTensorAccessor32<int, 2> even_acc,
     const torch::PackedTensorAccessor32<int, 2> odd_acc,
@@ -47,15 +47,15 @@ __global__ void ntt_cuda_kernel(
 }
 
 template <typename scalar_t>
-void ntt_cuda_typed(torch::Tensor a,
-                    const torch::Tensor even,
-                    const torch::Tensor odd,
-                    const torch::Tensor psi,
-                    const torch::Tensor _2q,
-                    const torch::Tensor ql,
-                    const torch::Tensor qh,
-                    const torch::Tensor kl,
-                    const torch::Tensor kh) {
+void ntt_radix2_cuda_typed(torch::Tensor a,
+                           const torch::Tensor even,
+                           const torch::Tensor odd,
+                           const torch::Tensor psi,
+                           const torch::Tensor _2q,
+                           const torch::Tensor ql,
+                           const torch::Tensor qh,
+                           const torch::Tensor kl,
+                           const torch::Tensor kh) {
   // Retrieve the device index, then set the corresponding device and stream.
   auto device_id = a.device().index();
   cudaSetDevice(device_id);
@@ -85,31 +85,32 @@ void ntt_cuda_typed(torch::Tensor a,
   const auto kh_acc = kh.packed_accessor32<scalar_t, 1>();
 
   for (int i = 0; i < logN; ++i) {
-    ntt_cuda_kernel<scalar_t><<<dim_grid, dim_block, 0, stream>>>(a_acc,
-                                                                  even_acc,
-                                                                  odd_acc,
-                                                                  psi_acc,
-                                                                  _2q_acc,
-                                                                  ql_acc,
-                                                                  qh_acc,
-                                                                  kl_acc,
-                                                                  kh_acc,
-                                                                  i);
+    ntt_radix2_cuda_kernel<scalar_t>
+        <<<dim_grid, dim_block, 0, stream>>>(a_acc,
+                                             even_acc,
+                                             odd_acc,
+                                             psi_acc,
+                                             _2q_acc,
+                                             ql_acc,
+                                             qh_acc,
+                                             kl_acc,
+                                             kh_acc,
+                                             i);
   }
 }
 
-void ntt_cuda(torch::Tensor a,
-              const torch::Tensor even,
-              const torch::Tensor odd,
-              const torch::Tensor psi,
-              const torch::Tensor _2q,
-              const torch::Tensor ql,
-              const torch::Tensor qh,
-              const torch::Tensor kl,
-              const torch::Tensor kh) {
+void ntt_radix2_cuda(torch::Tensor a,
+                     const torch::Tensor even,
+                     const torch::Tensor odd,
+                     const torch::Tensor psi,
+                     const torch::Tensor _2q,
+                     const torch::Tensor ql,
+                     const torch::Tensor qh,
+                     const torch::Tensor kl,
+                     const torch::Tensor kh) {
   // Dispatch to the correct data type.
   AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_ntt_cuda", ([&] {
-                               ntt_cuda_typed<scalar_t>(
+                               ntt_radix2_cuda_typed<scalar_t>(
                                    a, even, odd, psi, _2q, ql, qh, kl, kh);
                              }));
 }
@@ -119,16 +120,16 @@ void ntt_cuda(torch::Tensor a,
 //------------------------------------------------------------------
 
 template <typename scalar_t>
-void enter_ntt_cuda_typed(torch::Tensor a,
-                          const torch::Tensor Rs,
-                          const torch::Tensor even,
-                          const torch::Tensor odd,
-                          const torch::Tensor psi,
-                          const torch::Tensor _2q,
-                          const torch::Tensor ql,
-                          const torch::Tensor qh,
-                          const torch::Tensor kl,
-                          const torch::Tensor kh) {
+void enter_ntt_radix2_cuda_typed(torch::Tensor a,
+                                 const torch::Tensor Rs,
+                                 const torch::Tensor even,
+                                 const torch::Tensor odd,
+                                 const torch::Tensor psi,
+                                 const torch::Tensor _2q,
+                                 const torch::Tensor ql,
+                                 const torch::Tensor qh,
+                                 const torch::Tensor kl,
+                                 const torch::Tensor kh) {
   // Retrieve the device index, then set the corresponding device and stream.
   auto device_id = a.device().index();
   cudaSetDevice(device_id);
@@ -167,32 +168,33 @@ void enter_ntt_cuda_typed(torch::Tensor a,
 
   // ntt.
   for (int i = 0; i < logN; ++i) {
-    ntt_cuda_kernel<scalar_t><<<dim_grid_ntt, dim_block, 0, stream>>>(a_acc,
-                                                                      even_acc,
-                                                                      odd_acc,
-                                                                      psi_acc,
-                                                                      _2q_acc,
-                                                                      ql_acc,
-                                                                      qh_acc,
-                                                                      kl_acc,
-                                                                      kh_acc,
-                                                                      i);
+    ntt_radix2_cuda_kernel<scalar_t>
+        <<<dim_grid_ntt, dim_block, 0, stream>>>(a_acc,
+                                                 even_acc,
+                                                 odd_acc,
+                                                 psi_acc,
+                                                 _2q_acc,
+                                                 ql_acc,
+                                                 qh_acc,
+                                                 kl_acc,
+                                                 kh_acc,
+                                                 i);
   }
 }
 
-void enter_ntt_cuda(torch::Tensor a,
-                    const torch::Tensor Rs,
-                    const torch::Tensor even,
-                    const torch::Tensor odd,
-                    const torch::Tensor psi,
-                    const torch::Tensor _2q,
-                    const torch::Tensor ql,
-                    const torch::Tensor qh,
-                    const torch::Tensor kl,
-                    const torch::Tensor kh) {
+void enter_ntt_radix2_cuda(torch::Tensor a,
+                           const torch::Tensor Rs,
+                           const torch::Tensor even,
+                           const torch::Tensor odd,
+                           const torch::Tensor psi,
+                           const torch::Tensor _2q,
+                           const torch::Tensor ql,
+                           const torch::Tensor qh,
+                           const torch::Tensor kl,
+                           const torch::Tensor kh) {
   // Dispatch to the correct data type.
   AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_enter_ntt_cuda", ([&] {
-                               enter_ntt_cuda_typed<scalar_t>(
+                               enter_ntt_radix2_cuda_typed<scalar_t>(
                                    a, Rs, even, odd, psi, _2q, ql, qh, kl, kh);
                              }));
 }
@@ -202,7 +204,7 @@ void enter_ntt_cuda(torch::Tensor a,
 //------------------------------------------------------------------
 
 template <typename scalar_t>
-__global__ void intt_cuda_kernel(
+__global__ void intt_radix2_cuda_kernel(
     torch::PackedTensorAccessor32<scalar_t, 2> a_acc,
     const torch::PackedTensorAccessor32<int, 2> even_acc,
     const torch::PackedTensorAccessor32<int, 2> odd_acc,
@@ -243,16 +245,16 @@ __global__ void intt_cuda_kernel(
 }
 
 template <typename scalar_t>
-void intt_cuda_typed(torch::Tensor a,
-                     const torch::Tensor even,
-                     const torch::Tensor odd,
-                     const torch::Tensor psi,
-                     const torch::Tensor Ninv,
-                     const torch::Tensor _2q,
-                     const torch::Tensor ql,
-                     const torch::Tensor qh,
-                     const torch::Tensor kl,
-                     const torch::Tensor kh) {
+void intt_radix2_cuda_typed(torch::Tensor a,
+                            const torch::Tensor even,
+                            const torch::Tensor odd,
+                            const torch::Tensor psi,
+                            const torch::Tensor Ninv,
+                            const torch::Tensor _2q,
+                            const torch::Tensor ql,
+                            const torch::Tensor qh,
+                            const torch::Tensor kl,
+                            const torch::Tensor kh) {
   // Retrieve the device index, then set the corresponding device and stream.
   auto device_id = a.device().index();
   cudaSetDevice(device_id);
@@ -286,16 +288,17 @@ void intt_cuda_typed(torch::Tensor a,
   const auto kh_acc = kh.packed_accessor32<scalar_t, 1>();
 
   for (int i = 0; i < logN; ++i) {
-    intt_cuda_kernel<scalar_t><<<dim_grid_ntt, dim_block, 0, stream>>>(a_acc,
-                                                                       even_acc,
-                                                                       odd_acc,
-                                                                       psi_acc,
-                                                                       _2q_acc,
-                                                                       ql_acc,
-                                                                       qh_acc,
-                                                                       kl_acc,
-                                                                       kh_acc,
-                                                                       i);
+    intt_radix2_cuda_kernel<scalar_t>
+        <<<dim_grid_ntt, dim_block, 0, stream>>>(a_acc,
+                                                 even_acc,
+                                                 odd_acc,
+                                                 psi_acc,
+                                                 _2q_acc,
+                                                 ql_acc,
+                                                 qh_acc,
+                                                 kl_acc,
+                                                 kh_acc,
+                                                 i);
   }
 
   // Normalize.
@@ -303,20 +306,21 @@ void intt_cuda_typed(torch::Tensor a,
       a_acc, Ninv_acc, ql_acc, qh_acc, kl_acc, kh_acc);
 }
 
-void intt_cuda(torch::Tensor a,
-               const torch::Tensor even,
-               const torch::Tensor odd,
-               const torch::Tensor psi,
-               const torch::Tensor Ninv,
-               const torch::Tensor _2q,
-               const torch::Tensor ql,
-               const torch::Tensor qh,
-               const torch::Tensor kl,
-               const torch::Tensor kh) {
+void intt_radix2_cuda(torch::Tensor a,
+                      const torch::Tensor even,
+                      const torch::Tensor odd,
+                      const torch::Tensor psi,
+                      const torch::Tensor Ninv,
+                      const torch::Tensor _2q,
+                      const torch::Tensor ql,
+                      const torch::Tensor qh,
+                      const torch::Tensor kl,
+                      const torch::Tensor kh) {
   // Dispatch to the correct data type.
   AT_DISPATCH_INTEGRAL_TYPES(
       a.scalar_type(), "typed_intt_cuda", ([&] {
-        intt_cuda_typed<scalar_t>(a, even, odd, psi, Ninv, _2q, ql, qh, kl, kh);
+        intt_radix2_cuda_typed<scalar_t>(
+            a, even, odd, psi, Ninv, _2q, ql, qh, kl, kh);
       }));
 }
 
@@ -326,74 +330,7 @@ void intt_cuda(torch::Tensor a,
 // intt exit
 
 template <typename scalar_t>
-void intt_exit_cuda_typed(torch::Tensor a,
-                          const torch::Tensor even,
-                          const torch::Tensor odd,
-                          const torch::Tensor psi,
-                          const torch::Tensor Ninv,
-                          const torch::Tensor _2q,
-                          const torch::Tensor ql,
-                          const torch::Tensor qh,
-                          const torch::Tensor kl,
-                          const torch::Tensor kh) {
-  // Retrieve the device index, then set the corresponding device and stream.
-  auto device_id = a.device().index();
-  cudaSetDevice(device_id);
-
-  // Use a preallocated pytorch stream.
-  auto stream = at::cuda::getCurrentCUDAStream(device_id);
-
-  // The problem dimension.
-  // Be careful. even and odd has half the length of the a.
-  const auto C = ql.size(0);
-  const auto logN = even.size(0);
-  const auto N_half = even.size(1);
-  const auto N = a.size(1);
-
-  int dim_block = BLOCK_SIZE;
-  dim3 dim_grid_ntt(C, N_half / BLOCK_SIZE);
-  dim3 dim_grid_enter(C, N / BLOCK_SIZE);
-
-  // Run the cuda kernel.
-  auto a_acc = a.packed_accessor32<scalar_t, 2>();
-
-  const auto even_acc = even.packed_accessor32<int, 2>();
-  const auto odd_acc = odd.packed_accessor32<int, 2>();
-  const auto psi_acc = psi.packed_accessor32<scalar_t, 3>();
-  const auto Ninv_acc = Ninv.packed_accessor32<scalar_t, 1>();
-
-  const auto _2q_acc = _2q.packed_accessor32<scalar_t, 1>();
-  const auto ql_acc = ql.packed_accessor32<scalar_t, 1>();
-  const auto qh_acc = qh.packed_accessor32<scalar_t, 1>();
-  const auto kl_acc = kl.packed_accessor32<scalar_t, 1>();
-  const auto kh_acc = kh.packed_accessor32<scalar_t, 1>();
-
-  for (int i = 0; i < logN; ++i) {
-    intt_cuda_kernel<scalar_t><<<dim_grid_ntt, dim_block, 0, stream>>>(a_acc,
-                                                                       even_acc,
-                                                                       odd_acc,
-                                                                       psi_acc,
-                                                                       _2q_acc,
-                                                                       ql_acc,
-                                                                       qh_acc,
-                                                                       kl_acc,
-                                                                       kh_acc,
-                                                                       i);
-  }
-
-  // Normalize.
-  mont_enter_cuda_kernel<scalar_t><<<dim_grid_enter, dim_block, 0, stream>>>(
-      a_acc, Ninv_acc, ql_acc, qh_acc, kl_acc, kh_acc);
-
-  // Exit.
-  mont_reduce_cuda_kernel<scalar_t><<<dim_grid_enter, dim_block, 0, stream>>>(
-      a_acc, ql_acc, qh_acc, kl_acc, kh_acc);
-}
-
-// intt exit reduce
-
-template <typename scalar_t>
-void intt_exit_reduce_cuda_typed(torch::Tensor a,
+void intt_radix2_exit_cuda_typed(torch::Tensor a,
                                  const torch::Tensor even,
                                  const torch::Tensor odd,
                                  const torch::Tensor psi,
@@ -436,16 +373,17 @@ void intt_exit_reduce_cuda_typed(torch::Tensor a,
   const auto kh_acc = kh.packed_accessor32<scalar_t, 1>();
 
   for (int i = 0; i < logN; ++i) {
-    intt_cuda_kernel<scalar_t><<<dim_grid_ntt, dim_block, 0, stream>>>(a_acc,
-                                                                       even_acc,
-                                                                       odd_acc,
-                                                                       psi_acc,
-                                                                       _2q_acc,
-                                                                       ql_acc,
-                                                                       qh_acc,
-                                                                       kl_acc,
-                                                                       kh_acc,
-                                                                       i);
+    intt_radix2_cuda_kernel<scalar_t>
+        <<<dim_grid_ntt, dim_block, 0, stream>>>(a_acc,
+                                                 even_acc,
+                                                 odd_acc,
+                                                 psi_acc,
+                                                 _2q_acc,
+                                                 ql_acc,
+                                                 qh_acc,
+                                                 kl_acc,
+                                                 kh_acc,
+                                                 i);
   }
 
   // Normalize.
@@ -455,17 +393,30 @@ void intt_exit_reduce_cuda_typed(torch::Tensor a,
   // Exit.
   mont_reduce_cuda_kernel<scalar_t><<<dim_grid_enter, dim_block, 0, stream>>>(
       a_acc, ql_acc, qh_acc, kl_acc, kh_acc);
-
-  // Reduce.
-  reduce_2q_cuda_kernel<scalar_t>
-      <<<dim_grid_enter, dim_block, 0, stream>>>(a_acc, _2q_acc);
 }
 
-///////////////////////////////////////////////////////////////
-// intt exit reduce signed
+void intt_radix2_exit_cuda(torch::Tensor a,
+                           const torch::Tensor even,
+                           const torch::Tensor odd,
+                           const torch::Tensor psi,
+                           const torch::Tensor Ninv,
+                           const torch::Tensor _2q,
+                           const torch::Tensor ql,
+                           const torch::Tensor qh,
+                           const torch::Tensor kl,
+                           const torch::Tensor kh) {
+  // Dispatch to the correct data type.
+  AT_DISPATCH_INTEGRAL_TYPES(
+      a.scalar_type(), "typed_intt_exit_cuda", ([&] {
+        intt_radix2_exit_cuda_typed<scalar_t>(
+            a, even, odd, psi, Ninv, _2q, ql, qh, kl, kh);
+      }));
+}
+
+// intt exit reduce
 
 template <typename scalar_t>
-void intt_exit_reduce_signed_cuda_typed(torch::Tensor a,
+void intt_radix2_exit_reduce_cuda_typed(torch::Tensor a,
                                         const torch::Tensor even,
                                         const torch::Tensor odd,
                                         const torch::Tensor psi,
@@ -508,16 +459,109 @@ void intt_exit_reduce_signed_cuda_typed(torch::Tensor a,
   const auto kh_acc = kh.packed_accessor32<scalar_t, 1>();
 
   for (int i = 0; i < logN; ++i) {
-    intt_cuda_kernel<scalar_t><<<dim_grid_ntt, dim_block, 0, stream>>>(a_acc,
-                                                                       even_acc,
-                                                                       odd_acc,
-                                                                       psi_acc,
-                                                                       _2q_acc,
-                                                                       ql_acc,
-                                                                       qh_acc,
-                                                                       kl_acc,
-                                                                       kh_acc,
-                                                                       i);
+    intt_radix2_cuda_kernel<scalar_t>
+        <<<dim_grid_ntt, dim_block, 0, stream>>>(a_acc,
+                                                 even_acc,
+                                                 odd_acc,
+                                                 psi_acc,
+                                                 _2q_acc,
+                                                 ql_acc,
+                                                 qh_acc,
+                                                 kl_acc,
+                                                 kh_acc,
+                                                 i);
+  }
+
+  // Normalize.
+  mont_enter_cuda_kernel<scalar_t><<<dim_grid_enter, dim_block, 0, stream>>>(
+      a_acc, Ninv_acc, ql_acc, qh_acc, kl_acc, kh_acc);
+
+  // Exit.
+  mont_reduce_cuda_kernel<scalar_t><<<dim_grid_enter, dim_block, 0, stream>>>(
+      a_acc, ql_acc, qh_acc, kl_acc, kh_acc);
+
+  // Reduce.
+  reduce_2q_cuda_kernel<scalar_t>
+      <<<dim_grid_enter, dim_block, 0, stream>>>(a_acc, _2q_acc);
+}
+
+// intt exit reduce
+
+void intt_radix2_exit_reduce_cuda(torch::Tensor a,
+                                  const torch::Tensor even,
+                                  const torch::Tensor odd,
+                                  const torch::Tensor psi,
+                                  const torch::Tensor Ninv,
+                                  const torch::Tensor _2q,
+                                  const torch::Tensor ql,
+                                  const torch::Tensor qh,
+                                  const torch::Tensor kl,
+                                  const torch::Tensor kh) {
+  // Dispatch to the correct data type.
+  AT_DISPATCH_INTEGRAL_TYPES(
+      a.scalar_type(), "typed_intt_exit_reduce_cuda", ([&] {
+        intt_radix2_exit_reduce_cuda_typed<scalar_t>(
+            a, even, odd, psi, Ninv, _2q, ql, qh, kl, kh);
+      }));
+}
+
+// intt exit reduce signed
+
+template <typename scalar_t>
+void intt_radix2_exit_reduce_signed_cuda_typed(torch::Tensor a,
+                                               const torch::Tensor even,
+                                               const torch::Tensor odd,
+                                               const torch::Tensor psi,
+                                               const torch::Tensor Ninv,
+                                               const torch::Tensor _2q,
+                                               const torch::Tensor ql,
+                                               const torch::Tensor qh,
+                                               const torch::Tensor kl,
+                                               const torch::Tensor kh) {
+  // Retrieve the device index, then set the corresponding device and stream.
+  auto device_id = a.device().index();
+  cudaSetDevice(device_id);
+
+  // Use a preallocated pytorch stream.
+  auto stream = at::cuda::getCurrentCUDAStream(device_id);
+
+  // The problem dimension.
+  // Be careful. even and odd has half the length of the a.
+  const auto C = ql.size(0);
+  const auto logN = even.size(0);
+  const auto N_half = even.size(1);
+  const auto N = a.size(1);
+
+  int dim_block = BLOCK_SIZE;
+  dim3 dim_grid_ntt(C, N_half / BLOCK_SIZE);
+  dim3 dim_grid_enter(C, N / BLOCK_SIZE);
+
+  // Run the cuda kernel.
+  auto a_acc = a.packed_accessor32<scalar_t, 2>();
+
+  const auto even_acc = even.packed_accessor32<int, 2>();
+  const auto odd_acc = odd.packed_accessor32<int, 2>();
+  const auto psi_acc = psi.packed_accessor32<scalar_t, 3>();
+  const auto Ninv_acc = Ninv.packed_accessor32<scalar_t, 1>();
+
+  const auto _2q_acc = _2q.packed_accessor32<scalar_t, 1>();
+  const auto ql_acc = ql.packed_accessor32<scalar_t, 1>();
+  const auto qh_acc = qh.packed_accessor32<scalar_t, 1>();
+  const auto kl_acc = kl.packed_accessor32<scalar_t, 1>();
+  const auto kh_acc = kh.packed_accessor32<scalar_t, 1>();
+
+  for (int i = 0; i < logN; ++i) {
+    intt_radix2_cuda_kernel<scalar_t>
+        <<<dim_grid_ntt, dim_block, 0, stream>>>(a_acc,
+                                                 even_acc,
+                                                 odd_acc,
+                                                 psi_acc,
+                                                 _2q_acc,
+                                                 ql_acc,
+                                                 qh_acc,
+                                                 kl_acc,
+                                                 kh_acc,
+                                                 i);
   }
 
   // Normalize.
@@ -537,68 +581,22 @@ void intt_exit_reduce_signed_cuda_typed(torch::Tensor a,
       <<<dim_grid_enter, dim_block, 0, stream>>>(a_acc, _2q_acc);
 }
 
-/**************************************************************/
-/* Connectors                                                 */
-/**************************************************************/
-
-///////////////////////////////////////////////////////////////
-// intt exit
-
-void intt_exit_cuda(torch::Tensor a,
-                    const torch::Tensor even,
-                    const torch::Tensor odd,
-                    const torch::Tensor psi,
-                    const torch::Tensor Ninv,
-                    const torch::Tensor _2q,
-                    const torch::Tensor ql,
-                    const torch::Tensor qh,
-                    const torch::Tensor kl,
-                    const torch::Tensor kh) {
-  // Dispatch to the correct data type.
-  AT_DISPATCH_INTEGRAL_TYPES(
-      a.scalar_type(), "typed_intt_exit_cuda", ([&] {
-        intt_exit_cuda_typed<scalar_t>(
-            a, even, odd, psi, Ninv, _2q, ql, qh, kl, kh);
-      }));
-}
-
-///////////////////////////////////////////////////////////////
-// intt exit reduce
-
-void intt_exit_reduce_cuda(torch::Tensor a,
-                           const torch::Tensor even,
-                           const torch::Tensor odd,
-                           const torch::Tensor psi,
-                           const torch::Tensor Ninv,
-                           const torch::Tensor _2q,
-                           const torch::Tensor ql,
-                           const torch::Tensor qh,
-                           const torch::Tensor kl,
-                           const torch::Tensor kh) {
-  // Dispatch to the correct data type.
-  AT_DISPATCH_INTEGRAL_TYPES(
-      a.scalar_type(), "typed_intt_exit_reduce_cuda", ([&] {
-        intt_exit_reduce_cuda_typed<scalar_t>(
-            a, even, odd, psi, Ninv, _2q, ql, qh, kl, kh);
-      }));
-}
-
 // intt exit reduce signed
 
-void intt_exit_reduce_signed_cuda(torch::Tensor a,
-                                  const torch::Tensor even,
-                                  const torch::Tensor odd,
-                                  const torch::Tensor psi,
-                                  const torch::Tensor Ninv,
-                                  const torch::Tensor _2q,
-                                  const torch::Tensor ql,
-                                  const torch::Tensor qh,
-                                  const torch::Tensor kl,
-                                  const torch::Tensor kh) {
+void intt_radix2_exit_reduce_signed_cuda(torch::Tensor a,
+                                         const torch::Tensor even,
+                                         const torch::Tensor odd,
+                                         const torch::Tensor psi,
+                                         const torch::Tensor Ninv,
+                                         const torch::Tensor _2q,
+                                         const torch::Tensor ql,
+                                         const torch::Tensor qh,
+                                         const torch::Tensor kl,
+                                         const torch::Tensor kh) {
   // Dispatch to the correct data type.
   AT_DISPATCH_INTEGRAL_TYPES(
       a.scalar_type(), "typed_intt_exit_reduce_signed_cuda", ([&] {
-        intt_exit_reduce_signed_cuda_typed<scalar_t>(
+        intt_radix2_exit_reduce_signed_cuda_typed<scalar_t>(
             a, even, odd, psi, Ninv, _2q, ql, qh, kl, kh);
       }));
 }

@@ -292,21 +292,6 @@ torch::Tensor codec_rotate_make_unsigned_reduce_2q_cuda(
   return out;
 }
 
-// ------------------------------------------------------------------
-// create_switcher - pre_extend
-// ------------------------------------------------------------------
-
-// template <typename scalar_t>
-// __global__ void create_switcher_pre_extend_cuda_kernel(
-//     TensorAcc32Restrict<scalar_t, 2> out_acc,
-//     const TensorAcc32Restrict<scalar_t, 2> a_part_acc,
-//     const TensorAcc32Restrict<scalar_t, 1> perm_acc,
-//     const TensorAcc32Restrict<scalar_t, 1> Rs_acc,  // Rs_prepack
-//     const TensorAcc32Restrict<scalar_t, 1> ql_acc,  //
-//     *mont_prepack const TensorAcc32Restrict<scalar_t, 1> qh_acc,
-//     const TensorAcc32Restrict<scalar_t, 1> kl_acc,
-//     const TensorAcc32Restrict<scalar_t, 1> kh_acc) {
-
 // ----------------------------------------------------------------------
 // create_switcher Divide by P
 // ----------------------------------------------------------------------
@@ -445,6 +430,10 @@ void create_switcher_divide_by_p_cuda_typed(
   const auto kl_acc = makeAcc32Restrict(kl, scalar_t, 1);
   const auto kh_acc = makeAcc32Restrict(kh, scalar_t, 1);
 
+  // This is actually done in successive order.
+  // Rescale from the most outer prime channel.
+  // Start from the special len and drop channels one by one.
+
   // process primes
   mont_chain_backward_cuda_kernel<scalar_t>
       <<<dim_grid_p_back, dim_block, 0, stream>>>(
@@ -493,3 +482,7 @@ torch::Tensor create_switcher_divide_by_p_cuda(
 
   return out;
 }
+
+// ------------------------------------------------------------------
+// create_switcher - pre_extend
+// ------------------------------------------------------------------

@@ -38,8 +38,8 @@ set(MODULE_NAMES
     discrete_gaussian
     mont
     mont_fused
-    ntt
-    ntt_fused
+    ntt_radix2
+    ntt_radix2_fused
     he_fused
     randint
     randround)

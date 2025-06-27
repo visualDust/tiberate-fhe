@@ -557,7 +557,7 @@ class NTTContext:
     # Pre-packaging.
     # -------------------------------------------------------------------------------------------------
 
-    # Structure of self.ntt_prepack[mult_type][lvl][part]:
+    # Structure of self.ntt_radix2_prepack[mult_type][lvl][part]:
     #   Part Index | Description                      | Shape                              | Example(cuda:0, logN15, N=32768, 16 scales, 15 levels)
     # -------------|----------------------------------|------------------------------------|-------------------------------------------------------
     #       0      | Even values (duplicated)         | [n_dev, logN, N/2]                 | [1, 15, 16384]
@@ -572,8 +572,8 @@ class NTTContext:
     def pre_package(self):
 
         self.mont_prepack = []
-        self.ntt_prepack = []
-        self.intt_prepack = []
+        self.ntt_radix2_prepack = []
+        self.intt_radix2_prepack = []
         self.Rs_prepack = []
         self.Rs_scale_prepack = []
         self._2q_prepack = []
@@ -647,8 +647,8 @@ class NTTContext:
                 q_prepack.append(q_prepack_part)
 
             self.mont_prepack.append(mont_prepack)
-            self.ntt_prepack.append(ntt_prepack)
-            self.intt_prepack.append(intt_prepack)
+            self.ntt_radix2_prepack.append(ntt_prepack)
+            self.intt_radix2_prepack.append(intt_prepack)
             self.Rs_prepack.append(Rs_prepack)
             self.Rs_scale_prepack.append(Rs_scale_prepack)
             self._2q_prepack.append(_2q_prepack)
@@ -672,8 +672,8 @@ class NTTContext:
                 _2q_prepack.append([self.param_pack(self._2q, *stst)])
                 q_prepack.append([self.param_pack(self.qlists, *stst)])
             self.mont_prepack.append(mont_prepack)
-            self.ntt_prepack.append(ntt_prepack)
-            self.intt_prepack.append(intt_prepack)
+            self.ntt_radix2_prepack.append(ntt_prepack)
+            self.intt_radix2_prepack.append(intt_prepack)
             self.Rs_prepack.append(Rs_prepack)
             self.Rs_scale_prepack.append(Rs_scale_prepack)
             self._2q_prepack.append(_2q_prepack)
@@ -707,21 +707,21 @@ class NTTContext:
             a, b, *self.mont_prepack[mult_type][lvl][part]
         )
 
-    def ntt(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.ntt(
-            a, *self.ntt_prepack[mult_type][lvl][part]
+    def ntt_radix2(self, a, lvl=0, mult_type=-1, part=0):
+        torch.ops.tiberate_ntt_ops.ntt_radix2(
+            a, *self.ntt_radix2_prepack[mult_type][lvl][part]
         )
 
-    def enter_ntt(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.enter_ntt(
+    def enter_ntt_radix2(self, a, lvl=0, mult_type=-1, part=0):
+        torch.ops.tiberate_ntt_ops.enter_ntt_radix2(
             a,
             self.Rs_prepack[mult_type][lvl][part],
-            *self.ntt_prepack[mult_type][lvl][part],
+            *self.ntt_radix2_prepack[mult_type][lvl][part],
         )
 
-    def intt(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.intt(
-            a, *self.intt_prepack[mult_type][lvl][part]
+    def intt_radix2(self, a, lvl=0, mult_type=-1, part=0):
+        torch.ops.tiberate_ntt_ops.intt_radix2(
+            a, *self.intt_radix2_prepack[mult_type][lvl][part]
         )
 
     def mont_reduce(self, a, lvl=0, mult_type=-1, part=0):
@@ -729,19 +729,19 @@ class NTTContext:
             a, *self.mont_prepack[mult_type][lvl][part]
         )
 
-    def intt_exit(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_fused_ops.intt_exit(
-            a, *self.intt_prepack[mult_type][lvl][part]
+    def intt_radix2_exit(self, a, lvl=0, mult_type=-1, part=0):
+        torch.ops.tiberate_fused_ops.intt_radix2_exit(
+            a, *self.intt_radix2_prepack[mult_type][lvl][part]
         )
 
-    def intt_exit_reduce(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_fused_ops.intt_exit_reduce(
-            a, *self.intt_prepack[mult_type][lvl][part]
+    def intt_radix2_exit_reduce(self, a, lvl=0, mult_type=-1, part=0):
+        torch.ops.tiberate_fused_ops.intt_radix2_exit_reduce(
+            a, *self.intt_radix2_prepack[mult_type][lvl][part]
         )
 
-    def intt_exit_reduce_signed(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_fused_ops.intt_exit_reduce_signed(
-            a, *self.intt_prepack[mult_type][lvl][part]
+    def intt_radix2_exit_reduce_signed(self, a, lvl=0, mult_type=-1, part=0):
+        torch.ops.tiberate_fused_ops.intt_radix2_exit_reduce_signed(
+            a, *self.intt_radix2_prepack[mult_type][lvl][part]
         )
 
     def reduce_2q(self, a, lvl=0, mult_type=-1, part=0):

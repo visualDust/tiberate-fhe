@@ -28,7 +28,7 @@ class CkksEngineMPCExtension(CkksEngine):
         e = self.rng.discrete_gaussian(repeats=1)
         e = self.nttCtx.tile_unsigned(e, level, mult_type)
 
-        self.nttCtx.enter_ntt(e, level, mult_type)
+        self.nttCtx.enter_ntt_radix2(e, level, mult_type)
         repeats = (
             self.ckksCtx.num_special_primes
             if sk.has_flag(FLAGS.INCLUDE_SPECIAL)
@@ -103,12 +103,12 @@ class CkksEngineMPCExtension(CkksEngine):
         ct0 = ct.data[0][0]
         a = ct.data[1][0].clone()
 
-        self.nttCtx.enter_ntt([a], level)
+        self.nttCtx.enter_ntt_radix2([a], level)
 
         sk_data = sk.data[0][self.nttCtx.starts[level][0] :]
 
         sa = self.nttCtx.mont_mult([a], [sk_data], level)
-        self.nttCtx.intt_exit(sa, level)
+        self.nttCtx.intt_radix2_exit(sa, level)
 
         pt = self.nttCtx.mont_add([ct0], sa, level)
 
@@ -129,12 +129,12 @@ class CkksEngineMPCExtension(CkksEngine):
 
         a = ct.data[1][0].clone()
 
-        self.nttCtx.enter_ntt([a], ct.level)
+        self.nttCtx.enter_ntt_radix2([a], ct.level)
 
         sk_data = sk.data[0][self.nttCtx.starts[ct.level][0] :]
 
         sa = self.nttCtx.mont_mult([a], [sk_data], ct.level)
-        self.nttCtx.intt_exit(sa, ct.level)
+        self.nttCtx.intt_radix2_exit(sa, ct.level)
 
         return sa
 
@@ -236,9 +236,9 @@ class CkksEngineMPCExtension(CkksEngine):
         self, sk: SecretKey, delta: int, a=None
     ) -> RotationKey:
         sk_new_data = [s.clone() for s in sk.data]
-        self.nttCtx.intt(sk_new_data)
+        self.nttCtx.intt_radix2(sk_new_data)
         sk_new_data = [rotate(s, delta) for s in sk_new_data]
-        self.nttCtx.ntt(sk_new_data)
+        self.nttCtx.ntt_radix2(sk_new_data)
         sk_rotated = DataStruct(
             data=sk_new_data,
             flags=FLAGS.NTT_STATE | FLAGS.MONTGOMERY_STATE,
