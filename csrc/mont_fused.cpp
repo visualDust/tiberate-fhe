@@ -12,6 +12,18 @@ std::vector<torch::Tensor> mont_add_many_3d(
   return outputs;
 }
 
+std::vector<torch::Tensor> mont_reduce_add_many_3d(
+    const std::vector<torch::Tensor> inputs,
+    const std::vector<torch::Tensor> _2q) {
+  std::vector<torch::Tensor> outputs;
+  const auto num_devices = inputs.size();
+  for (size_t i = 0; i < num_devices; ++i) {
+    auto out = mont_reduce_add_many_3d_cuda(inputs[i], _2q[i]);
+    outputs.push_back(out);
+  }
+  return outputs;
+}
+
 std::vector<torch::Tensor> mont_add_reduce_2q(
     const std::vector<torch::Tensor> a,
     const std::vector<torch::Tensor> b,
@@ -93,6 +105,8 @@ void rescale_non_exact_rounding_fused(std::vector<torch::Tensor> a,
 TORCH_LIBRARY_FRAGMENT(tiberate_fused_ops, m) {
   m.def("mont_add_many_3d(Tensor[] input, Tensor[] _2q) -> Tensor[]",
         &mont_add_many_3d);
+  m.def("mont_reduce_add_many_3d(Tensor[] input, Tensor[] _2q) -> Tensor[]",
+        &mont_reduce_add_many_3d);
   m.def("mont_add_reduce_2q(Tensor[] a, Tensor[] b, Tensor[] _2q) -> Tensor[]");
   m.def("mont_sub_reduce_2q(Tensor[] a, Tensor[] b, Tensor[] _2q) -> Tensor[]");
   m.def(
@@ -113,6 +127,7 @@ TORCH_LIBRARY_FRAGMENT(tiberate_fused_ops, m) {
 
 TORCH_LIBRARY_IMPL(tiberate_fused_ops, CUDA, m) {
   m.impl("mont_add_many_3d", &mont_add_many_3d);
+  m.impl("mont_reduce_add_many_3d", &mont_reduce_add_many_3d);
   m.impl("mont_add_reduce_2q", &mont_add_reduce_2q);
   m.impl("mont_sub_reduce_2q", &mont_sub_reduce_2q);
   m.impl("mont_enter_reduce_2q", &mont_enter_reduce_2q);

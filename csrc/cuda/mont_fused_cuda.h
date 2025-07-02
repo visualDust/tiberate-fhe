@@ -9,6 +9,9 @@
 torch::Tensor mont_add_many_3d_cuda(const torch::Tensor input,
                                     const torch::Tensor _2q);
 
+torch::Tensor mont_reduce_add_many_3d_cuda(const torch::Tensor input,
+                                           const torch::Tensor _2q);
+
 torch::Tensor mont_add_reduce_2q_cuda(const torch::Tensor a,
                                       const torch::Tensor b,
                                       const torch::Tensor _2q);
