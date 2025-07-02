@@ -1237,17 +1237,37 @@ class CkksEngine:
                 )
                 states[storage_id] = state
 
-        # 2. Copy to CPU.
-        CPU_states = [[] for _ in range(num_parts)]
+        # Copy to CPU is meaningless, removed
+        # # 2. Copy to CPU.
+        # CPU_states = [[] for _ in range(num_parts)]
+        # for src_device_id in range(len_devices):
+        #     for part_id, part in enumerate(
+        #         self.rnsPart.p[level][src_device_id]
+        #     ):
+        #         storage_id = self.stor_ids[level][src_device_id][part_id]
+        #         alpha = len(part)
+        #         CPU_state = self.ksk_buffers[src_device_id][part_id][:alpha]
+        #         CPU_state.copy_(states[storage_id], non_blocking=True)
+        #         CPU_states[storage_id] = CPU_state
+
+        # 2. Copy onto neighbor GPUs the states.
+        CUDA_states = [[] for _ in range(num_parts)]
         for src_device_id in range(len_devices):
             for part_id, part in enumerate(
                 self.rnsPart.p[level][src_device_id]
             ):
                 storage_id = self.stor_ids[level][src_device_id][part_id]
-                alpha = len(part)
-                CPU_state = self.ksk_buffers[src_device_id][part_id][:alpha]
-                CPU_state.copy_(states[storage_id], non_blocking=True)
-                CPU_states[storage_id] = CPU_state
+                src_state = states[storage_id]  # already on src_device_id
+
+                for dst_device_id in neighbor_devices[src_device_id]:
+                    dst_state = src_state.to(
+                        device=self.nttCtx.devices[dst_device_id],
+                        non_blocking=True,
+                        copy=True,
+                    )
+                    CUDA_states[storage_id] = (
+                        dst_state  # if multiple dests, store list if needed
+                    )
 
         # 3. Continue on with the follow ups on source devices.
         for src_device_id in range(len_devices):
@@ -1261,19 +1281,19 @@ class CkksEngine:
                 part_results[storage_id][0][src_device_id] = d0
                 part_results[storage_id][1][src_device_id] = d1
 
-        # 4. Copy onto neighbor GPUs the states.
-        CUDA_states = [[] for _ in range(num_parts)]
-        for src_device_id in range(len_devices):
-            for j, dst_device_id in enumerate(neighbor_devices[src_device_id]):
-                for part_id, part in enumerate(
-                    self.rnsPart.p[level][src_device_id]
-                ):
-                    storage_id = self.stor_ids[level][src_device_id][part_id]
-                    CPU_state = CPU_states[storage_id]
-                    CUDA_states[storage_id] = CPU_state.cuda(
-                        self.nttCtx.devices[dst_device_id],
-                        non_blocking=True,
-                    )
+        # # 4. Copy onto neighbor GPUs the states.
+        # CUDA_states = [[] for _ in range(num_parts)]
+        # for src_device_id in range(len_devices):
+        #     for j, dst_device_id in enumerate(neighbor_devices[src_device_id]):
+        #         for part_id, part in enumerate(
+        #             self.rnsPart.p[level][src_device_id]
+        #         ):
+        #             storage_id = self.stor_ids[level][src_device_id][part_id]
+        #             CPU_state = CPU_states[storage_id]
+        #             CUDA_states[storage_id] = CPU_state.cuda(
+        #                 self.nttCtx.devices[dst_device_id],
+        #                 non_blocking=True,
+        #             )
 
         # 5. Synchronize.
         # torch.cuda.synchronize()
