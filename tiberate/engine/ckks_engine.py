@@ -1325,8 +1325,8 @@ class CkksEngine:
             stacked0.append(torch.stack([x[0][i] for x in part_results]))
             stacked1.append(torch.stack([x[1][i] for x in part_results]))
 
-        d0 = self.nttCtx.mont_add_many_3d(stacked0, level, -2)
-        d1 = self.nttCtx.mont_add_many_3d(stacked1, level, -2)
+        d0 = self.nttCtx.mont_reduce_add_many_3d(stacked0, level, -2)
+        d1 = self.nttCtx.mont_reduce_add_many_3d(stacked1, level, -2)
 
         # intt to prepare for division by P.
         self.nttCtx.intt_radix2_exit_reduce(d0, level, -2)
@@ -2601,7 +2601,9 @@ class CkksEngine:
 
         # process ct
 
-        new_ct = ct if inplace else ct.clone()
+        new_ct = (
+            ct if inplace else ct.clone()
+        )  # todo)) inplace will be useless after we change to auto ntt/intt
 
         self.nttCtx.enter_ntt_radix2(new_ct.data[0], ct.level)
         self.nttCtx.enter_ntt_radix2(new_ct.data[1], ct.level)

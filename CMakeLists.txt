@@ -41,6 +41,7 @@ set(MODULE_NAMES
     ntt_radix2
     ntt_radix2_fused
     he_fused
+    cascade_mac
     randint
     randround)
 

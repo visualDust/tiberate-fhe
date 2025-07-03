@@ -74,50 +74,36 @@ torch::Tensor mont_add_many_3d_cuda(const torch::Tensor input,
 // mont_add_many_3d_reduce_cuda_kernel
 // ------------------------------------------------------------------
 
-template <typename scalar_t>
-__device__ __forceinline__ scalar_t mont_add_scalar(const scalar_t a,
-                                                    const scalar_t b,
-                                                    const scalar_t _2q) {
-  const scalar_t aplusb = a + b;
-  return (aplusb < _2q) ? aplusb : aplusb - _2q;
-}
-
-template <typename scalar_t>
+template <typename scalar_t, int K_STEP>
 __global__ void mont_reduce_add_many_3d_cuda_kernel(
     TensorAcc32Restrict<scalar_t, 2> out_acc,          // [C, N]
     const TensorAcc32Restrict<scalar_t, 3> input_acc,  // [K, C, N]
     const TensorAcc32Restrict<scalar_t, 1> _2q_acc) {
-  const int i = blockIdx.x;
-  const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
-  const int tid = threadIdx.x;
+  const int c = blockIdx.x;                             // channel index (C)
+  const int n = blockIdx.y * BLOCK_SIZE + threadIdx.x;  // data index (N)
 
   const int K = input_acc.size(0);
-  scalar_t _2q = _2q_acc[i];
-
-  __shared__ scalar_t sdata[BLOCK_SIZE][CHUNK_SIZE];
+  const scalar_t _2q = _2q_acc[c];
 
   scalar_t acc = 0;
+  int k = 0;
 
-  for (int k_base = 0; k_base < K; k_base += CHUNK_SIZE) {
-    int local_k = 0;
-
-    // Load a chunk into shared memory
-    for (; local_k < CHUNK_SIZE && (k_base + local_k) < K; ++local_k) {
-      sdata[tid][local_k] = input_acc[k_base + local_k][i][j];
-    }
-
-    // Pad remaining chunk with zero if out-of-bound
-    for (; local_k < CHUNK_SIZE; ++local_k) {
-      sdata[tid][local_k] = 0;
-    }
-
-    // Reduction within chunk
-    for (int k = 0; k < CHUNK_SIZE; ++k) {
-      acc = mont_add_scalar(acc, sdata[tid][k], _2q);
+  // Unrolled main loop
+  for (; k + K_STEP - 1 < K; k += K_STEP) {
+#pragma unroll
+    for (int offset = 0; offset < K_STEP; ++offset) {
+      scalar_t val = input_acc[k + offset][c][n];
+      acc = mont_add_scalar_cuda_kernel(acc, val, _2q);
     }
   }
 
-  out_acc[i][j] = acc;
+  // Tail loop
+  for (; k < K; ++k) {
+    scalar_t val = input_acc[k][c][n];
+    acc = mont_add_scalar_cuda_kernel(acc, val, _2q);
+  }
+
+  out_acc[c][n] = acc;
 }
 
 template <typename scalar_t>
@@ -138,7 +124,7 @@ void mont_reduce_add_many_3d_cuda_typed(const torch::Tensor input,
   auto out_acc = makeAcc32Restrict(out, scalar_t, 2);
   const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
 
-  mont_reduce_add_many_3d_cuda_kernel<scalar_t>
+  mont_reduce_add_many_3d_cuda_kernel<scalar_t, 8>  // dispatch with unroll 8
       <<<dim_grid, dim_block, 0, stream>>>(out_acc, input_acc, _2q_acc);
 }
 
