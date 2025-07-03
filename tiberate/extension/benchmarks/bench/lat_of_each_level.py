@@ -101,7 +101,7 @@ def test_lat_and_size_until_level_used_up(engine: CkksEngine) -> list[list]:
             lat_pcadd = lat_pcadd * 1e3  # convert to ms
 
             # pt add cache size
-            pt_add_cache_size = (
+            pt_cache_size = (
                 calculate_ckks_cipher_datastruct_size_in_list_recursive(pt.data)
                 / 1e6
             )
@@ -120,12 +120,6 @@ def test_lat_and_size_until_level_used_up(engine: CkksEngine) -> list[list]:
             lat_rescale = time.time() - time0
             lat_rescale = lat_rescale * 1e3  # convert to ms
 
-            # pt mult cache size
-            pt_mult_cache_size = (
-                calculate_ckks_cipher_datastruct_size_in_list_recursive(pt.data)
-                / 1e6
-            )
-
             # print result, do not drop precision
             result_table.append(
                 [
@@ -140,7 +134,7 @@ def test_lat_and_size_until_level_used_up(engine: CkksEngine) -> list[list]:
                     lat_rotate,
                     lat_key_switch,
                     ct_size_mb,
-                    pt_add_cache_size,
+                    pt_cache_size,
                     # pt_mult_cache_size,
                 ]
             )
@@ -158,20 +152,35 @@ class ConsumeAllLevelsBenchmark(BenchmarkBase):
         self.name = "Test op latency at each level"
         self.description = "Evaluate the performance of all operations at each level, including ciphertext addition, multiplication, plaintext addition, multiplication, rotation, and key switching, as well as ciphertext size and plaintext cache size."
         self.config_matrix = {
-            "logN14": {
+            "logN14 1x GPU": {
                 "description": "Using polynomial degree logN14",
                 "ckks_params": Preset.logN14,
-                "relinearize": True,
+                "devices": ["cuda:0"],
             },
-            "logN15": {
+            "logN15 1x GPU": {
                 "description": "Using polynomial degree logN15",
                 "ckks_params": Preset.logN15,
-                "relinearize": True,
+                "devices": ["cuda:0"],
             },
-            "logN16": {
+            "logN16 1x GPU": {
                 "description": "Using polynomial degree logN16",
                 "ckks_params": Preset.logN16,
-                "relinearize": True,
+                "devices": ["cuda:0"],
+            },
+            "logN14 2x GPUs": {
+                "description": "Using polynomial degree logN14",
+                "ckks_params": Preset.logN14,
+                "devices": ["cuda:0", "cuda:1"],
+            },
+            "logN15 2x GPUs": {
+                "description": "Using polynomial degree logN15",
+                "ckks_params": Preset.logN15,
+                "devices": ["cuda:0", "cuda:1"],
+            },
+            "logN16 2x GPUs": {
+                "description": "Using polynomial degree logN16",
+                "ckks_params": Preset.logN16,
+                "devices": ["cuda:0", "cuda:1"],
             },
         }
 
@@ -184,11 +193,12 @@ class ConsumeAllLevelsBenchmark(BenchmarkBase):
         ), f"Invalid benchmark name: {option_name}"
         config = self.config_matrix[option_name]
         ckks_params = config["ckks_params"]
+        devices = config.get("devices", ["cuda:0"])
         logger.info(f"Running benchmark: {config['description']}")
 
         benchmark_result = BenchmarkResult()
 
-        engine = CkksEngine(ckks_params)
+        engine = CkksEngine(ckks_params, devices=devices)
 
         # =========== Test Error ========== #
         packed_ct_1, input_tensor_1 = engine.randn(return_src=True)
@@ -284,8 +294,9 @@ class ConsumeAllLevelsBenchmark(BenchmarkBase):
             )
             try:
                 with open(file_name, "w") as f:
-                    for row in lat_table:
-                        f.write(",".join(map(str, row)) + "\n")
+                    f.writelines(
+                        ",".join(map(str, row)) + "\n" for row in lat_table
+                    )
                 logger.info(f"Benchmark result saved to {file_name}.")
             except Exception as e:
                 logger.error(f"Failed to save benchmark result: {e}")
