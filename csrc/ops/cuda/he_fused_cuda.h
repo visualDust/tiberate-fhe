@@ -1,0 +1,60 @@
+#pragma once
+
+#include <torch/torch.h>
+
+torch::Tensor pc_add_fused_cuda(
+    const torch::Tensor a,  // a is typically ct_data
+    const torch::Tensor b,  // b is typically pt_data
+    const torch::Tensor _2q,
+    const torch::Tensor Rs,
+    const torch::Tensor ql,
+    const torch::Tensor qh,
+    const torch::Tensor kl,
+    const torch::Tensor kh);
+
+torch::Tensor switch_key_switch_later_part_extend_cuda(
+    const int64_t rns_len,
+    const torch::Tensor state,
+    const torch::Tensor l_enter,
+    const int64_t l_enter_start_offset,
+    const torch::Tensor _2q,
+    const torch::Tensor Rs,
+    const torch::Tensor ql,
+    const torch::Tensor qh,
+    const torch::Tensor kl,
+    const torch::Tensor kh);
+
+torch::Tensor codec_rotate_make_unsigned_reduce_2q_cuda(
+    const torch::Tensor a, const torch::Tensor perm, const torch::Tensor _2q);
+
+torch::Tensor create_switcher_divide_by_p_cuda(
+    const torch::Tensor c,  // d[: -self.ckksCfg.num_special_primes]
+    const torch::Tensor p,  // d[-self.ckksCfg.num_special_primes:]
+    const torch::Tensor _2q,
+    const torch::Tensor Rs,
+    const std::vector<torch::Tensor> PiRi,
+    const torch::Tensor ql,
+    const torch::Tensor qh,
+    const torch::Tensor kl,
+    const torch::Tensor kh);
+
+void rescale_exact_rounding_fused_cuda(
+    torch::Tensor a,  // inplace of a
+    const torch::Tensor Rs,
+    const torch::Tensor rescaler,  // rescaler0
+    const int64_t round_at,        // round_at
+    const torch::Tensor _2q,
+    const torch::Tensor ql,
+    const torch::Tensor qh,
+    const torch::Tensor kl,
+    const torch::Tensor kh);
+
+void rescale_non_exact_rounding_fused_cuda(
+    torch::Tensor a,  // inplace of a
+    const torch::Tensor Rs,
+    const torch::Tensor rescaler,  // rescaler0
+    const torch::Tensor _2q,
+    const torch::Tensor ql,
+    const torch::Tensor qh,
+    const torch::Tensor kl,
+    const torch::Tensor kh);

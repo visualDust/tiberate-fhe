@@ -13,7 +13,7 @@ from vdtoys.registry import Registry
 engClsRegistry = Registry("ENGINE_CLASS")
 
 if TYPE_CHECKING:  # avoid circular import
-    from tiberate.engine.ckks_engine import CkksEngine
+    from tiberate.ckks_engine import CkksEngine
 
 
 def _default_none():

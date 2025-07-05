@@ -5,6 +5,7 @@ from loguru import logger
 from tiberate.config.ckks_config import CkksConfig
 from tiberate.context.mont_context import MontgomeryContext
 from tiberate.context.rns_partition import RnsPartition
+from tiberate.libs.wrapper import mont as mont_ops, ntt2 as ntt2_ops
 
 # ------------------------------------------------------------------------------------------
 # NTT pre-compute.
@@ -684,125 +685,105 @@ class NTTContext:
     # -------------------------------------------------------------------------------------------------
 
     def mont_enter(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.mont_enter(
+        mont_ops.mont_enter(
             a,
             self.Rs_prepack[mult_type][lvl][part],
             *self.mont_prepack[mult_type][lvl][part],
         )
 
     def mont_enter_scale(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.mont_enter(
+        mont_ops.mont_enter(
             a,
             self.Rs_scale_prepack[mult_type][lvl][part],
             *self.mont_prepack[mult_type][lvl][part],
         )
 
     def mont_enter_scalar(self, a, b, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.mont_enter(
-            a, b, *self.mont_prepack[mult_type][lvl][part]
-        )
+        mont_ops.mont_enter(a, b, *self.mont_prepack[mult_type][lvl][part])
 
     def mont_mult(self, a, b, lvl=0, mult_type=-1, part=0):
-        return torch.ops.tiberate_ntt_ops.mont_mult(
+        return mont_ops.mont_mult(
             a, b, *self.mont_prepack[mult_type][lvl][part]
-        )
-
-    def ntt_radix2(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.ntt_radix2(
-            a, *self.ntt_radix2_prepack[mult_type][lvl][part]
-        )
-
-    def enter_ntt_radix2(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.enter_ntt_radix2(
-            a,
-            self.Rs_prepack[mult_type][lvl][part],
-            *self.ntt_radix2_prepack[mult_type][lvl][part],
-        )
-
-    def intt_radix2(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.intt_radix2(
-            a, *self.intt_radix2_prepack[mult_type][lvl][part]
         )
 
     def mont_reduce(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.mont_reduce(
-            a, *self.mont_prepack[mult_type][lvl][part]
-        )
-
-    def intt_radix2_exit(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_fused_ops.intt_radix2_exit(
-            a, *self.intt_radix2_prepack[mult_type][lvl][part]
-        )
-
-    def intt_radix2_exit_reduce(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_fused_ops.intt_radix2_exit_reduce(
-            a, *self.intt_radix2_prepack[mult_type][lvl][part]
-        )
-
-    def intt_radix2_exit_reduce_signed(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_fused_ops.intt_radix2_exit_reduce_signed(
-            a, *self.intt_radix2_prepack[mult_type][lvl][part]
-        )
+        mont_ops.mont_reduce(a, *self.mont_prepack[mult_type][lvl][part])
 
     def reduce_2q(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.reduce_2q(
-            a, self._2q_prepack[mult_type][lvl][part]
-        )
+        mont_ops.reduce_2q(a, self._2q_prepack[mult_type][lvl][part])
 
     def make_signed(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.make_signed(
-            a, self._2q_prepack[mult_type][lvl][part]
-        )
+        mont_ops.make_signed(a, self._2q_prepack[mult_type][lvl][part])
 
     def make_unsigned(self, a, lvl=0, mult_type=-1, part=0):
-        torch.ops.tiberate_ntt_ops.make_unsigned(
-            a, self._2q_prepack[mult_type][lvl][part]
-        )
+        mont_ops.make_unsigned(a, self._2q_prepack[mult_type][lvl][part])
 
     def mont_add(self, a, b, lvl=0, mult_type=-1, part=0):
-        return torch.ops.tiberate_ntt_ops.mont_add(
-            a, b, self._2q_prepack[mult_type][lvl][part]
-        )
+        return mont_ops.mont_add(a, b, self._2q_prepack[mult_type][lvl][part])
 
     def mont_sub(self, a, b, lvl=0, mult_type=-1, part=0):
-        return torch.ops.tiberate_ntt_ops.mont_sub(
-            a, b, self._2q_prepack[mult_type][lvl][part]
-        )
+        return mont_ops.mont_sub(a, b, self._2q_prepack[mult_type][lvl][part])
 
     def tile_unsigned(self, a, lvl=0, mult_type=-1, part=0):
-        return torch.ops.tiberate_ntt_ops.tile_unsigned(
-            a, self._2q_prepack[mult_type][lvl][part]
-        )
-
-    # ===========================================
-    # fused ops
-    # ===========================================
+        return mont_ops.tile_unsigned(a, self._2q_prepack[mult_type][lvl][part])
 
     def mont_add_many_3d(
         self, stacked: torch.Tensor, lvl=0, mult_type=-1, part=0
     ):
-        return torch.ops.tiberate_fused_ops.mont_add_many_3d(
+        return mont_ops.mont_add_many_3d(
             stacked, self._2q_prepack[mult_type][lvl][part]
         )
 
     def mont_reduce_add_many_3d(
         self, stacked: torch.Tensor, lvl=0, mult_type=-1, part=0
     ):
-        return torch.ops.tiberate_fused_ops.mont_reduce_add_many_3d(
+        return mont_ops.mont_reduce_add_many_3d(
             stacked, self._2q_prepack[mult_type][lvl][part]
         )
 
     def mont_add_reduce_2q(self, a, b, lvl=0, mult_type=-1, part=0):
-        return torch.ops.tiberate_fused_ops.mont_add_reduce_2q(
+        return mont_ops.mont_add_reduce_2q(
             a, b, self._2q_prepack[mult_type][lvl][part]
         )
 
     def mont_sub_reduce_2q(self, a, b, lvl=0, mult_type=-1, part=0):
-        return torch.ops.tiberate_fused_ops.mont_sub_reduce_2q(
+        return mont_ops.mont_sub_reduce_2q(
             a, b, self._2q_prepack[mult_type][lvl][part]
         )
 
-    def mont_pc_add_fused(self, ct_data, pt_data, lvl=0, mult_type=-1, part=0):
+    def ntt_radix2(self, a, lvl=0, mult_type=-1, part=0):
+        ntt2_ops.ntt_radix2(a, *self.ntt_radix2_prepack[mult_type][lvl][part])
+
+    def enter_ntt_radix2(self, a, lvl=0, mult_type=-1, part=0):
+        ntt2_ops.enter_ntt_radix2(
+            a,
+            self.Rs_prepack[mult_type][lvl][part],
+            *self.ntt_radix2_prepack[mult_type][lvl][part],
+        )
+
+    def intt_radix2(self, a, lvl=0, mult_type=-1, part=0):
+        ntt2_ops.intt_radix2(a, *self.intt_radix2_prepack[mult_type][lvl][part])
+
+    def intt_radix2_exit(self, a, lvl=0, mult_type=-1, part=0):
+        ntt2_ops.intt_radix2_exit(
+            a, *self.intt_radix2_prepack[mult_type][lvl][part]
+        )
+
+    def intt_radix2_exit_reduce(self, a, lvl=0, mult_type=-1, part=0):
+        ntt2_ops.intt_radix2_exit_reduce(
+            a, *self.intt_radix2_prepack[mult_type][lvl][part]
+        )
+
+    def intt_radix2_exit_reduce_signed(self, a, lvl=0, mult_type=-1, part=0):
+        ntt2_ops.intt_radix2_exit_reduce_signed(
+            a, *self.intt_radix2_prepack[mult_type][lvl][part]
+        )
+
+    # ===========================================
+    # fused ops
+    # ===========================================
+
+    def pc_add_fused(self, ct_data, pt_data, lvl=0, mult_type=-1, part=0):
         return torch.ops.tiberate_fused_ops.pc_add_fused(
             ct_data,
             pt_data,
