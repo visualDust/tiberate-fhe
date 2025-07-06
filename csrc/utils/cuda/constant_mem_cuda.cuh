@@ -5,7 +5,7 @@
 
 constexpr size_t MAX_CONST_BYTES = 64 * 1024;  // 64KB
 constexpr size_t MAX_RNS_COUNT =
-    64;  // typical value: 19 for logN15, 35 for logN16
+    128;  // typical value: 19 for logN15, 35 for logN16
 constexpr size_t _2Q_BYTE_OFFSET = 0;
 constexpr size_t RS_BYTE_OFFSET =
     _2Q_BYTE_OFFSET + MAX_RNS_COUNT * sizeof(uint64_t);

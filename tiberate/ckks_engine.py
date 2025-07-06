@@ -14,6 +14,7 @@ import tiberate.utils.encoding as codec
 from tiberate import errors
 from tiberate.config import CkksConfig, Preset
 from tiberate.context.ntt_context import NTTContext
+from tiberate.libs.wrapper import he_misc as he_ops, mont as mont_ops
 from tiberate.rng import Csprng
 from tiberate.typing import (
     FLAGS,
@@ -831,9 +832,7 @@ class CkksEngine:
                 pk_data = pk.data[0][device_id][astart:astop]
 
                 _2q = self.nttCtx.parts_pack[device_id][key]["_2q"]
-                update_part = torch.ops.tiberate_ntt_ops.mont_add(
-                    [pk_data], [shard], _2q
-                )[0]
+                update_part = mont_ops.mont_add([pk_data], [shard], _2q)[0]
                 pk_data.copy_(update_part, non_blocking=True)
 
                 pk.misc["description"] = (
@@ -896,7 +895,7 @@ class CkksEngine:
 
             # mont_enter will take care of signedness.
             # ntt_cuda.make_unsigned([Y], _2q)
-            torch.ops.tiberate_ntt_ops.mont_enter([Y], [Y_scalar], *mont_pack)
+            mont_ops.mont_enter([Y], [Y_scalar], *mont_pack)
             # ntt_cuda.reduce_2q([Y], _2q)
 
             state[i + 1] = Y
@@ -911,9 +910,7 @@ class CkksEngine:
                 # print(type(L_scalar))
                 new_state_len = alpha - (i + 2)
                 new_state = Y.repeat(new_state_len, 1)
-                torch.ops.tiberate_ntt_ops.mont_enter(
-                    [new_state], [L_scalar], *state_mont_pack
-                )
+                mont_ops.mont_enter([new_state], [L_scalar], *state_mont_pack)
                 state[i + 2 :] += new_state
 
         # Returned state is in plain integer format.
@@ -990,27 +987,23 @@ class CkksEngine:
             target_device_id
         ]
         start = self.nttCtx.starts[level][target_device_id]
-        extended = (
-            torch.ops.tiberate_fused_ops.switch_key_switch_later_part_extend(
-                rns_len,
-                state,
-                (
-                    torch.stack(L_enter)
-                    if L_enter
-                    else torch.empty(
-                        0, 0, dtype=state.dtype
-                    )  # todo)) just pass None cause error
-                ),
-                start,
-                self.nttCtx._2q_prepack[target_device_id][level][-2][0],
-                self.nttCtx.Rs_prepack[target_device_id][level][-2][0],
-                *[
-                    t[0]
-                    for t in self.nttCtx.mont_prepack[target_device_id][level][
-                        -2
-                    ]
-                ],
-            )
+        extended = he_ops.switch_key_switch_later_part_extend(
+            rns_len,
+            state,
+            (
+                torch.stack(L_enter)
+                if L_enter
+                else torch.empty(
+                    0, 0, dtype=state.dtype
+                )  # todo)) just pass None cause error
+            ),
+            start,
+            self.nttCtx._2q_prepack[target_device_id][level][-2][0],
+            self.nttCtx.Rs_prepack[target_device_id][level][-2][0],
+            *[
+                t[0]
+                for t in self.nttCtx.mont_prepack[target_device_id][level][-2]
+            ],
         )
 
         # Returned extended is in the Montgomery format.
@@ -1352,7 +1345,7 @@ class CkksEngine:
                 ]
             )  # now PiRi is [device_idx][prime_idx] for current level
 
-        out0 = torch.ops.tiberate_fused_ops.create_switcher_divide_by_p(
+        out0 = he_ops.create_switcher_divide_by_p(
             c0,
             p0,
             self.nttCtx._2q_prepack[-2][level][0],
@@ -1361,7 +1354,7 @@ class CkksEngine:
             *self.nttCtx.mont_prepack[-2][level][0],
         )
 
-        out1 = torch.ops.tiberate_fused_ops.create_switcher_divide_by_p(
+        out1 = he_ops.create_switcher_divide_by_p(
             c1,
             p1,
             self.nttCtx._2q_prepack[-2][level][0],
@@ -1590,7 +1583,7 @@ class CkksEngine:
             ][0]
 
             round_at = self.montCtx.q[rescale_channel_prime_id] // 2
-            torch.ops.tiberate_fused_ops.rescale_exact_rounding_fused(
+            he_ops.rescale_exact_rounding_fused(
                 data0,
                 rescaling_scales,
                 rescaler0,
@@ -1598,7 +1591,7 @@ class CkksEngine:
                 self.nttCtx._2q_prepack[-1][next_level][0],
                 *self.nttCtx.mont_prepack[-1][next_level][0],
             )
-            torch.ops.tiberate_fused_ops.rescale_exact_rounding_fused(
+            he_ops.rescale_exact_rounding_fused(
                 data1,
                 rescaling_scales,
                 rescaler1,
@@ -1608,14 +1601,14 @@ class CkksEngine:
             )
 
         else:
-            torch.ops.tiberate_fused_ops.rescale_non_exact_rounding_fused(
+            he_ops.rescale_non_exact_rounding_fused(
                 data0,
                 rescaling_scales,
                 rescaler0,
                 self.nttCtx._2q_prepack[-1][next_level][0],
                 *self.nttCtx.mont_prepack[-1][next_level][0],
             )
-            torch.ops.tiberate_fused_ops.rescale_non_exact_rounding_fused(
+            he_ops.rescale_non_exact_rounding_fused(
                 data1,
                 rescaling_scales,
                 rescaler1,
@@ -1834,7 +1827,7 @@ class CkksEngine:
                 leap = (3**delta - 1) // 2 % (N * 2)
                 perm = codec.canon_permutation_torch_cache[N, leap, d.device]
                 perms.append(perm)
-            data_rotated = torch.ops.tiberate_fused_ops.codec_rotate_make_unsigned_reduce_2q(
+            data_rotated = he_ops.codec_rotate_make_unsigned_reduce_2q(
                 ct_data,
                 perms,
                 self.nttCtx._2q_prepack[mult_type][level][0],
@@ -2154,14 +2147,14 @@ class CkksEngine:
             )
             multipliers.append(multiplier)
 
-        # new_ct_data0 = torch.ops.tiberate_fused_ops.mont_enter_reduce_2q(
+        # new_ct_data0 = mont_ops.mont_enter_reduce_2q(
         #     new_ct_data0,
         #     multipliers,
         #     self.nttCtx._2q_prepack[-1][dst_level][0],
         #     *self.nttCtx.mont_prepack[-1][dst_level][0],
         # )
 
-        # new_ct_data1 = torch.ops.tiberate_fused_ops.mont_enter_reduce_2q(
+        # new_ct_data1 = mont_ops.mont_enter_reduce_2q(
         #     new_ct_data1,
         #     multipliers,
         #     self.nttCtx._2q_prepack[-1][dst_level][0],
@@ -2650,7 +2643,7 @@ class CkksEngine:
 
         new_ct = ct.clone(clone_data=False)
         for i in [0, 1]:
-            new_data_i = torch.ops.tiberate_fused_ops.mont_enter_reduce_2q(
+            new_data_i = mont_ops.mont_enter_reduce_2q(
                 new_ct.data[i],
                 tensorized_scalar,
                 self.nttCtx._2q_prepack[-1][ct.level][0],

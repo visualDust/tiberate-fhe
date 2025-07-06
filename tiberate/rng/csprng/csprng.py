@@ -4,6 +4,7 @@ import os
 import numpy as np
 import torch
 
+from tiberate.libs.wrapper import csprng as csprng_ops
 from tiberate.rng.csprng.discrete_gaussian_sampler import (
     build_CDT_binary_search_tree,
 )
@@ -234,9 +235,7 @@ class Csprng(RandNumGen):
             target_states.append(device_states.view(-1, 16))
 
         # Derive random bytes.
-        random_bytes = torch.ops.tiberate_csprng_ops.chacha20(
-            target_states, self.inc
-        )
+        random_bytes = csprng_ops.chacha20(target_states, self.inc)
 
         # If not reshape, flatten.
         if reshape:
@@ -274,7 +273,7 @@ class Csprng(RandNumGen):
             target_states.append(device_states)
 
         # Generate the randint.
-        rand_int = torch.ops.tiberate_csprng_ops.randint_fast(
+        rand_int = csprng_ops.randint_fast(
             target_states, q_ptr, shift, self.inc
         )
 
@@ -297,7 +296,7 @@ class Csprng(RandNumGen):
             target_states.append(device_states.view(-1, 16))
 
         # Generate the randint.
-        rand_int = torch.ops.tiberate_csprng_ops.discrete_gaussian_fast(
+        rand_int = csprng_ops.discrete_gaussian_fast(
             target_states,
             self.btree_ptr,
             self.btree_size,
@@ -317,9 +316,9 @@ class Csprng(RandNumGen):
         # contiguous stream of states.
         # It will not make the target state strided.
         L = self.num_coefs // 16
-        rand_bytes = torch.ops.tiberate_csprng_ops.chacha20(
-            (self.states[0][:L],), self.inc
-        )[0].ravel()
+        rand_bytes = csprng_ops.chacha20((self.states[0][:L],), self.inc)[
+            0
+        ].ravel()
 
-        torch.ops.tiberate_csprng_ops.randround([coef], [rand_bytes])
+        csprng_ops.randround([coef], [rand_bytes])
         return rand_bytes

@@ -40,7 +40,7 @@ def _(
     return input
 
 
-@torch.library.register_fake("tiberate_ntt_ops::tile_unsigned")
+@torch.library.register_fake("tiberate_mont_ops::tile_unsigned")
 def _(a: list[torch.Tensor], _2q: list[torch.Tensor]):
     """
     Tile unsigned operation for Tiberate.
@@ -48,7 +48,7 @@ def _(a: list[torch.Tensor], _2q: list[torch.Tensor]):
     return a
 
 
-@torch.library.register_fake("tiberate_ntt_ops::mont_mult")
+@torch.library.register_fake("tiberate_mont_ops::mont_mult")
 def _(
     a: list[torch.Tensor],
     b: list[torch.Tensor],
@@ -71,7 +71,7 @@ def _(input: list[torch.Tensor], q_ptrs: list[int], shift: int, step: int):
     return input
 
 
-@torch.library.register_fake("tiberate_ntt_ops::mont_sub")
+@torch.library.register_fake("tiberate_mont_ops::mont_sub")
 def _(
     a: list[torch.Tensor],
     b: list[torch.Tensor],
@@ -86,7 +86,7 @@ def _(
     return a
 
 
-@torch.library.register_fake("tiberate_ntt_ops::mont_add")
+@torch.library.register_fake("tiberate_mont_ops::mont_add")
 def _(
     a: list[torch.Tensor],
     b: list[torch.Tensor],

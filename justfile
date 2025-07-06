@@ -12,6 +12,9 @@ clean-pycache: # all __pycache__ directories
 clean-all: clean-build clean-cache clean-pycache
 
 install:
+    pip install --editable . --verbose --no-build-isolation
+
+install-uv:
     uv pip install --editable . --verbose --no-build-isolation
 
 trace:

@@ -103,7 +103,7 @@ std::vector<torch::Tensor> create_switcher_divide_by_p(
   return outputs;
 }
 
-TORCH_LIBRARY_FRAGMENT(tiberate_fused_ops, m) {
+TORCH_LIBRARY_FRAGMENT(tiberate_he_ops, m) {
   m.def(
       "pc_add_fused(Tensor[] ct_data, Tensor[] pt_data, "
       "Tensor[] Rs, Tensor[] ql, Tensor[] qh, "
@@ -132,7 +132,7 @@ TORCH_LIBRARY_FRAGMENT(tiberate_fused_ops, m) {
       "Tensor[] ql, Tensor[] qh, Tensor[] kl, Tensor[] kh) -> Tensor[]");
 }
 
-TORCH_LIBRARY_IMPL(tiberate_fused_ops, CUDA, m) {
+TORCH_LIBRARY_IMPL(tiberate_he_ops, CUDA, m) {
   m.impl("pc_add_fused", &pc_add_fused);
   m.impl("rescale_exact_rounding_fused", &rescale_exact_rounding_fused);
   m.impl("rescale_non_exact_rounding_fused", &rescale_non_exact_rounding_fused);

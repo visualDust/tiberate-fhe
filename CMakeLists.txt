@@ -83,7 +83,7 @@ set(OP_MODULE_NAMES
     chacha20
     discrete_gaussian
     mont
-    mont_fused
+    mont_extra
     ntt_radix2
     intt_radix2
     he_fused

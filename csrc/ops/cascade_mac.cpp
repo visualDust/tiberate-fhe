@@ -19,12 +19,12 @@ std::vector<torch::Tensor> mont_mult_sum_many_3d(
   return outputs;
 }
 
-TORCH_LIBRARY_FRAGMENT(tiberate_fused_ops, m) {
+TORCH_LIBRARY_FRAGMENT(tiberate_he_ops, m) {
   m.def(
       "mont_mult_sum_many_3d(Tensor[] a, Tensor[] b, Tensor[] _2q, "
       "Tensor[] ql, Tensor[] qh, Tensor[] kl, Tensor[] kh) -> Tensor[]");
 }
 
-TORCH_LIBRARY_IMPL(tiberate_fused_ops, CUDA, m) {
+TORCH_LIBRARY_IMPL(tiberate_he_ops, CUDA, m) {
   m.impl("mont_mult_sum_many_3d", mont_mult_sum_many_3d);
 }

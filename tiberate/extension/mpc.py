@@ -1,7 +1,7 @@
-import torch
 from vdtoys.mvc import strictype
 
 from tiberate import CkksEngine, errors
+from tiberate.libs.wrapper import mont as mont_ops
 from tiberate.typing import *  # noqa: F403
 from tiberate.utils.encoding import rotate
 
@@ -210,9 +210,7 @@ class CkksEngineMPCExtension(CkksEngine):
                 pk_data = pk.data[0][device_id][astart:astop]
 
                 _2q = self.nttCtx.parts_pack[device_id][key]["_2q"]
-                update_part = torch.ops.tiberate_ntt_ops.mont_add(
-                    [pk_data], [shard], _2q
-                )[0]
+                update_part = mont_ops.mont_add([pk_data], [shard], _2q)[0]
                 pk_data.copy_(update_part, non_blocking=True)
 
                 # Name the pk.

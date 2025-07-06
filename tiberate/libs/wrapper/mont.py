@@ -25,7 +25,7 @@ def mont_mult(
     Returns:
         torch.Tensor: Result of Montgomery multiplication.
     """
-    return torch.ops.tiberate_ntt_ops.mont_mult(a, b, ql, qh, kl, kh)
+    return torch.ops.tiberate_mont_ops.mont_mult(a, b, ql, qh, kl, kh)
 
 
 def mont_enter(
@@ -45,7 +45,7 @@ def mont_enter(
         kl (torch.Tensor): Lower part of the Montgomery constant.
         kh (torch.Tensor): Upper part of the Montgomery constant.
     """
-    return torch.ops.tiberate_ntt_ops.mont_enter(a, Rs, ql, qh, kl, kh)
+    return torch.ops.tiberate_mont_ops.mont_enter(a, Rs, ql, qh, kl, kh)
 
 
 def mont_reduce(
@@ -63,7 +63,7 @@ def mont_reduce(
         kl (torch.Tensor): Lower part of the Montgomery constant.
         kh (torch.Tensor): Upper part of the Montgomery constant.
     """
-    return torch.ops.tiberate_ntt_ops.mont_reduce(a, ql, qh, kl, kh)
+    return torch.ops.tiberate_mont_ops.mont_reduce(a, ql, qh, kl, kh)
 
 
 def mont_add(
@@ -79,7 +79,7 @@ def mont_add(
     Returns:
         torch.Tensor: Result of the addition.
     """
-    return torch.ops.tiberate_ntt_ops.mont_add(a, b, _2q)
+    return torch.ops.tiberate_mont_ops.mont_add(a, b, _2q)
 
 
 def mont_sub(
@@ -95,7 +95,7 @@ def mont_sub(
     Returns:
         torch.Tensor: Result of the subtraction.
     """
-    return torch.ops.tiberate_ntt_ops.mont_sub(a, b, _2q)
+    return torch.ops.tiberate_mont_ops.mont_sub(a, b, _2q)
 
 
 def reduce_2q(
@@ -107,7 +107,7 @@ def reduce_2q(
         a (torch.Tensor): Tensor to reduce.
         _2q (torch.Tensor): Double of the modulus.
     """
-    return torch.ops.tiberate_ntt_ops.reduce_2q(a, _2q)
+    return torch.ops.tiberate_mont_ops.reduce_2q(a, _2q)
 
 
 def make_signed(
@@ -119,7 +119,7 @@ def make_signed(
         a (torch.Tensor): Tensor to convert.
         _2q (torch.Tensor): Double of the modulus.
     """
-    return torch.ops.tiberate_ntt_ops.make_signed(a, _2q)
+    return torch.ops.tiberate_mont_ops.make_signed(a, _2q)
 
 
 def make_unsigned(
@@ -131,7 +131,7 @@ def make_unsigned(
         a (torch.Tensor): Tensor to convert.
         _2q (torch.Tensor): Double of the modulus.
     """
-    return torch.ops.tiberate_ntt_ops.make_unsigned(a, _2q)
+    return torch.ops.tiberate_mont_ops.make_unsigned(a, _2q)
 
 
 def tile_unsigned(
@@ -145,7 +145,7 @@ def tile_unsigned(
     Returns:
         torch.Tensor: Tiled tensor.
     """
-    return torch.ops.tiberate_ntt_ops.tile_unsigned(a, _2q)
+    return torch.ops.tiberate_mont_ops.tile_unsigned(a, _2q)
 
 
 def mont_add_many_3d(
@@ -159,7 +159,7 @@ def mont_add_many_3d(
     Returns:
         torch.Tensor: Result of the addition.
     """
-    return torch.ops.tiberate_fused_ops.mont_add_many_3d(input, _2q)
+    return torch.ops.tiberate_mont_ops.mont_add_many_3d(input, _2q)
 
 
 def mont_reduce_add_many_3d(
@@ -173,7 +173,7 @@ def mont_reduce_add_many_3d(
     Returns:
         torch.Tensor: Result of the reduction and addition.
     """
-    return torch.ops.tiberate_fused_ops.mont_reduce_add_many_3d(input, _2q)
+    return torch.ops.tiberate_mont_ops.mont_reduce_add_many_3d(input, _2q)
 
 
 def mont_add_reduce_2q(
@@ -189,7 +189,7 @@ def mont_add_reduce_2q(
     Returns:
         torch.Tensor: Result of the addition and reduction.
     """
-    return torch.ops.tiberate_fused_ops.mont_add_reduce_2q(a, b, _2q)
+    return torch.ops.tiberate_mont_ops.mont_add_reduce_2q(a, b, _2q)
 
 
 def mont_sub_reduce_2q(
@@ -205,7 +205,7 @@ def mont_sub_reduce_2q(
     Returns:
         torch.Tensor: Result of the subtraction and reduction.
     """
-    return torch.ops.tiberate_fused_ops.mont_sub_reduce_2q(a, b, _2q)
+    return torch.ops.tiberate_mont_ops.mont_sub_reduce_2q(a, b, _2q)
 
 
 def mont_enter_reduce_2q(
@@ -229,60 +229,6 @@ def mont_enter_reduce_2q(
     Returns:
         torch.Tensor: Prepared tensor.
     """
-    return torch.ops.tiberate_fused_ops.mont_enter_reduce_2q(
+    return torch.ops.tiberate_mont_ops.mont_enter_reduce_2q(
         a, Rs, _2q, ql, qh, kl, kh
-    )
-
-
-def rescale_exact_rounding_fused(
-    a: torch.Tensor,
-    Rs: torch.Tensor,
-    rescaler: torch.Tensor,
-    round_at: int,
-    _2q: torch.Tensor,
-    ql: torch.Tensor,
-    qh: torch.Tensor,
-    kl: torch.Tensor,
-    kh: torch.Tensor,
-) -> None:
-    """Rescale the tensor with exact rounding.
-    Args:
-        a (torch.Tensor): Tensor to rescale.
-        Rs (torch.Tensor): Montgomery constant.
-        rescaler (torch.Tensor): Rescaling factor.
-        round_at (int): Rounding position.
-        _2q (torch.Tensor): Double of the modulus.
-        ql (torch.Tensor): Lower part of the modulus.
-        qh (torch.Tensor): Upper part of the modulus.
-        kl (torch.Tensor): Lower part of the Montgomery constant.
-        kh (torch.Tensor): Upper part of the Montgomery constant.
-    """
-    return torch.ops.tiberate_fused_ops.rescale_exact_rounding_fused(
-        a, Rs, rescaler, round_at, _2q, ql, qh, kl, kh
-    )
-
-
-def rescale_non_exact_rounding_fused(
-    a: torch.Tensor,
-    Rs: torch.Tensor,
-    rescaler: torch.Tensor,
-    _2q: torch.Tensor,
-    ql: torch.Tensor,
-    qh: torch.Tensor,
-    kl: torch.Tensor,
-    kh: torch.Tensor,
-) -> None:
-    """Rescale the tensor with non-exact rounding.
-    Args:
-        a (torch.Tensor): Tensor to rescale.
-        Rs (torch.Tensor): Montgomery constant.
-        rescaler (torch.Tensor): Rescaling factor.
-        _2q (torch.Tensor): Double of the modulus.
-        ql (torch.Tensor): Lower part of the modulus.
-        qh (torch.Tensor): Upper part of the modulus.
-        kl (torch.Tensor): Lower part of the Montgomery constant.
-        kh (torch.Tensor): Upper part of the Montgomery constant.
-    """
-    return torch.ops.tiberate_fused_ops.rescale_non_exact_rounding_fused(
-        a, Rs, rescaler, _2q, ql, qh, kl, kh
     )

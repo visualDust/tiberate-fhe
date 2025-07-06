@@ -107,7 +107,7 @@ std::vector<torch::Tensor> tile_unsigned(std::vector<torch::Tensor> a,
   return outputs;
 }
 
-TORCH_LIBRARY_FRAGMENT(tiberate_ntt_ops, m) {
+TORCH_LIBRARY_FRAGMENT(tiberate_mont_ops, m) {
   m.def(
       "mont_mult(Tensor[] a, Tensor[] b, Tensor[] ql, Tensor[] qh, "
       "Tensor[] kl, Tensor[] kh) -> Tensor[]");
@@ -124,7 +124,7 @@ TORCH_LIBRARY_FRAGMENT(tiberate_ntt_ops, m) {
   m.def("make_unsigned(Tensor[](a!) a, Tensor[] _2q) -> ()");
   m.def("tile_unsigned(Tensor[] a, Tensor[] _2q) -> Tensor[]");
 }
-TORCH_LIBRARY_IMPL(tiberate_ntt_ops, CUDA, m) {
+TORCH_LIBRARY_IMPL(tiberate_mont_ops, CUDA, m) {
   m.impl("mont_mult", &mont_mult);
   m.impl("mont_enter", &mont_enter);
   m.impl("mont_reduce", &mont_reduce);

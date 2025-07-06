@@ -1,4 +1,4 @@
-#include "cuda/mont_fused_cuda.h"
+#include "cuda/mont_extra_cuda.h"
 
 std::vector<torch::Tensor> mont_add_many_3d(
     const std::vector<torch::Tensor> inputs,
@@ -71,7 +71,7 @@ std::vector<torch::Tensor> mont_enter_reduce_2q(
   return outputs;
 }
 
-TORCH_LIBRARY_FRAGMENT(tiberate_fused_ops, m) {
+TORCH_LIBRARY_FRAGMENT(tiberate_mont_ops, m) {
   m.def("mont_add_many_3d(Tensor[] input, Tensor[] _2q) -> Tensor[]",
         &mont_add_many_3d);
   m.def("mont_reduce_add_many_3d(Tensor[] input, Tensor[] _2q) -> Tensor[]",
@@ -84,7 +84,7 @@ TORCH_LIBRARY_FRAGMENT(tiberate_fused_ops, m) {
       "Tensor[] kl, Tensor[] kh) -> Tensor[]");
 }
 
-TORCH_LIBRARY_IMPL(tiberate_fused_ops, CUDA, m) {
+TORCH_LIBRARY_IMPL(tiberate_mont_ops, CUDA, m) {
   m.impl("mont_add_many_3d", &mont_add_many_3d);
   m.impl("mont_reduce_add_many_3d", &mont_reduce_add_many_3d);
   m.impl("mont_add_reduce_2q", &mont_add_reduce_2q);

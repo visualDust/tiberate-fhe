@@ -5,7 +5,11 @@ from loguru import logger
 from tiberate.config.ckks_config import CkksConfig
 from tiberate.context.mont_context import MontgomeryContext
 from tiberate.context.rns_partition import RnsPartition
-from tiberate.libs.wrapper import mont as mont_ops, ntt2 as ntt2_ops
+from tiberate.libs.wrapper import (
+    he_misc as he_ops,
+    mont as mont_ops,
+    ntt2 as ntt2_ops,
+)
 
 # ------------------------------------------------------------------------------------------
 # NTT pre-compute.
@@ -248,11 +252,11 @@ class NTTContext:
 
         a = [psi.view(psi.size(0), -1) for psi in p]
 
-        torch.ops.tiberate_ntt_ops.mont_enter(a, Rs, ql, qh, kl, kh)
+        mont_ops.mont_enter(a, Rs, ql, qh, kl, kh)
 
         p = self.ipsi
         a = [psi.view(psi.size(0), -1) for psi in p]
-        torch.ops.tiberate_ntt_ops.mont_enter(a, Rs, ql, qh, kl, kh)
+        mont_ops.mont_enter(a, Rs, ql, qh, kl, kh)
 
     def Ninv_enter(self):
         self.Ninv = [
@@ -784,7 +788,7 @@ class NTTContext:
     # ===========================================
 
     def pc_add_fused(self, ct_data, pt_data, lvl=0, mult_type=-1, part=0):
-        return torch.ops.tiberate_fused_ops.pc_add_fused(
+        return he_ops.pc_add_fused(
             ct_data,
             pt_data,
             self._2q_prepack[mult_type][lvl][part],
