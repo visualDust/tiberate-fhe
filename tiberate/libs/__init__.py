@@ -2,7 +2,7 @@ import os
 
 import torch
 
-lib_dirs = ['torchops']
+torch_op_dirs = ['torchops']
 
 
 def load_pytorch_ops(path):
@@ -24,7 +24,7 @@ def load_pytorch_ops(path):
 
 
 # Load the PyTorch ops
-for lib_dir in lib_dirs:
+for lib_dir in torch_op_dirs:
     load_pytorch_ops(lib_dir)
 
 from tiberate.libs.wrapper import (
