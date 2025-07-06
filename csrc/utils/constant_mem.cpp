@@ -18,4 +18,7 @@ PYBIND11_MODULE(constant_mem, m) {
   m.def("upload_constants_2qRsQlQhKlKh",
         &upload_constants_2qRsQlQhKlKh,
         "Upload constants to CUDA constant memory");
+  m.def("test_read_constants_2qRsQlQhKlKh",
+        &test_read_constants_2qRsQlQhKlKh,
+        "Read _2q, Rs, ql, qh, kl, kh from constant memory for one device");
 }

@@ -1,4 +1,5 @@
-clean-build: # .so in build directories
+clean-build: # .so in build directories, and build folder
+    find tiberate -type d -name "build" -exec rm -rv {} \;
     find tiberate/libs -maxdepth 2 -type f -name "*.so" -exec rm -v {} \;
     echo "Cleaned up shared object files in tiberate/libs"
 

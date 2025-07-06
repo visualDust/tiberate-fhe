@@ -509,7 +509,8 @@ __global__ void mont_chain_backward_cuda_kernel(
     const TensorAcc32Restrict<scalar_t, 1> qh_acc,
     const TensorAcc32Restrict<scalar_t, 1> kl_acc,
     const TensorAcc32Restrict<scalar_t, 1> kh_acc) {
-  const int i = blockIdx.x;
+  // const int i = blockIdx.x; // i is useless here because only need 1d kernel
+  // launch
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
   const int num_primes = p_acc.size(0);
 

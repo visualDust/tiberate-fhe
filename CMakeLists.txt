@@ -14,13 +14,28 @@ execute_process(
   OUTPUT_VARIABLE TORCH_CMAKE_PATH
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
+execute_process(
+  COMMAND ${Python3_EXECUTABLE} -c
+          "import torch; print(torch.__path__[0] + '/lib')"
+  OUTPUT_VARIABLE TORCH_LIB_PATH
+  OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+execute_process(
+  COMMAND ${Python3_EXECUTABLE} -c
+          "import torch; print(torch._C._GLIBCXX_USE_CXX11_ABI)"
+  OUTPUT_VARIABLE TORCH_ABI
+  OUTPUT_STRIP_TRAILING_WHITESPACE)
+
 message(STATUS "Python Executable: ${Python3_EXECUTABLE}")
 message(STATUS "Python Include Dirs: ${Python3_INCLUDE_DIRS}")
 message(STATUS "Torch cmake path: ${TORCH_CMAKE_PATH}")
+message(STATUS "Torch lib path: ${TORCH_LIB_PATH}")
+message(STATUS "Torch ABI: ${TORCH_ABI}")
 message(STATUS "Detected Python SOABI: ${Python3_SOABI}")
 
 set(PYTHON_MODULE_SUFFIX ".${Python3_SOABI}")
 list(APPEND CMAKE_PREFIX_PATH ${TORCH_CMAKE_PATH})
+link_directories(${TORCH_LIB_PATH})
 
 find_package(Torch REQUIRED)
 find_package(CUDA REQUIRED)
@@ -39,15 +54,18 @@ function(add_cuda_module name cpp_path cu_path out_subdir)
     add_library(${name} MODULE ${cpp_path})
   endif()
 
-  target_link_libraries(${name} ${TORCH_LIBRARIES})
+  target_link_libraries(${name} ${TORCH_LIBRARIES} torch_python)
+  target_compile_definitions(${name} PRIVATE TORCH_EXTENSION_NAME=${name})
+
+  target_include_directories(${name} PRIVATE ${TORCH_INCLUDE_DIRS}
+                                             ${Python3_INCLUDE_DIRS})
+
   set_target_properties(
     ${name}
     PROPERTIES PREFIX ""
                CXX_STANDARD 17
                OUTPUT_NAME "${name}${PYTHON_MODULE_SUFFIX}")
 
-  # Add definition for constant memory size limit, for now use 64KB by default
-  # target_compile_definitions(${name} PRIVATE CONST_MEM_MAX_BYTES=65536)
   if(SKBUILD_STATE STREQUAL "editable")
     install(
       TARGETS ${name}
