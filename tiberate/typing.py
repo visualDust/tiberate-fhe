@@ -10,7 +10,7 @@ from torch import Tensor
 from vdtoys.cache import CachedDict
 from vdtoys.registry import Registry
 
-engClsRegistry = Registry("ENGINE_CLASS")
+EngineClsRegistry = Registry("ENGINE_CLASS")
 
 if TYPE_CHECKING:  # avoid circular import
     from tiberate.ckks_engine import CkksEngine
@@ -297,7 +297,7 @@ class DataStruct:
 
     @property
     def _default_engine(self):
-        EngineCls: CkksEngine = engClsRegistry["CkksEngine"]
+        EngineCls: CkksEngine = EngineClsRegistry["CkksEngine"]
         return EngineCls.get_default_for_logN(self.misc["logN"])
 
 

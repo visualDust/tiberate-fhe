@@ -8,6 +8,7 @@ import numpy as np
 import torch
 from loguru import logger
 from vdtoys.cache import CachedDict
+from vdtoys.registry import Registry
 
 # from vdtoys.mvc import strictype # enable when debugging
 import tiberate.utils.encoding as codec
@@ -32,7 +33,10 @@ from tiberate.typing import (
 )
 from tiberate.utils.massive import decompose_rot_offsets
 
+EngineClsRegistry = Registry("ENGINE_CLASS")
 
+
+@EngineClsRegistry.register(name="CkksEngine")
 class CkksEngine:
     __default: dict[str, "CkksEngine"] = {}
 
