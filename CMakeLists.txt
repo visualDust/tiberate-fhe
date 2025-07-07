@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.15...3.26)
 project(tiberate-csrc LANGUAGES CXX CUDA)
 
+find_program(CCACHE_FOUND ccache)
+if(CCACHE_FOUND)
+  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
+endif()
+
 # === Python & Torch setup ===
 find_package(
   Python3
@@ -113,3 +118,6 @@ foreach(name IN LISTS NON_COMPUTE_MODULE_NAMES)
   add_cuda_module(${name} ${CMAKE_CURRENT_SOURCE_DIR}/csrc/utils/${name}.cpp ""
                   utils)
 endforeach()
+
+set(Python_ARGS "Tools/genwrapper.py")
+execute_process(COMMAND ${Python3_EXECUTABLE} ${Python_ARGS})
