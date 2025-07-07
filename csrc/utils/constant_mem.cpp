@@ -7,10 +7,14 @@ void upload_constants_2qRsQlQhKlKh(const std::vector<torch::Tensor> _2q,
                                    const std::vector<torch::Tensor> ql,
                                    const std::vector<torch::Tensor> qh,
                                    const std::vector<torch::Tensor> kl,
-                                   const std::vector<torch::Tensor> kh) {
+                                   const std::vector<torch::Tensor> kh,
+                                   const std::vector<torch::Tensor> Ninv,
+                                   int layout = 0) {
   const auto num_devices = _2q.size();
+  auto layout_enum = static_cast<ConstantMemoryLayout>(layout);
   for (size_t i = 0; i < num_devices; ++i) {
-    upload_constants_cuda(_2q[i], Rs[i], ql[i], qh[i], kl[i], kh[i]);
+    upload_constants_cuda(
+        _2q[i], Rs[i], ql[i], qh[i], kl[i], kh[i], Ninv[i], layout_enum);
   }
 }
 

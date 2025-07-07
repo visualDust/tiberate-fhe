@@ -6,14 +6,22 @@ int copy_to_constant_memory(const void* src,
                             size_t size_bytes,
                             size_t offset_bytes,
                             int device_id,
-                            cudaStream_t stream) {
+                            cudaStream_t stream,
+                            ConstantMemoryLayout layout) {
   if (offset_bytes + size_bytes > MAX_CONST_BYTES) return -1;
 
   cudaSetDevice(device_id);
+
+  size_t effective_offset = offset_bytes;
+  if (layout == RightToLeft) {
+    effective_offset = MAX_CONST_BYTES - offset_bytes - size_bytes;
+    if (effective_offset + size_bytes > MAX_CONST_BYTES) return -2;
+  }
+
   cudaMemcpyToSymbolAsync(constant_mem_pool,
                           src,
                           size_bytes,
-                          offset_bytes,
+                          effective_offset,
                           cudaMemcpyHostToDevice,
                           stream);
   return 0;
@@ -25,32 +33,65 @@ void upload_constants_cuda_typed(torch::Tensor _2q,
                                  torch::Tensor ql,
                                  torch::Tensor qh,
                                  torch::Tensor kl,
-                                 torch::Tensor kh) {
+                                 torch::Tensor kh,
+                                 torch::Tensor Ninv,
+                                 ConstantMemoryLayout layout) {
   TORCH_CHECK(_2q.is_contiguous() && Rs.is_contiguous());
   TORCH_CHECK(ql.is_contiguous() && qh.is_contiguous());
   TORCH_CHECK(kl.is_contiguous() && kh.is_contiguous());
+  TORCH_CHECK(Ninv.is_contiguous());
 
-  int device_id =
-      ql.device().index();  // Assuming all tensors are on the same device
+  int device_id = ql.device().index();
   auto stream = at::cuda::getCurrentCUDAStream(device_id);
 
   const size_t size_bytes = ql.numel() * sizeof(T);
   TORCH_CHECK(ql.numel() == qh.numel() && ql.numel() == kl.numel() &&
-                  ql.numel() == kh.numel() && _2q.numel() == Rs.numel(),
+                  ql.numel() == kh.numel() && ql.numel() == Rs.numel() &&
+                  ql.numel() == _2q.numel() && ql.numel() == Ninv.numel(),
               "All tensors must have the same number of elements");
 
-  copy_to_constant_memory(
-      _2q.data_ptr(), size_bytes, _2Q_BYTE_OFFSET, device_id, stream.stream());
-  copy_to_constant_memory(
-      Rs.data_ptr(), size_bytes, RS_BYTE_OFFSET, device_id, stream.stream());
-  copy_to_constant_memory(
-      ql.data_ptr(), size_bytes, QL_BYTE_OFFSET, device_id, stream.stream());
-  copy_to_constant_memory(
-      qh.data_ptr(), size_bytes, QH_BYTE_OFFSET, device_id, stream.stream());
-  copy_to_constant_memory(
-      kl.data_ptr(), size_bytes, KL_BYTE_OFFSET, device_id, stream.stream());
-  copy_to_constant_memory(
-      kh.data_ptr(), size_bytes, KH_BYTE_OFFSET, device_id, stream.stream());
+  copy_to_constant_memory(_2q.data_ptr(),
+                          size_bytes,
+                          _2Q_BYTE_OFFSET,
+                          device_id,
+                          stream.stream(),
+                          layout);
+  copy_to_constant_memory(Rs.data_ptr(),
+                          size_bytes,
+                          RS_BYTE_OFFSET,
+                          device_id,
+                          stream.stream(),
+                          layout);
+  copy_to_constant_memory(ql.data_ptr(),
+                          size_bytes,
+                          QL_BYTE_OFFSET,
+                          device_id,
+                          stream.stream(),
+                          layout);
+  copy_to_constant_memory(qh.data_ptr(),
+                          size_bytes,
+                          QH_BYTE_OFFSET,
+                          device_id,
+                          stream.stream(),
+                          layout);
+  copy_to_constant_memory(kl.data_ptr(),
+                          size_bytes,
+                          KL_BYTE_OFFSET,
+                          device_id,
+                          stream.stream(),
+                          layout);
+  copy_to_constant_memory(kh.data_ptr(),
+                          size_bytes,
+                          KH_BYTE_OFFSET,
+                          device_id,
+                          stream.stream(),
+                          layout);
+  copy_to_constant_memory(Ninv.data_ptr(),
+                          size_bytes,
+                          NINV_BYTE_OFFSET,
+                          device_id,
+                          stream.stream(),
+                          layout);
 }
 
 void upload_constants_cuda(torch::Tensor _2q,
@@ -58,21 +99,30 @@ void upload_constants_cuda(torch::Tensor _2q,
                            torch::Tensor ql,
                            torch::Tensor qh,
                            torch::Tensor kl,
-                           torch::Tensor kh) {
+                           torch::Tensor kh,
+                           torch::Tensor Ninv,
+                           ConstantMemoryLayout layout = LeftToRight) {
   AT_DISPATCH_INTEGRAL_TYPES(ql.scalar_type(), "upload_constants", ([&] {
                                upload_constants_cuda_typed<scalar_t>(
-                                   _2q, Rs, ql, qh, kl, kh);
+                                   _2q, Rs, ql, qh, kl, kh, Ninv, layout);
                              }));
 }
 
 // Kernel: read a fixed-length int64 array from constant memory
 __global__ void test_read_constant_kernel(int64_t* out_ptr,
                                           size_t offset_bytes,
-                                          size_t count) {
+                                          size_t count,
+                                          int layout) {
   int idx = threadIdx.x;
   if (idx < count) {
+    size_t effective_offset = offset_bytes;
+    if (layout == RightToLeft) {
+      effective_offset =
+          MAX_CONST_BYTES - offset_bytes - count * sizeof(int64_t);
+    }
+
     const int64_t* const_mem =
-        reinterpret_cast<const int64_t*>(&constant_mem_pool[offset_bytes]);
+        reinterpret_cast<const int64_t*>(&constant_mem_pool[effective_offset]);
     out_ptr[idx] = const_mem[idx];
   }
 }
@@ -80,7 +130,8 @@ __global__ void test_read_constant_kernel(int64_t* out_ptr,
 // Read one chunk
 torch::Tensor test_read_constant_chunk(int device_id,
                                        size_t offset_bytes,
-                                       size_t count) {
+                                       size_t count,
+                                       ConstantMemoryLayout layout) {
   at::cuda::set_device(device_id);
   auto options = torch::TensorOptions()
                      .dtype(torch::kInt64)
@@ -92,21 +143,31 @@ torch::Tensor test_read_constant_chunk(int device_id,
   auto stream = at::cuda::getCurrentCUDAStream(device_id);
 
   test_read_constant_kernel<<<blocks, threads, 0, stream.stream()>>>(
-      out.data_ptr<int64_t>(), offset_bytes, count);
+      out.data_ptr<int64_t>(), offset_bytes, count, static_cast<int>(layout));
 
   return out;
 }
 
 // Read all 6 constants: _2q, Rs, ql, qh, kl, kh
 std::vector<torch::Tensor> test_read_constants_2qRsQlQhKlKh(int device_id,
-                                                            int count) {
+                                                            int count,
+                                                            int layout) {
+  auto layout_enum = static_cast<ConstantMemoryLayout>(layout);
   std::vector<torch::Tensor> result;
-  result.reserve(6);
-  result.push_back(test_read_constant_chunk(device_id, _2Q_BYTE_OFFSET, count));
-  result.push_back(test_read_constant_chunk(device_id, RS_BYTE_OFFSET, count));
-  result.push_back(test_read_constant_chunk(device_id, QL_BYTE_OFFSET, count));
-  result.push_back(test_read_constant_chunk(device_id, QH_BYTE_OFFSET, count));
-  result.push_back(test_read_constant_chunk(device_id, KL_BYTE_OFFSET, count));
-  result.push_back(test_read_constant_chunk(device_id, KH_BYTE_OFFSET, count));
+  result.reserve(7);
+  result.push_back(
+      test_read_constant_chunk(device_id, _2Q_BYTE_OFFSET, count, layout_enum));
+  result.push_back(
+      test_read_constant_chunk(device_id, RS_BYTE_OFFSET, count, layout_enum));
+  result.push_back(
+      test_read_constant_chunk(device_id, QL_BYTE_OFFSET, count, layout_enum));
+  result.push_back(
+      test_read_constant_chunk(device_id, QH_BYTE_OFFSET, count, layout_enum));
+  result.push_back(
+      test_read_constant_chunk(device_id, KL_BYTE_OFFSET, count, layout_enum));
+  result.push_back(
+      test_read_constant_chunk(device_id, KH_BYTE_OFFSET, count, layout_enum));
+  result.push_back(test_read_constant_chunk(
+      device_id, NINV_BYTE_OFFSET, count, layout_enum));
   return result;
 }

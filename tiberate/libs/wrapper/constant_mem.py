@@ -11,23 +11,31 @@ def upload_constants_2qRsQlQhKlKh(
     qh: list[torch.Tensor],
     kl: list[torch.Tensor],
     kh: list[torch.Tensor],
+    Ninv: list[torch.Tensor],
+    layout: int = 0,  # 0 = left-to-right, 1 = right-to-left
 ) -> None:
-    """Upload constant memory tensors to the device."""
     logger.info(
-        f"Uploading constant memory tensors for 2q, Rs, ql, qh, kl, kh for {len(_2q)} devices."
+        f"Uploading constant memory tensors for {len(_2q)} devices. Layout: {'LTR' if layout == 0 else 'RTL'}"
     )
-    constant_mem.upload_constants_2qRsQlQhKlKh(_2q, Rs, ql, qh, kl, kh)
+    constant_mem.upload_constants_2qRsQlQhKlKh(
+        _2q, Rs, ql, qh, kl, kh, Ninv, layout
+    )
+
+
+def read_constants_2qRsQlQhKlKh(
+    device: int,
+    count: int,
+    layout: int = 0,  # 0 = left-to-right, 1 = right-to-left
+) -> tuple[torch.Tensor, ...]:
+    """Read constants back from constant memory on the given device and layout."""
+    return tuple(
+        constant_mem.test_read_constants_2qRsQlQhKlKh(device, count, layout)
+    )
 
 
 if __name__ == "__main__":
 
-    def read_constants_2qRsQlQhKlKh(
-        device: int, count: int
-    ) -> tuple[torch.Tensor, ...]:
-        """Read constants back from constant memory on the given device."""
-        return tuple(
-            constant_mem.test_read_constants_2qRsQlQhKlKh(device, count)
-        )
+    test_layout = 1  # Right-to-left layout
 
     def make_rand_tensors(device_count: int, shape=(19,)) -> list[torch.Tensor]:
         return [
@@ -53,6 +61,7 @@ if __name__ == "__main__":
         "qh": make_rand_tensors(device_count),
         "kl": make_rand_tensors(device_count),
         "kh": make_rand_tensors(device_count),
+        "Ninv": make_rand_tensors(device_count),
     }
 
     # Upload to constant memory
@@ -63,6 +72,8 @@ if __name__ == "__main__":
         qh=expected_per_field["qh"],
         kl=expected_per_field["kl"],
         kh=expected_per_field["kh"],
+        Ninv=expected_per_field["Ninv"],
+        layout=test_layout,
     )
 
     # Optional sync to ensure upload is complete before readback
@@ -71,7 +82,7 @@ if __name__ == "__main__":
     # Validate readback
     error_flag = False
     for device_id in range(device_count):
-        readback = read_constants_2qRsQlQhKlKh(device_id, 19)
+        readback = read_constants_2qRsQlQhKlKh(device_id, 19, test_layout)
         for name, actual_tensor in zip(expected_per_field.keys(), readback):
             expected_tensor = expected_per_field[name][device_id]
             if not torch.allclose(actual_tensor.cpu(), expected_tensor.cpu()):
