@@ -10,12 +10,13 @@ from loguru import logger
 from vdtoys.cache import CachedDict
 from vdtoys.registry import Registry
 
-# from vdtoys.mvc import strictype # enable when debugging
 import tiberate.utils.encoding as codec
 from tiberate import errors
 from tiberate.config import CkksConfig, Preset
 from tiberate.context.ntt_context import NTTContext
-from tiberate.libs.wrapper import he_misc as he_ops, mont as mont_ops
+
+# from vdtoys.mvc import strictype # enable when debugging
+from tiberate.libs.wrapper import he_ops, mont_ops
 from tiberate.rng import Csprng
 from tiberate.typing import (
     FLAGS,

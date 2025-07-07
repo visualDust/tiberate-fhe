@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.15...3.26)
 project(tiberate-csrc LANGUAGES CXX CUDA)
 
-find_program(CCACHE_FOUND ccache)
+find_program(CCACHE_FOUND ccache) # it's apt install ccache on Ubuntu
+
 if(CCACHE_FOUND)
   set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
 endif()
@@ -119,5 +120,20 @@ foreach(name IN LISTS NON_COMPUTE_MODULE_NAMES)
                   utils)
 endforeach()
 
-set(Python_ARGS "Tools/genwrapper.py")
-execute_process(COMMAND ${Python3_EXECUTABLE} ${Python_ARGS})
+set(WrapperGenScript ${CMAKE_SOURCE_DIR}/tiberate/libs/wrapper/genwrapper.py)
+execute_process(
+  COMMAND ${Python3_EXECUTABLE} ${WrapperGenScript} --verbose
+  RESULT_VARIABLE WRAPPER_RESULT
+  OUTPUT_VARIABLE WRAPPER_OUTPUT
+  ERROR_VARIABLE WRAPPER_ERROR
+  OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_STRIP_TRAILING_WHITESPACE)
+
+message(STATUS "Wrapper script output: ${WRAPPER_OUTPUT}")
+
+if(NOT "${WRAPPER_ERROR}" STREQUAL "")
+  message(WARNING "Wrapper script stderr: ${WRAPPER_ERROR}")
+endif()
+
+if(NOT WRAPPER_RESULT EQUAL 0)
+  message(FATAL_ERROR "Wrapper script failed with code ${WRAPPER_RESULT}")
+endif()

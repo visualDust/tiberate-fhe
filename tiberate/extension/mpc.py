@@ -1,7 +1,7 @@
 from vdtoys.mvc import strictype
 
 from tiberate import CkksEngine, errors
-from tiberate.libs.wrapper import mont as mont_ops
+from tiberate.libs.wrapper import mont_ops
 from tiberate.typing import *  # noqa: F403
 from tiberate.utils.encoding import rotate
 

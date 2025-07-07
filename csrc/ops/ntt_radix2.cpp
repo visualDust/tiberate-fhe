@@ -45,7 +45,7 @@ void enter_ntt_radix2(std::vector<torch::Tensor> a,
   }
 }
 
-TORCH_LIBRARY_FRAGMENT(tiberate_ntt_ops, m) {
+TORCH_LIBRARY_FRAGMENT(tiberate_ntt2_ops, m) {
   m.def(
       "ntt_radix2(Tensor[](a!) a, Tensor[] even, Tensor[] odd, Tensor[] psi, "
       "Tensor[] _2q, Tensor[] ql, Tensor[] qh, Tensor[] kl, "
@@ -57,7 +57,7 @@ TORCH_LIBRARY_FRAGMENT(tiberate_ntt_ops, m) {
       "Tensor[] kl, Tensor[] kh) -> ()");
 }
 
-TORCH_LIBRARY_IMPL(tiberate_ntt_ops, CUDA, m) {
+TORCH_LIBRARY_IMPL(tiberate_ntt2_ops, CUDA, m) {
   m.impl("ntt_radix2", &ntt_radix2);
   m.impl("enter_ntt_radix2", &enter_ntt_radix2);
 }

@@ -6,9 +6,9 @@ from tiberate.config.ckks_config import CkksConfig
 from tiberate.context.mont_context import MontgomeryContext
 from tiberate.context.rns_partition import RnsPartition
 from tiberate.libs.wrapper import (
-    he_misc as he_ops,
-    mont as mont_ops,
-    ntt2 as ntt2_ops,
+    he_ops,
+    mont_ops,
+    ntt2_ops,
 )
 
 # ------------------------------------------------------------------------------------------

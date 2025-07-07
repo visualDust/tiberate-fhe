@@ -4,7 +4,7 @@ import os
 import numpy as np
 import torch
 
-from tiberate.libs.wrapper import csprng as csprng_ops
+from tiberate.libs.wrapper import csprng_ops
 from tiberate.rng.csprng.discrete_gaussian_sampler import (
     build_CDT_binary_search_tree,
 )

@@ -100,7 +100,7 @@ void intt_radix2_exit_reduce_signed(std::vector<torch::Tensor> a,
   }
 }
 
-TORCH_LIBRARY_FRAGMENT(tiberate_ntt_ops, m) {
+TORCH_LIBRARY_FRAGMENT(tiberate_ntt2_ops, m) {
   m.def(
       "intt_radix2(Tensor[](a!) a, Tensor[] even, Tensor[] odd, Tensor[] psi, "
       "Tensor[] Ninv, Tensor[] _2q, Tensor[] ql, Tensor[] qh, "
@@ -121,7 +121,7 @@ TORCH_LIBRARY_FRAGMENT(tiberate_ntt_ops, m) {
       "Tensor[] qh, Tensor[] kl, Tensor[] kh) -> ()");
 }
 
-TORCH_LIBRARY_IMPL(tiberate_ntt_ops, CUDA, m) {
+TORCH_LIBRARY_IMPL(tiberate_ntt2_ops, CUDA, m) {
   m.impl("intt_radix2", &intt_radix2);
   m.impl("intt_radix2_exit", &intt_radix2_exit);
   m.impl("intt_radix2_exit_reduce", &intt_radix2_exit_reduce);
