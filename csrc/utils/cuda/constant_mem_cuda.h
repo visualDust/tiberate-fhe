@@ -4,15 +4,13 @@
 
 enum ConstantMemoryLayout { LeftToRight = 0, RightToLeft = 1 };
 
-void upload_constants_cuda(torch::Tensor _2q,
-                           torch::Tensor Rs,
-                           torch::Tensor ql,
-                           torch::Tensor qh,
-                           torch::Tensor kl,
-                           torch::Tensor kh,
-                           torch::Tensor Ninv,
-                           ConstantMemoryLayout layout);
+int upload_tensor_list_cuda(const std::vector<torch::Tensor>& tensors,
+                            const std::vector<int64_t>& offsets,
+                            ConstantMemoryLayout layout,
+                            int device_id);
 
-std::vector<torch::Tensor> test_read_constants_2qRsQlQhKlKh(int device_id,
-                                                            int count,
-                                                            int layout);
+torch::Tensor read_constant_chunk_cuda(int device_id,
+                                       size_t offset_bytes,
+                                       size_t count,
+                                       torch::Dtype dtype,
+                                       ConstantMemoryLayout layout);

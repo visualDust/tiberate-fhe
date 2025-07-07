@@ -4,7 +4,7 @@ from loguru import logger
 from tiberate.libs.utils import constant_mem
 
 
-def upload_constants_2qRsQlQhKlKh(
+def upload_constants_2qRsQlQhKlKhNinv(
     _2q: list[torch.Tensor],
     Rs: list[torch.Tensor],
     ql: list[torch.Tensor],
@@ -17,19 +17,19 @@ def upload_constants_2qRsQlQhKlKh(
     logger.info(
         f"Uploading constant memory tensors for {len(_2q)} devices. Layout: {'LTR' if layout == 0 else 'RTL'}"
     )
-    constant_mem.upload_constants_2qRsQlQhKlKh(
+    constant_mem.upload_constants_2qRsQlQhKlKhNinv(
         _2q, Rs, ql, qh, kl, kh, Ninv, layout
     )
 
 
-def read_constants_2qRsQlQhKlKh(
+def read_constants_2qRsQlQhKlKhNinv(
     device: int,
     count: int,
     layout: int = 0,  # 0 = left-to-right, 1 = right-to-left
 ) -> tuple[torch.Tensor, ...]:
     """Read constants back from constant memory on the given device and layout."""
     return tuple(
-        constant_mem.test_read_constants_2qRsQlQhKlKh(device, count, layout)
+        constant_mem.test_read_constants_2qRsQlQhKlKhNinv(device, count, layout)
     )
 
 
@@ -65,7 +65,7 @@ if __name__ == "__main__":
     }
 
     # Upload to constant memory
-    upload_constants_2qRsQlQhKlKh(
+    upload_constants_2qRsQlQhKlKhNinv(
         _2q=expected_per_field["_2q"],
         Rs=expected_per_field["Rs"],
         ql=expected_per_field["ql"],
@@ -82,7 +82,7 @@ if __name__ == "__main__":
     # Validate readback
     error_flag = False
     for device_id in range(device_count):
-        readback = read_constants_2qRsQlQhKlKh(device_id, 19, test_layout)
+        readback = read_constants_2qRsQlQhKlKhNinv(device_id, 19, test_layout)
         for name, actual_tensor in zip(expected_per_field.keys(), readback):
             expected_tensor = expected_per_field[name][device_id]
             if not torch.allclose(actual_tensor.cpu(), expected_tensor.cpu()):

@@ -3,6 +3,9 @@ import torch
 from loguru import logger
 
 from tiberate.config.ckks_config import CkksConfig
+from tiberate.context.constant_mem_context import (
+    upload_constant_2qRsQlQhKlKhNinv,
+)
 from tiberate.context.mont_context import MontgomeryContext
 from tiberate.context.rns_partition import RnsPartition
 from tiberate.libs.wrapper import (
@@ -218,6 +221,27 @@ class NTTContext:
 
         self.generate_parts_pack()
         self.pre_package()
+        self.upload_prepacks_to_constant()
+
+    def upload_prepacks_to_constant(self):
+        Rs_list = self.Rs_prepack[-1][0][0]
+        Ninv_list = self.intt_radix2_prepack[-1][0][0][3]
+        _2q_list = self.intt_radix2_prepack[-1][0][0][4]
+        ql_list = self.intt_radix2_prepack[-1][0][0][5]
+        qh_list = self.intt_radix2_prepack[-1][0][0][6]
+        kl_list = self.intt_radix2_prepack[-1][0][0][7]
+        kh_list = self.intt_radix2_prepack[-1][0][0][8]
+        upload_constant_2qRsQlQhKlKhNinv(
+            _2q=_2q_list,
+            Rs=Rs_list,
+            ql=ql_list,
+            qh=qh_list,
+            kl=kl_list,
+            kh=kh_list,
+            Ninv=Ninv_list,
+            gravity="right",
+            verbose=True,
+        )
 
     @property
     def num_levels(self) -> int:
