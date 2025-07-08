@@ -1,5 +1,8 @@
 #include "ntt_radix2_cuda.h"
+#include <cstdint>
 #include "../../extensions.cuh"
+#include "../../utils/cuda/constant_mem_cuda.cuh"
+#include "../../utils/cuda/constant_mem_cuda.h"
 #include "mont_used_in_ntt.cuh"
 
 //------------------------------------------------------------------
@@ -17,6 +20,7 @@ __global__ void ntt_radix2_cuda_kernel(
     const torch::PackedTensorAccessor32<scalar_t, 1> qh_acc,
     const torch::PackedTensorAccessor32<scalar_t, 1> kl_acc,
     const torch::PackedTensorAccessor32<scalar_t, 1> kh_acc,
+    const int prime_len,
     const int level) {
   // Where am I?
   const int i = blockIdx.x;
@@ -55,7 +59,8 @@ void ntt_radix2_cuda_typed(torch::Tensor a,
                            const torch::Tensor ql,
                            const torch::Tensor qh,
                            const torch::Tensor kl,
-                           const torch::Tensor kh) {
+                           const torch::Tensor kh,
+                           const int prime_len) {
   // Retrieve the device index, then set the corresponding device and stream.
   auto device_id = a.device().index();
   cudaSetDevice(device_id);
@@ -70,6 +75,8 @@ void ntt_radix2_cuda_typed(torch::Tensor a,
 
   int dim_block = BLOCK_SIZE;
   dim3 dim_grid(C, N / BLOCK_SIZE);
+
+  printf("ntt: constant_mem_pool address: %p\n", constant_mem_pool);
 
   // Run the cuda kernel.
   auto a_acc = a.packed_accessor32<scalar_t, 2>();
@@ -95,6 +102,7 @@ void ntt_radix2_cuda_typed(torch::Tensor a,
                                              qh_acc,
                                              kl_acc,
                                              kh_acc,
+                                             prime_len,
                                              i);
   }
 }
@@ -107,12 +115,15 @@ void ntt_radix2_cuda(torch::Tensor a,
                      const torch::Tensor ql,
                      const torch::Tensor qh,
                      const torch::Tensor kl,
-                     const torch::Tensor kh) {
+                     const torch::Tensor kh,
+                     const int64_t prime_len) {
+  int prime_len_int = static_cast<int>(prime_len);
   // Dispatch to the correct data type.
-  AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_ntt_cuda", ([&] {
-                               ntt_radix2_cuda_typed<scalar_t>(
-                                   a, even, odd, psi, _2q, ql, qh, kl, kh);
-                             }));
+  AT_DISPATCH_INTEGRAL_TYPES(
+      a.scalar_type(), "typed_ntt_cuda", ([&] {
+        ntt_radix2_cuda_typed<scalar_t>(
+            a, even, odd, psi, _2q, ql, qh, kl, kh, prime_len_int);
+      }));
 }
 
 //------------------------------------------------------------------
@@ -129,7 +140,8 @@ void enter_ntt_radix2_cuda_typed(torch::Tensor a,
                                  const torch::Tensor ql,
                                  const torch::Tensor qh,
                                  const torch::Tensor kl,
-                                 const torch::Tensor kh) {
+                                 const torch::Tensor kh,
+                                 const int prime_len) {
   // Retrieve the device index, then set the corresponding device and stream.
   auto device_id = a.device().index();
   cudaSetDevice(device_id);
@@ -178,6 +190,7 @@ void enter_ntt_radix2_cuda_typed(torch::Tensor a,
                                                  qh_acc,
                                                  kl_acc,
                                                  kh_acc,
+                                                 prime_len,
                                                  i);
   }
 }
@@ -191,10 +204,13 @@ void enter_ntt_radix2_cuda(torch::Tensor a,
                            const torch::Tensor ql,
                            const torch::Tensor qh,
                            const torch::Tensor kl,
-                           const torch::Tensor kh) {
+                           const torch::Tensor kh,
+                           const int64_t prime_len) {
+  int prime_len_int = static_cast<int>(prime_len);
   // Dispatch to the correct data type.
-  AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_enter_ntt_cuda", ([&] {
-                               enter_ntt_radix2_cuda_typed<scalar_t>(
-                                   a, Rs, even, odd, psi, _2q, ql, qh, kl, kh);
-                             }));
+  AT_DISPATCH_INTEGRAL_TYPES(
+      a.scalar_type(), "typed_enter_ntt_cuda", ([&] {
+        enter_ntt_radix2_cuda_typed<scalar_t>(
+            a, Rs, even, odd, psi, _2q, ql, qh, kl, kh, prime_len_int);
+      }));
 }

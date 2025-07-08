@@ -167,13 +167,13 @@ class NTTContext:
         # Transfer input parameters.
         self.index_type = index_type
 
-        self.ckksCfg = ckks_config
+        self.ckksCfg: CkksConfig = ckks_config
         self.montCtx = MontgomeryContext.from_ckks_config(ckks_config)
-        self.num_ordinary_primes = self.ckksCfg.num_scales + 1
-        self.num_special_primes = self.ckksCfg.num_special_primes
 
         self.rnsPart = RnsPartition(
-            self.num_ordinary_primes, self.num_special_primes, self.num_devices
+            self.ckksCfg.num_ordinary_primes,
+            self.ckksCfg.num_special_primes,
+            self.num_devices,
         )
 
         # ==============================================
@@ -780,13 +780,18 @@ class NTTContext:
         )
 
     def ntt_radix2(self, a, lvl=0, mult_type=-1, part=0):
-        ntt2_ops.ntt_radix2(a, *self.ntt_radix2_prepack[mult_type][lvl][part])
+        ntt2_ops.ntt_radix2(
+            a,
+            *self.ntt_radix2_prepack[mult_type][lvl][part],
+            self.ckksCfg.total_num_primes,
+        )
 
     def enter_ntt_radix2(self, a, lvl=0, mult_type=-1, part=0):
         ntt2_ops.enter_ntt_radix2(
             a,
             self.Rs_prepack[mult_type][lvl][part],
             *self.ntt_radix2_prepack[mult_type][lvl][part],
+            self.ckksCfg.total_num_primes,
         )
 
     def intt_radix2(self, a, lvl=0, mult_type=-1, part=0):

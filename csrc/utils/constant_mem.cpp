@@ -11,7 +11,7 @@ void upload_tensor_list(const std::vector<torch::Tensor>& tensor_list,
                         int device_id) {
   upload_tensor_list_cuda(tensor_list,
                           offset_list,
-                          static_cast<ConstantMemoryLayout>(layout),
+                          static_cast<ConstantMemoryGravity>(layout),
                           device_id);
 }
 
@@ -24,7 +24,7 @@ torch::Tensor read_constant_chunk(int device_id,
                                   offset_bytes,
                                   count,
                                   dtype,
-                                  static_cast<ConstantMemoryLayout>(layout));
+                                  static_cast<ConstantMemoryGravity>(layout));
 }
 
 PYBIND11_MODULE(constant_mem, m) {

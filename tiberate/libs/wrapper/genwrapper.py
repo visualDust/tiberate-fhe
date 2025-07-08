@@ -12,6 +12,8 @@ CPP_TO_PYTHON_TYPE_MAP = {
     "Tensor": "torch.Tensor",
     "int": "int",
     "int[]": "list[int]",
+    "int64_t": "int",
+    "int64_t[]": "list[int]",
     "float": "float",
     "float[]": "list[float]",
     "bool": "bool",

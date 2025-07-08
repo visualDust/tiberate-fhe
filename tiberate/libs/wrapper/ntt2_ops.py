@@ -16,6 +16,7 @@ def enter_ntt_radix2(
     qh: list[torch.Tensor],
     kl: list[torch.Tensor],
     kh: list[torch.Tensor],
+    prime_len: int,
 ) -> None:
     """
     Python wrapper for the 'tiberate_ntt2_ops::enter_ntt_radix2' custom operator.
@@ -31,11 +32,12 @@ def enter_ntt_radix2(
     qh: list[torch.Tensor]
     kl: list[torch.Tensor]
     kh: list[torch.Tensor]
+    prime_len: int
     Returns:
         None
     """
     torch.ops.tiberate_ntt2_ops.enter_ntt_radix2(
-        a, Rs, even, odd, psi, _2q, ql, qh, kl, kh
+        a, Rs, even, odd, psi, _2q, ql, qh, kl, kh, prime_len
     )
 
 
@@ -49,6 +51,7 @@ def ntt_radix2(
     qh: list[torch.Tensor],
     kl: list[torch.Tensor],
     kh: list[torch.Tensor],
+    prime_len: int,
 ) -> None:
     """
     Python wrapper for the 'tiberate_ntt2_ops::ntt_radix2' custom operator.
@@ -63,11 +66,12 @@ def ntt_radix2(
     qh: list[torch.Tensor]
     kl: list[torch.Tensor]
     kh: list[torch.Tensor]
+    prime_len: int
     Returns:
         None
     """
     torch.ops.tiberate_ntt2_ops.ntt_radix2(
-        a, even, odd, psi, _2q, ql, qh, kl, kh
+        a, even, odd, psi, _2q, ql, qh, kl, kh, prime_len
     )
 
 

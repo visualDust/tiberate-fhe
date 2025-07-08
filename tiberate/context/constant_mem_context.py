@@ -43,7 +43,7 @@ class TensorEntry:
 @dataclass
 class TensorConstLayout:
     entries: list[TensorEntry]
-    layout_mode: LayoutGravity = "left"
+    gravity: LayoutGravity = "left"
     align_bytes: int = 8  # Alignment for safety (especially with int64)
     max_bytes: int = 64 * 1024
 
@@ -68,12 +68,32 @@ class TensorConstLayout:
         return offsets
 
     def upload(self):
-        offsets = self.compute_offsets()
+        self.offsets = self.compute_offsets()
         tensors = [entry.tensor for entry in self.entries]
         device_id = tensors[0].device.index
-        upload_tensor_list(tensors, offsets, self.layout_mode, device_id)
+        upload_tensor_list(tensors, self.offsets, self.gravity, device_id)
         torch.cuda.synchronize()  # Ensure upload is complete
-        return offsets  # For debugging or readback
+        return self.offsets  # For debugging or readback
+
+    def validate(self):
+        """
+        Check if the content of constant memory matches the expected.
+        """
+        for entry, offset in zip(self.entries, self.offsets):
+            actual = read_constant_chunk(
+                device=entry.tensor.device.index,
+                offset_bytes=offset,
+                count=entry.tensor.numel(),
+                dtype=entry.tensor.dtype,
+                layout=self.gravity,
+            )
+            if not torch.allclose(actual.cpu(), entry.tensor.cpu()):
+                # raise AssertionError(
+                #     f"Constant memory mismatch for {entry.name}: "
+                #     f"expected {entry.tensor}, got {actual}"
+                # )
+                return False  # Return False if any mismatch occurs
+        return True  # Return True if all entries match
 
 
 def make_padded(t: torch.Tensor, length: int, pad_left: bool) -> torch.Tensor:
@@ -98,7 +118,8 @@ def make_padded(t: torch.Tensor, length: int, pad_left: bool) -> torch.Tensor:
     pad_amount = length - current_len
     # Pad format is (last_dim_pad_right, last_dim_pad_left)
     pad = (pad_amount, 0) if pad_left else (0, pad_amount)
-    return F.pad(t, pad, value=0)
+    padded = F.pad(t, pad, value=0)
+    return padded
 
 
 def upload_constant_2qRsQlQhKlKhNinv(
@@ -113,41 +134,69 @@ def upload_constant_2qRsQlQhKlKhNinv(
     verbose: bool = False,
 ) -> None:
     """
-    Upload constants to constant memory across multiple devices.
+        Upload constants to constant memory across multiple devices.
 
-    Args: _2q, Rs, ql, qh, kl, kh, Ninv: Lists of tensors for each device.
-            layout: "left" or "right" for constant memory layout.
+        Args: _2q, Rs, ql, qh, kl, kh, Ninv: Lists of tensors for each device.
+                layout: "left" or "right" for constant memory layout.
 
-    Raises:
-        ValueError: If tensors are not on the same device.
-        RuntimeError: If constant memory overflow occurs.
-        AssertionError: If readback does not match uploaded tensors.
+        Raises:
+            ValueError: If tensors are not on the same device.
+            RuntimeError: If constant memory overflow occurs.
+            AssertionError: If readback does not match uploaded tensors.
 
-    My design here are:
-        - use right layout for those constants since in CUDA kernel they are dropped from left to right, exampe:
-            - level 0: [0,1,2,3,4,5,6,...]
-            - level 1: [1,2,3,4,5,6,...]
-            - level 2: [2,3,4,5,6,...]
-            - so the offset for _2q in CUDA kernel [2q_end_offset-gridDim.x+ blockIdx.x]
-        - pad each constant tensor to length 128 (which is engough for most cases), so the constant offset will be aligned to 128*sizeof(int32/int64) for sure, and Python won't have to tell CUDA what is the length of rns since CUDA will use the same static offset too. todo)) chat with PuQing and see which design is better, tell the rns length or pad to static length. like:
-            - level 0: [0,1,2,3,4,5,6, 0,0,0,0,0,0,0,0,...]  # padded to 128
-            - level 1: [1,2,3,4,5,6, 0,0,0,0,0,0,0,0,...,0]  # padded to 128
-            - level 2: [2,3,4,5,6, 0,0,0,0,0,0,0,0,...,0,0] # padded to 128
-        - use 64KB constant memory for each device, which is enough for most cases.
-        - use 8 bytes alignment for each constant tensor, which is safe for all tensor types (int32, int64, float32, float64, etc.).
-        - use a dataclass to represent each tensor entry, in case in the future we need to manage multiple context of constant memory. And we can implement a with statement to manage the context automatically.
+        My design here are:
+            - use right gravity for those constants since in CUDA kernel they are dropped from left to right, exampe:
+                - level 0: [0,1,2,3,4,5,6,...]
+                - level 1: [1,2,3,4,5,6,...]
+                - level 2: [2,3,4,5,6,...]
+                - so the offset for _2q in CUDA kernel [2q_end_offset-gridDim.x+ blockIdx.x]
+            - pad each constant tensor to length 128 (which is engough for most cases), so the constant offset will be aligned to 128*sizeof(int32/int64) for sure, and Python won't have to tell CUDA what is the length of rns since CUDA will use the same static offset too. todo)) chat with PuQing and see which design is better, tell the rns length or pad to static length. like:
+                - level 0: [0,1,2,3,4,5,6, 0,0,0,0,0,0,0,0,...]  # padded to 128
+                - level 1: [1,2,3,4,5,6, 0,0,0,0,0,0,0,0,...,0]  # padded to 128
+                - level 2: [2,3,4,5,6, 0,0,0,0,0,0,0,0,...,0,0] # padded to 128
+            - use 64KB constant memory for each device, which is enough for most cases.
+            - use 8 bytes alignment for each constant tensor, which is safe for all tensor types (int32, int64, float32, float64, etc.).
+            - use a dataclass to represent each tensor entry, in case in the future we need to manage multiple context of constant memory. And we can implement a with statement to manage the context automatically.
+
+    # Example Layouts:
+    #  Gravity: Left
+    # ┌────────────────────────────────────────────────────────────────────────────────────────┐
+    # │┌────────────────┐┌────────────────┐┌────────────────┐                                  │
+    # ││_2q,..,0,0,0,0,0││Rs ,..,0,0,0,0,0││ql ,..,0,0,0,0,0│...                               │
+    # │└────────────────┘└────────────────┘└────────────────┘                                  │
+    # └────────────────────────────────────────────────────────────────────────────────────────┘
+    #  Gravity: Right
+    # ┌────────────────────────────────────────────────────────────────────────────────────────┐
+    # │                              ┌────────────────┐┌────────────────┐┌────────────────┐    │
+    # │                              │0,0,0,0,0,..,_2q││0,0,0,0,0 ,..,Rs││0,0,0,0,0 ,..,ql│... │
+    # │                              └────────────────┘└────────────────┘└────────────────┘    │
+    # └────────────────────────────────────────────────────────────────────────────────────────┘
     """
     REGION_LEN = 128
 
     device_count = len(_2q)
-    layout_on_devices = []
+    layout_on_devices: list[tuple[int, TensorConstLayout, list[int]]] = []
+    plans = []
 
     for i in range(device_count):
+        # should be on the same device
         if not all(
             t.device.index == i
             for t in [_2q[i], Rs[i], ql[i], qh[i], kl[i], kh[i], Ninv[i]]
         ):
             raise ValueError(f"All tensors must be on the same device {i}")
+        # should have the same shape
+        if not all(
+            t.shape == _2q[i].shape
+            for t in [Rs[i], ql[i], qh[i], kl[i], kh[i], Ninv[i]]
+        ):
+            raise ValueError("All tensors must have the same shape")
+        # should be on the same dtype
+        if not all(
+            t.dtype == _2q[i].dtype
+            for t in [Rs[i], ql[i], qh[i], kl[i], kh[i], Ninv[i]]
+        ):
+            raise ValueError("All tensors must have the same dtype")
         pad_left = gravity == "right"  # Right layout -> pad 0 on the left side
         padded_entries = [
             TensorEntry(
@@ -180,9 +229,13 @@ def upload_constant_2qRsQlQhKlKhNinv(
             ),
         ]
 
-        plan = TensorConstLayout(padded_entries, layout_mode=gravity)
+        plan = TensorConstLayout(padded_entries, gravity=gravity)
         offsets = plan.upload()
-        layout_on_devices.append((i, plan, offsets))
+        plans.append(plan)
+        if verbose:
+            layout_on_devices.append((i, plan, offsets))
+
+        # the function ends here. The following are pure debugging prints.
         if verbose:
             print(f"Device {i} uploaded constants with offsets:")
             for entry, offset in zip(plan.entries, offsets):
@@ -207,7 +260,7 @@ def upload_constant_2qRsQlQhKlKhNinv(
                     offset_bytes=offset,
                     count=entry.tensor.numel(),
                     dtype=entry.tensor.dtype,
-                    layout=plan.layout_mode,
+                    layout=plan.gravity,
                 )
                 expected = entry.tensor.cpu()
                 if not torch.allclose(actual.cpu(), expected):
@@ -222,3 +275,5 @@ def upload_constant_2qRsQlQhKlKhNinv(
             )
         else:
             print("All constants verified successfully across devices.")
+
+    return plans  # Return the plans for further use or validation

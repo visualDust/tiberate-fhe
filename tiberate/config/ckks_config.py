@@ -147,6 +147,13 @@ class CkksConfig:
         except IndexError:
             raise errors.NotEnoughPrimes(scale_bits=self.scale_bits, N=self.N)
 
+        self.num_ordinary_primes = (
+            self.num_scales + 1
+        )  # ordinary primes = scale primes + 1 base prime
+        self.total_num_primes = (
+            self.num_ordinary_primes + self.num_special_primes
+        )  # total number of primes used in computation
+
         # Check if security requirements are met.
         self.total_qbits = math.ceil(sum([math.log2(qi) for qi in self.q]))
 

@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from tiberate.context.constant_mem_context import (
@@ -32,7 +33,7 @@ def upload_and_read_single_device(
         make_tensor_entry("Ninv", 32, torch.int64, device),
     ]
 
-    plan = TensorConstLayout(entries=entries, layout_mode=layout_mode)
+    plan = TensorConstLayout(entries=entries, gravity=layout_mode)
     offsets = plan.upload()
 
     print(f"Device {device} uploaded constants with offsets:")
@@ -57,7 +58,7 @@ def upload_and_read_single_device(
             offset_bytes=offset,
             count=entry.tensor.numel(),
             dtype=entry.tensor.dtype,
-            layout=plan.layout_mode,
+            layout=plan.gravity,
         )
         expected = entry.tensor.cpu()
         if not torch.allclose(actual.cpu(), expected):
@@ -100,7 +101,8 @@ def make_rand_tensors(device_count: int, shape=(32,)):
     ]
 
 
-def test_upload_constants_2qRsQlQhKlKhNinv():
+@pytest.mark.parametrize("gravity", ["left", "right"])
+def test_upload_constants_2qRsQlQhKlKhNinv(gravity: str):
     print("Testing upload_constants_2qRsQlQhKlKhNinv...")
     _2q_list = make_rand_tensors(torch.cuda.device_count())
     Rs_list = make_rand_tensors(torch.cuda.device_count())
@@ -118,6 +120,6 @@ def test_upload_constants_2qRsQlQhKlKhNinv():
         kl=kl_list,
         kh=kh_list,
         Ninv=Ninv_list,
-        gravity="right",
+        gravity=gravity,
         verbose=True,
     )
