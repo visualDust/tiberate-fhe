@@ -127,7 +127,7 @@ def extract_namespace_and_ops(so_path: str) -> dict[str, list[str]]:
 
         lines = stdout_text.strip().splitlines()
         for line in lines:
-            if "->" in line:
+            if " ->" in line:
                 found_on_line = op_name_pattern.findall(line)
                 op_names_found.update(found_on_line)
         if namespace and op_names_found:
