@@ -1,8 +1,7 @@
 cmake_minimum_required(VERSION 3.15...3.26)
 project(tiberate-csrc LANGUAGES CXX CUDA)
 
-# === Optional: Use ccache ===
-find_program(CCACHE_FOUND ccache)
+find_program(CCACHE_FOUND ccache) # it's apt install ccache on Ubuntu
 
 if(CCACHE_FOUND)
   set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
@@ -33,6 +32,13 @@ execute_process(
   OUTPUT_VARIABLE TORCH_ABI
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
+message(STATUS "Python Executable: ${Python3_EXECUTABLE}")
+message(STATUS "Python Include Dirs: ${Python3_INCLUDE_DIRS}")
+message(STATUS "Torch cmake path: ${TORCH_CMAKE_PATH}")
+message(STATUS "Torch lib path: ${TORCH_LIB_PATH}")
+message(STATUS "Torch ABI: ${TORCH_ABI}")
+message(STATUS "Detected Python SOABI: ${Python3_SOABI}")
+
 set(PYTHON_MODULE_SUFFIX ".${Python3_SOABI}")
 list(APPEND CMAKE_PREFIX_PATH ${TORCH_CMAKE_PATH})
 link_directories(${TORCH_LIB_PATH})
@@ -40,38 +46,23 @@ link_directories(${TORCH_LIB_PATH})
 find_package(Torch REQUIRED)
 find_package(CUDA REQUIRED)
 
-include_directories(${TORCH_INCLUDE_DIRS} ${Python3_INCLUDE_DIRS})
+include_directories(${Python_INCLUDE_DIRS})
+include_directories(${TORCH_INCLUDE_DIRS})
+
 set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_INCLUDES OFF)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
-# === Gather all .cu sources into one unified core ===
-set(CKKS_CUDA_CORE_SRC
-    csrc/utils/cuda/constant_mem_cuda.cu
-    csrc/ops/cuda/chacha20_cuda.cu
-    csrc/ops/cuda/discrete_gaussian_cuda.cu
-    csrc/ops/cuda/mont_cuda.cu
-    csrc/ops/cuda/mont_extra_cuda.cu
-    csrc/ops/cuda/ntt_radix2_cuda.cu
-    csrc/ops/cuda/intt_radix2_cuda.cu
-    csrc/ops/cuda/he_fused_cuda.cu
-    csrc/ops/cuda/cascade_mac_cuda.cu
-    csrc/ops/cuda/randint_cuda.cu
-    csrc/ops/cuda/randround_cuda.cu)
+# === Helper function to define modules ===
+function(add_cuda_module name cpp_path cu_path out_subdir)
+  if(cu_path)
+    add_library(${name} MODULE ${cpp_path} ${cu_path})
+  else()
+    add_library(${name} MODULE ${cpp_path})
+  endif()
 
-add_library(ckks_cuda_core STATIC ${CKKS_CUDA_CORE_SRC})
-set_target_properties(ckks_cuda_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  target_link_libraries(${name} ${TORCH_LIBRARIES} torch_python)
+  target_compile_definitions(${name} PRIVATE TORCH_EXTENSION_NAME=${name})
 
-target_include_directories(ckks_cuda_core PRIVATE csrc ${TORCH_INCLUDE_DIRS}
-                                                  ${Python3_INCLUDE_DIRS})
-
-target_link_libraries(ckks_cuda_core PRIVATE ${TORCH_LIBRARIES})
-
-# === Wrapper function to create MODULE libraries ===
-function(add_pybind_module name cpp_path install_subdir)
-  add_library(${name} MODULE ${cpp_path})
-
-  target_link_libraries(${name} PRIVATE ${TORCH_LIBRARIES} torch_python
-                                        ckks_cuda_core)
   target_include_directories(${name} PRIVATE ${TORCH_INCLUDE_DIRS}
                                              ${Python3_INCLUDE_DIRS})
 
@@ -85,38 +76,42 @@ function(add_pybind_module name cpp_path install_subdir)
     install(
       TARGETS ${name}
       LIBRARY
-        DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/tiberate/libs/${install_subdir})
+        DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/tiberate/libs/${out_subdir})
   else()
-    install(TARGETS ${name}
-            LIBRARY DESTINATION ./tiberate/libs/${install_subdir})
+    install(TARGETS ${name} LIBRARY DESTINATION ./tiberate/libs/${out_subdir})
   endif()
 endfunction()
 
-# === Build all Python modules ===
-# Compute modules (only .cpp needed now — .cu are in core)
+# === Define modules ===
+
+# Compute modules
 set(OP_MODULE_NAMES
     chacha20
     discrete_gaussian
+    randint
+    randround
     mont
     mont_extra
     ntt_radix2
     intt_radix2
     he_fused
-    cascade_mac
-    randint
-    randround)
+    cascade_mac)
 
 foreach(name IN LISTS OP_MODULE_NAMES)
-  add_pybind_module(${name} csrc/ops/${name}.cpp torchops)
+  add_cuda_module(
+    ${name} ${CMAKE_CURRENT_SOURCE_DIR}/csrc/ops/${name}.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/csrc/ops/cuda/${name}_cuda.cu torchops)
 endforeach()
 
-# Non-compute CUDA module (e.g. constant_mem)
-add_pybind_module(constant_mem csrc/utils/constant_mem.cpp utils)
+# Non-compute pure C++ modules
+set(NON_COMPUTE_MODULE_NAMES cuda_info)
 
-# Pure C++ modules
-add_pybind_module(cuda_info csrc/utils/cuda_info.cpp utils)
+foreach(name IN LISTS NON_COMPUTE_MODULE_NAMES)
+  add_cuda_module(${name} ${CMAKE_CURRENT_SOURCE_DIR}/csrc/utils/${name}.cpp ""
+                  utils)
+endforeach()
 
-# === Optional wrapper script ===
+# === Install Python wrapper ===
 set(WrapperGenScript ${CMAKE_SOURCE_DIR}/tiberate/libs/wrapper/genwrapper.py)
 execute_process(
   COMMAND ${Python3_EXECUTABLE} ${WrapperGenScript} --verbose

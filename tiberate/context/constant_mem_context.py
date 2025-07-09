@@ -4,7 +4,7 @@ from typing import Literal
 import torch
 import torch.nn.functional as F
 
-from tiberate.libs.utils import constant_mem
+from tiberate.libs.wrapper import ntt2_ops
 
 LayoutGravity = Literal["left", "right"]
 
@@ -17,7 +17,7 @@ def upload_tensor_list(
 ) -> None:
     """Upload a list of tensors to constant memory with specified offsets."""
     layout_flag = 0 if layout == "left" else 1
-    constant_mem.upload_tensor_list(tensors, offsets, layout_flag, device_id)
+    ntt2_ops.upload_tensor_list(tensors, offsets, layout_flag, device_id)
 
 
 def read_constant_chunk(
@@ -28,9 +28,10 @@ def read_constant_chunk(
     layout: LayoutGravity = "left",
 ) -> torch.Tensor:
     """Read a chunk of constants from constant memory."""
+    dummy = torch.empty(0, device=f"cuda:{device}")
     layout_flag = 0 if layout == "left" else 1
-    return constant_mem.read_constant_chunk(
-        device, offset_bytes, count, dtype, layout_flag
+    return ntt2_ops.read_constant_chunk(
+        dummy, offset_bytes, count, dtype, layout_flag
     )
 
 
@@ -168,7 +169,7 @@ def upload_constant_2qRsQlQhKlKhNinv(
     #  Gravity: Right
     # ┌────────────────────────────────────────────────────────────────────────────────────────┐
     # │                              ┌────────────────┐┌────────────────┐┌────────────────┐    │
-    # │                              │0,0,0,0,0,..,_2q││0,0,0,0,0 ,..,Rs││0,0,0,0,0 ,..,ql│... │
+    # │                              │0,0,0,0,0,.., ql││0,0,0,0,0 ,..,Rs││0,0,0,0,0,..,_2q│... │
     # │                              └────────────────┘└────────────────┘└────────────────┘    │
     # └────────────────────────────────────────────────────────────────────────────────────────┘
     """

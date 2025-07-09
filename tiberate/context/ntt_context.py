@@ -224,14 +224,14 @@ class NTTContext:
         self.upload_prepacks_to_constant()
 
     def upload_prepacks_to_constant(self):
-        Rs_list = self.Rs_prepack[-1][0][0]
-        Ninv_list = self.intt_radix2_prepack[-1][0][0][3]
-        _2q_list = self.intt_radix2_prepack[-1][0][0][4]
-        ql_list = self.intt_radix2_prepack[-1][0][0][5]
-        qh_list = self.intt_radix2_prepack[-1][0][0][6]
-        kl_list = self.intt_radix2_prepack[-1][0][0][7]
-        kh_list = self.intt_radix2_prepack[-1][0][0][8]
-        upload_constant_2qRsQlQhKlKhNinv(
+        Rs_list = self.Rs_prepack[-2][0][0]
+        Ninv_list = self.intt_radix2_prepack[0][0][-2][3]
+        _2q_list = self.ntt_radix2_prepack[0][0][-2][3]
+        ql_list = self.ntt_radix2_prepack[0][0][-2][4]
+        qh_list = self.ntt_radix2_prepack[0][0][-2][5]
+        kl_list = self.ntt_radix2_prepack[0][0][-2][6]
+        kh_list = self.ntt_radix2_prepack[0][0][-2][7]
+        self.constant_mem_plans = upload_constant_2qRsQlQhKlKhNinv(
             _2q=_2q_list,
             Rs=Rs_list,
             ql=ql_list,
@@ -783,7 +783,7 @@ class NTTContext:
         ntt2_ops.ntt_radix2(
             a,
             *self.ntt_radix2_prepack[mult_type][lvl][part],
-            self.ckksCfg.total_num_primes,
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
         )
 
     def enter_ntt_radix2(self, a, lvl=0, mult_type=-1, part=0):
@@ -791,7 +791,7 @@ class NTTContext:
             a,
             self.Rs_prepack[mult_type][lvl][part],
             *self.ntt_radix2_prepack[mult_type][lvl][part],
-            self.ckksCfg.total_num_primes,
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
         )
 
     def intt_radix2(self, a, lvl=0, mult_type=-1, part=0):

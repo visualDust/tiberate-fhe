@@ -433,10 +433,6 @@ __global__ void codec_rotate_make_unsigned_reduce_2q_cuda_kernel(
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;  // position index
 
   const int N = a_acc.size(1);
-  if (j >= N) {
-    printf("debug: j >= N, j: %d, N: %d\n", j, N);
-    return;
-  }
 
   const scalar_t perm = perm_acc[j];
   const scalar_t perm_folded = perm % N;

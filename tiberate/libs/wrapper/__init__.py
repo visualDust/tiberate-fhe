@@ -41,6 +41,8 @@ from .ntt2_ops import (
     intt_radix2_exit_reduce,
     intt_radix2_exit_reduce_signed,
     ntt_radix2,
+    read_constant_chunk,
+    upload_tensor_list,
 )
 
 __all__ = [
@@ -53,6 +55,8 @@ __all__ = [
     'mont_sub_reduce_2q',
     'enter_ntt_radix2',
     'ntt_radix2',
+    'read_constant_chunk',
+    'upload_tensor_list',
     'codec_rotate_make_unsigned_reduce_2q',
     'create_switcher_divide_by_p',
     'pc_add_fused',

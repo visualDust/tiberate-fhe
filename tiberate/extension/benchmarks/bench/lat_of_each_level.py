@@ -8,15 +8,14 @@ from vdtoys.ansi import legal_file_name_of
 from vdtoys.registry import Registry
 
 from tiberate import CkksEngine, Preset, errors
-from tiberate.typing import Plaintext
-from tiberate.utils.massive import (
-    calculate_ckks_cipher_datastruct_size_in_list_recursive,
-)
-
-from .interface import (
+from tiberate.extension.benchmarks.bench.interface import (
     BenchmarkBase,
     BenchmarkResult,
     BenchmarkResultMetricType,
+)
+from tiberate.typing import Plaintext
+from tiberate.utils.massive import (
+    calculate_ckks_cipher_datastruct_size_in_list_recursive,
 )
 
 benchreg = Registry("benchmarks")
@@ -308,4 +307,4 @@ class ConsumeAllLevelsBenchmark(BenchmarkBase):
 
 if __name__ == "__main__":
     benchmark = ConsumeAllLevelsBenchmark()
-    benchmark.run("logN14")  # Example run with logN14
+    benchmark.run("logN15 1x GPU")  # Example run with logN15 1x GPU config
