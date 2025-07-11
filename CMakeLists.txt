@@ -53,6 +53,7 @@ set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_INCLUDES OFF)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
 set(UNIFIED_MODULE_NAME _tiberate_ops)
+set(WrapperGenScript ${CMAKE_SOURCE_DIR}/tiberate/libs/wrapper/genwrapper.py)
 
 file(GLOB_RECURSE TORCH_OPS_CPP_SOURCES "csrc/ops/*.cpp" "csrc/utils/*.cpp")
 
@@ -82,6 +83,14 @@ if(SKBUILD_STATE STREQUAL "editable")
   install(
     TARGETS ${UNIFIED_MODULE_NAME}
     LIBRARY DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/tiberate/libs/torchops)
+  install(
+    CODE "
+      execute_process(
+          COMMAND ${Python3_EXECUTABLE} ${WrapperGenScript} --verbose
+          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+          RESULT_VARIABLE result
+      )
+  ")
 else()
   install(TARGETS ${UNIFIED_MODULE_NAME}
           LIBRARY DESTINATION ./tiberate/libs/torchops)
@@ -119,34 +128,3 @@ foreach(name IN LISTS NON_COMPUTE_MODULE_NAMES)
   add_cpp_module(${name} ${CMAKE_CURRENT_SOURCE_DIR}/csrc/utils/${name}.cpp
                  utils)
 endforeach()
-
-# === Install Python wrapper ===
-set(WrapperGenScript ${CMAKE_SOURCE_DIR}/tiberate/libs/wrapper/genwrapper.py)
-execute_process(
-  COMMAND ${Python3_EXECUTABLE} ${WrapperGenScript} --verbose
-  RESULT_VARIABLE WRAPPER_RESULT
-  OUTPUT_VARIABLE WRAPPER_OUTPUT
-  ERROR_VARIABLE WRAPPER_ERROR
-  OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_STRIP_TRAILING_WHITESPACE)
-
-message(STATUS "Wrapper script output: ${WRAPPER_OUTPUT}")
-
-if(NOT "${WRAPPER_ERROR}" STREQUAL "")
-  message(WARNING "Wrapper script stderr:
-${WRAPPER_ERROR}")
-endif()
-
-if(NOT WRAPPER_RESULT EQUAL 0)
-  message(FATAL_ERROR "Wrapper script failed with
-code ${WRAPPER_RESULT}")
-endif()
-
-set(WrapperGenScript ${CMAKE_SOURCE_DIR}/tiberate/libs/wrapper/genwrapper.py)
-set(WrapperTargetName gen_wrapper)
-
-add_custom_target(
-  ${WrapperTargetName}
-  COMMAND ${Python3_EXECUTABLE} ${WrapperGenScript} --verbose
-  DEPENDS ${UNIFIED_MODULE_NAME}
-  COMMENT "Generating Python wrapper for ${UNIFIED_MODULE_NAME}..."
-  VERBATIM)
