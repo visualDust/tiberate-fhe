@@ -5,96 +5,6 @@
 import torch
 
 
-def mont_add_many_3d(
-    input: list[torch.Tensor], _2q: list[torch.Tensor]
-) -> list[torch.Tensor]:
-    """
-    Python wrapper for the 'tiberate_mont_ops::mont_add_many_3d' custom operator.
-
-    Args:
-    input: list[torch.Tensor]
-    _2q: list[torch.Tensor]
-    Returns:
-        list[torch.Tensor]
-    """
-    return torch.ops.tiberate_mont_ops.mont_add_many_3d(input, _2q)
-
-
-def mont_add_reduce_2q(
-    a: list[torch.Tensor], b: list[torch.Tensor], _2q: list[torch.Tensor]
-) -> list[torch.Tensor]:
-    """
-    Python wrapper for the 'tiberate_mont_ops::mont_add_reduce_2q' custom operator.
-
-    Args:
-    a: list[torch.Tensor]
-    b: list[torch.Tensor]
-    _2q: list[torch.Tensor]
-    Returns:
-        list[torch.Tensor]
-    """
-    return torch.ops.tiberate_mont_ops.mont_add_reduce_2q(a, b, _2q)
-
-
-def mont_enter_reduce_2q(
-    a: list[torch.Tensor],
-    Rs: list[torch.Tensor],
-    _2q: list[torch.Tensor],
-    ql: list[torch.Tensor],
-    qh: list[torch.Tensor],
-    kl: list[torch.Tensor],
-    kh: list[torch.Tensor],
-) -> list[torch.Tensor]:
-    """
-    Python wrapper for the 'tiberate_mont_ops::mont_enter_reduce_2q' custom operator.
-
-    Args:
-    a: list[torch.Tensor]
-    Rs: list[torch.Tensor]
-    _2q: list[torch.Tensor]
-    ql: list[torch.Tensor]
-    qh: list[torch.Tensor]
-    kl: list[torch.Tensor]
-    kh: list[torch.Tensor]
-    Returns:
-        list[torch.Tensor]
-    """
-    return torch.ops.tiberate_mont_ops.mont_enter_reduce_2q(
-        a, Rs, _2q, ql, qh, kl, kh
-    )
-
-
-def mont_reduce_add_many_3d(
-    input: list[torch.Tensor], _2q: list[torch.Tensor]
-) -> list[torch.Tensor]:
-    """
-    Python wrapper for the 'tiberate_mont_ops::mont_reduce_add_many_3d' custom operator.
-
-    Args:
-    input: list[torch.Tensor]
-    _2q: list[torch.Tensor]
-    Returns:
-        list[torch.Tensor]
-    """
-    return torch.ops.tiberate_mont_ops.mont_reduce_add_many_3d(input, _2q)
-
-
-def mont_sub_reduce_2q(
-    a: list[torch.Tensor], b: list[torch.Tensor], _2q: list[torch.Tensor]
-) -> list[torch.Tensor]:
-    """
-    Python wrapper for the 'tiberate_mont_ops::mont_sub_reduce_2q' custom operator.
-
-    Args:
-    a: list[torch.Tensor]
-    b: list[torch.Tensor]
-    _2q: list[torch.Tensor]
-    Returns:
-        list[torch.Tensor]
-    """
-    return torch.ops.tiberate_mont_ops.mont_sub_reduce_2q(a, b, _2q)
-
-
 def make_signed(a: list[torch.Tensor], _2q: list[torch.Tensor]) -> None:
     """
     Python wrapper for the 'tiberate_mont_ops::make_signed' custom operator.
@@ -137,6 +47,37 @@ def mont_add(
     return torch.ops.tiberate_mont_ops.mont_add(a, b, _2q)
 
 
+def mont_add_many_3d(
+    input: list[torch.Tensor], _2q: list[torch.Tensor]
+) -> list[torch.Tensor]:
+    """
+    Python wrapper for the 'tiberate_mont_ops::mont_add_many_3d' custom operator.
+
+    Args:
+    input: list[torch.Tensor]
+    _2q: list[torch.Tensor]
+    Returns:
+        list[torch.Tensor]
+    """
+    return torch.ops.tiberate_mont_ops.mont_add_many_3d(input, _2q)
+
+
+def mont_add_reduce_2q(
+    a: list[torch.Tensor], b: list[torch.Tensor], _2q: list[torch.Tensor]
+) -> list[torch.Tensor]:
+    """
+    Python wrapper for the 'tiberate_mont_ops::mont_add_reduce_2q' custom operator.
+
+    Args:
+    a: list[torch.Tensor]
+    b: list[torch.Tensor]
+    _2q: list[torch.Tensor]
+    Returns:
+        list[torch.Tensor]
+    """
+    return torch.ops.tiberate_mont_ops.mont_add_reduce_2q(a, b, _2q)
+
+
 def mont_enter(
     a: list[torch.Tensor],
     Rs: list[torch.Tensor],
@@ -159,6 +100,34 @@ def mont_enter(
         None
     """
     torch.ops.tiberate_mont_ops.mont_enter(a, Rs, ql, qh, kl, kh)
+
+
+def mont_enter_reduce_2q(
+    a: list[torch.Tensor],
+    Rs: list[torch.Tensor],
+    _2q: list[torch.Tensor],
+    ql: list[torch.Tensor],
+    qh: list[torch.Tensor],
+    kl: list[torch.Tensor],
+    kh: list[torch.Tensor],
+) -> list[torch.Tensor]:
+    """
+    Python wrapper for the 'tiberate_mont_ops::mont_enter_reduce_2q' custom operator.
+
+    Args:
+    a: list[torch.Tensor]
+    Rs: list[torch.Tensor]
+    _2q: list[torch.Tensor]
+    ql: list[torch.Tensor]
+    qh: list[torch.Tensor]
+    kl: list[torch.Tensor]
+    kh: list[torch.Tensor]
+    Returns:
+        list[torch.Tensor]
+    """
+    return torch.ops.tiberate_mont_ops.mont_enter_reduce_2q(
+        a, Rs, _2q, ql, qh, kl, kh
+    )
 
 
 def mont_mult(
@@ -207,6 +176,21 @@ def mont_reduce(
     torch.ops.tiberate_mont_ops.mont_reduce(a, ql, qh, kl, kh)
 
 
+def mont_reduce_add_many_3d(
+    input: list[torch.Tensor], _2q: list[torch.Tensor]
+) -> list[torch.Tensor]:
+    """
+    Python wrapper for the 'tiberate_mont_ops::mont_reduce_add_many_3d' custom operator.
+
+    Args:
+    input: list[torch.Tensor]
+    _2q: list[torch.Tensor]
+    Returns:
+        list[torch.Tensor]
+    """
+    return torch.ops.tiberate_mont_ops.mont_reduce_add_many_3d(input, _2q)
+
+
 def mont_sub(
     a: list[torch.Tensor], b: list[torch.Tensor], _2q: list[torch.Tensor]
 ) -> list[torch.Tensor]:
@@ -221,6 +205,22 @@ def mont_sub(
         list[torch.Tensor]
     """
     return torch.ops.tiberate_mont_ops.mont_sub(a, b, _2q)
+
+
+def mont_sub_reduce_2q(
+    a: list[torch.Tensor], b: list[torch.Tensor], _2q: list[torch.Tensor]
+) -> list[torch.Tensor]:
+    """
+    Python wrapper for the 'tiberate_mont_ops::mont_sub_reduce_2q' custom operator.
+
+    Args:
+    a: list[torch.Tensor]
+    b: list[torch.Tensor]
+    _2q: list[torch.Tensor]
+    Returns:
+        list[torch.Tensor]
+    """
+    return torch.ops.tiberate_mont_ops.mont_sub_reduce_2q(a, b, _2q)
 
 
 def reduce_2q(a: list[torch.Tensor], _2q: list[torch.Tensor]) -> None:

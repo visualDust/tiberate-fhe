@@ -107,7 +107,7 @@ def generate_wrappers_from_dict(schemas: dict[str, list[str]], output_dir: str):
             f.write("\n\n".join(generated_code))
 
 
-def extract_namespace_and_ops(so_path: str) -> dict[str, list[str]]:
+def extract_namespace_and_ops(so_path: str) -> tuple[list[str], list[str]]:
     """Extracts operator schemas from a .so file."""
     try:
         strings_process = subprocess.run(
@@ -115,12 +115,11 @@ def extract_namespace_and_ops(so_path: str) -> dict[str, list[str]]:
         )
         stdout_text = strings_process.stdout
 
-        namespace_match = re.search(r"^tiberate_.*$", stdout_text, re.MULTILINE)
+        namespace_matches = re.findall(
+            r"^tiberate_.*$", stdout_text, re.MULTILINE
+        )
 
-        namespace = None
-        if namespace_match:
-            potential_ns = namespace_match.group(0).strip()
-            namespace = potential_ns
+        namespaces = [ns.strip() for ns in namespace_matches]
 
         op_name_pattern = re.compile(r"(\w+)\s*\(")
         op_names_found = set()
@@ -130,8 +129,7 @@ def extract_namespace_and_ops(so_path: str) -> dict[str, list[str]]:
             if " ->" in line:
                 found_on_line = op_name_pattern.findall(line)
                 op_names_found.update(found_on_line)
-        if namespace and op_names_found:
-            return {namespace: sorted(op_names_found)}
+        return namespaces, sorted(op_names_found)
     except FileNotFoundError:
         print(
             "Error: 'strings' command not found. Please ensure it's in your system's PATH."
@@ -169,7 +167,16 @@ def genwarpper(args):
             if args.verbose:
                 print(f"  -> Analyzing library: {lib_path}")
             torch.ops.load_library(lib_path)
-            namespace_ops_from_file = extract_namespace_and_ops(lib_path)
+            namespaces, ops = extract_namespace_and_ops(lib_path)
+            namespace_ops_from_file = {}
+            for namespace in namespaces:
+                for op in ops:
+                    # check if the op exists in the namespace
+                    if hasattr(getattr(torch.ops, namespace, None), op):
+                        namespace_ops_from_file[namespace] = [
+                            *namespace_ops_from_file.get(namespace, []),
+                            op,
+                        ]
             for namespace, ops in namespace_ops_from_file.items():
                 init_from_list.append(
                     f"from .{namespace.replace('tiberate_', '')} import {', '.join(ops)}"

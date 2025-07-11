@@ -55,6 +55,34 @@ def create_switcher_divide_by_p(
     )
 
 
+def mont_mult_sum_many_3d(
+    a: list[torch.Tensor],
+    b: list[torch.Tensor],
+    _2q: list[torch.Tensor],
+    ql: list[torch.Tensor],
+    qh: list[torch.Tensor],
+    kl: list[torch.Tensor],
+    kh: list[torch.Tensor],
+) -> list[torch.Tensor]:
+    """
+    Python wrapper for the 'tiberate_he_ops::mont_mult_sum_many_3d' custom operator.
+
+    Args:
+    a: list[torch.Tensor]
+    b: list[torch.Tensor]
+    _2q: list[torch.Tensor]
+    ql: list[torch.Tensor]
+    qh: list[torch.Tensor]
+    kl: list[torch.Tensor]
+    kh: list[torch.Tensor]
+    Returns:
+        list[torch.Tensor]
+    """
+    return torch.ops.tiberate_he_ops.mont_mult_sum_many_3d(
+        a, b, _2q, ql, qh, kl, kh
+    )
+
+
 def pc_add_fused(
     ct_data: list[torch.Tensor],
     pt_data: list[torch.Tensor],
@@ -178,32 +206,4 @@ def switch_key_switch_later_part_extend(
     """
     return torch.ops.tiberate_he_ops.switch_key_switch_later_part_extend(
         rns_len, state, l_enter, l_enter_start_offset, _2q, Rs, ql, qh, kl, kh
-    )
-
-
-def mont_mult_sum_many_3d(
-    a: list[torch.Tensor],
-    b: list[torch.Tensor],
-    _2q: list[torch.Tensor],
-    ql: list[torch.Tensor],
-    qh: list[torch.Tensor],
-    kl: list[torch.Tensor],
-    kh: list[torch.Tensor],
-) -> list[torch.Tensor]:
-    """
-    Python wrapper for the 'tiberate_he_ops::mont_mult_sum_many_3d' custom operator.
-
-    Args:
-    a: list[torch.Tensor]
-    b: list[torch.Tensor]
-    _2q: list[torch.Tensor]
-    ql: list[torch.Tensor]
-    qh: list[torch.Tensor]
-    kl: list[torch.Tensor]
-    kh: list[torch.Tensor]
-    Returns:
-        list[torch.Tensor]
-    """
-    return torch.ops.tiberate_he_ops.mont_mult_sum_many_3d(
-        a, b, _2q, ql, qh, kl, kh
     )
