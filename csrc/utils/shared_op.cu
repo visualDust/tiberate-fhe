@@ -58,12 +58,14 @@ __global__ void read_chunk_kernel(scalar_t* out_ptr,
   const scalar_t* const_mem =
       reinterpret_cast<const scalar_t*>(&constant_mem_pool[effective_offset]);
 
+#ifdef DEBUG_KERNEL_OUTPUT
   if (idx == 127) {
     // Debugging output.
     printf("read: constant_mem_pool address: %p : %ld\n",
            constant_mem_pool,
            const_mem[idx]);
   }
+#endif
   out_ptr[idx] = const_mem[idx];
 }
 
