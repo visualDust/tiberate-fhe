@@ -1,6 +1,5 @@
-#include "shared_op.h"
-#include "../extensions.cuh"
-#include "shared_constants.h"
+#include "../../extensions.cuh"
+#include "constant_mem.h"
 
 // ------------------------------------------------------------------
 // constant memory pool
@@ -59,11 +58,9 @@ __global__ void read_chunk_kernel(scalar_t* out_ptr,
       reinterpret_cast<const scalar_t*>(&constant_mem_pool[effective_offset]);
 
 #ifdef DEBUG_KERNEL_OUTPUT
-  if (idx == 127) {
+  if (idx == 0 || idx == CONST_MEM_REGION_LEN) {
     // Debugging output.
-    printf("read: constant_mem_pool address: %p : %ld\n",
-           constant_mem_pool,
-           const_mem[idx]);
+    printf("read constant[%d]: %p : %ld\n", idx, const_mem, const_mem[idx]);
   }
 #endif
   out_ptr[idx] = const_mem[idx];

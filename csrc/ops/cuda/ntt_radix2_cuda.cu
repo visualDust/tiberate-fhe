@@ -1,6 +1,6 @@
 #include "ntt_radix2_cuda.h"
 #include "../../extensions.cuh"
-#include "../../utils/shared_constants.h"
+#include "constant_mem.h"
 #include "mont_used_in_ntt.cuh"
 
 //------------------------------------------------------------------
