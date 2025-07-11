@@ -5,38 +5,6 @@
 import torch
 
 
-def randint(input: list[torch.Tensor], q_ptrs: list[int]) -> None:
-    """
-    Python wrapper for the 'tiberate_csprng_ops::randint' custom operator.
-
-    Args:
-    input: list[torch.Tensor] (modified in-place)
-    q_ptrs: list[int]
-    Returns:
-        None
-    """
-    torch.ops.tiberate_csprng_ops.randint(input, q_ptrs)
-
-
-def randint_fast(
-    input: list[torch.Tensor], q_ptrs: list[int], shift: int, step: int
-) -> list[torch.Tensor]:
-    """
-    Python wrapper for the 'tiberate_csprng_ops::randint_fast' custom operator.
-
-    Args:
-    input: list[torch.Tensor]
-    q_ptrs: list[int]
-    shift: int
-    step: int
-    Returns:
-        list[torch.Tensor]
-    """
-    return torch.ops.tiberate_csprng_ops.randint_fast(
-        input, q_ptrs, shift, step
-    )
-
-
 def chacha20(input: list[torch.Tensor], step: int) -> list[torch.Tensor]:
     """
     Python wrapper for the 'tiberate_csprng_ops::chacha20' custom operator.
@@ -48,21 +16,6 @@ def chacha20(input: list[torch.Tensor], step: int) -> list[torch.Tensor]:
         list[torch.Tensor]
     """
     return torch.ops.tiberate_csprng_ops.chacha20(input, step)
-
-
-def randround(
-    input: list[torch.Tensor], rand_bytes: list[torch.Tensor]
-) -> None:
-    """
-    Python wrapper for the 'tiberate_csprng_ops::randround' custom operator.
-
-    Args:
-    input: list[torch.Tensor]
-    rand_bytes: list[torch.Tensor] (modified in-place)
-    Returns:
-        None
-    """
-    torch.ops.tiberate_csprng_ops.randround(input, rand_bytes)
 
 
 def discrete_gaussian(
@@ -106,3 +59,50 @@ def discrete_gaussian_fast(
     return torch.ops.tiberate_csprng_ops.discrete_gaussian_fast(
         input, btree_ptr, btree_size, depth, step
     )
+
+
+def randint(input: list[torch.Tensor], q_ptrs: list[int]) -> None:
+    """
+    Python wrapper for the 'tiberate_csprng_ops::randint' custom operator.
+
+    Args:
+    input: list[torch.Tensor] (modified in-place)
+    q_ptrs: list[int]
+    Returns:
+        None
+    """
+    torch.ops.tiberate_csprng_ops.randint(input, q_ptrs)
+
+
+def randint_fast(
+    input: list[torch.Tensor], q_ptrs: list[int], shift: int, step: int
+) -> list[torch.Tensor]:
+    """
+    Python wrapper for the 'tiberate_csprng_ops::randint_fast' custom operator.
+
+    Args:
+    input: list[torch.Tensor]
+    q_ptrs: list[int]
+    shift: int
+    step: int
+    Returns:
+        list[torch.Tensor]
+    """
+    return torch.ops.tiberate_csprng_ops.randint_fast(
+        input, q_ptrs, shift, step
+    )
+
+
+def randround(
+    input: list[torch.Tensor], rand_bytes: list[torch.Tensor]
+) -> None:
+    """
+    Python wrapper for the 'tiberate_csprng_ops::randround' custom operator.
+
+    Args:
+    input: list[torch.Tensor]
+    rand_bytes: list[torch.Tensor] (modified in-place)
+    Returns:
+        None
+    """
+    torch.ops.tiberate_csprng_ops.randround(input, rand_bytes)

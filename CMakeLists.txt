@@ -52,14 +52,44 @@ include_directories(${TORCH_INCLUDE_DIRS})
 set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_INCLUDES OFF)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
-# === Helper function to define modules ===
-function(add_cuda_module name cpp_path cu_path out_subdir)
-  if(cu_path)
-    add_library(${name} MODULE ${cpp_path} ${cu_path})
-  else()
-    add_library(${name} MODULE ${cpp_path})
-  endif()
+set(UNIFIED_MODULE_NAME _tiberate_ops)
 
+file(GLOB_RECURSE TORCH_OPS_CPP_SOURCES "csrc/ops/*.cpp" "csrc/utils/*.cpp")
+
+file(GLOB_RECURSE TORCH_OPS_CU_SOURCES "csrc/ops/cuda/*.cu" "csrc/utils/*.cu")
+
+message(STATUS "Found C++ sources: ${TORCH_OPS_CPP_SOURCES}")
+message(STATUS "Found CUDA sources: ${TORCH_OPS_CU_SOURCES}")
+
+add_library(${UNIFIED_MODULE_NAME} MODULE ${TORCH_OPS_CPP_SOURCES}
+                                          ${TORCH_OPS_CU_SOURCES})
+
+target_link_libraries(${UNIFIED_MODULE_NAME} PRIVATE ${TORCH_LIBRARIES}
+                                                     torch_python)
+target_include_directories(
+  ${UNIFIED_MODULE_NAME} PRIVATE ${TORCH_INCLUDE_DIRS} ${Python3_INCLUDE_DIRS})
+target_compile_definitions(${UNIFIED_MODULE_NAME}
+                           PRIVATE TORCH_EXTENSION_NAME=${UNIFIED_MODULE_NAME})
+
+set_target_properties(
+  ${UNIFIED_MODULE_NAME}
+  PROPERTIES PREFIX ""
+             CXX_STANDARD 17
+             OUTPUT_NAME "${UNIFIED_MODULE_NAME}${PYTHON_MODULE_SUFFIX}"
+             CUDA_SEPARABLE_COMPILATION ON)
+
+if(SKBUILD_STATE STREQUAL "editable")
+  install(
+    TARGETS ${UNIFIED_MODULE_NAME}
+    LIBRARY DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/tiberate/libs/torchops)
+else()
+  install(TARGETS ${UNIFIED_MODULE_NAME}
+          LIBRARY DESTINATION ./tiberate/libs/torchops)
+endif()
+
+# === Helper function to define modules ===
+function(add_cpp_module name cpp_path out_subdir)
+  add_library(${name} MODULE ${cpp_path})
   target_link_libraries(${name} ${TORCH_LIBRARIES} torch_python)
   target_compile_definitions(${name} PRIVATE TORCH_EXTENSION_NAME=${name})
 
@@ -82,33 +112,12 @@ function(add_cuda_module name cpp_path cu_path out_subdir)
   endif()
 endfunction()
 
-# === Define modules ===
-
-# Compute modules
-set(OP_MODULE_NAMES
-    chacha20
-    discrete_gaussian
-    randint
-    randround
-    mont
-    mont_extra
-    ntt_radix2
-    intt_radix2
-    he_fused
-    cascade_mac)
-
-foreach(name IN LISTS OP_MODULE_NAMES)
-  add_cuda_module(
-    ${name} ${CMAKE_CURRENT_SOURCE_DIR}/csrc/ops/${name}.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/csrc/ops/cuda/${name}_cuda.cu torchops)
-endforeach()
-
 # Non-compute pure C++ modules
 set(NON_COMPUTE_MODULE_NAMES cuda_info)
 
 foreach(name IN LISTS NON_COMPUTE_MODULE_NAMES)
-  add_cuda_module(${name} ${CMAKE_CURRENT_SOURCE_DIR}/csrc/utils/${name}.cpp ""
-                  utils)
+  add_cpp_module(${name} ${CMAKE_CURRENT_SOURCE_DIR}/csrc/utils/${name}.cpp
+                 utils)
 endforeach()
 
 # === Install Python wrapper ===
@@ -123,9 +132,21 @@ execute_process(
 message(STATUS "Wrapper script output: ${WRAPPER_OUTPUT}")
 
 if(NOT "${WRAPPER_ERROR}" STREQUAL "")
-  message(WARNING "Wrapper script stderr: ${WRAPPER_ERROR}")
+  message(WARNING "Wrapper script stderr:
+${WRAPPER_ERROR}")
 endif()
 
 if(NOT WRAPPER_RESULT EQUAL 0)
-  message(FATAL_ERROR "Wrapper script failed with code ${WRAPPER_RESULT}")
+  message(FATAL_ERROR "Wrapper script failed with
+code ${WRAPPER_RESULT}")
 endif()
+
+set(WrapperGenScript ${CMAKE_SOURCE_DIR}/tiberate/libs/wrapper/genwrapper.py)
+set(WrapperTargetName gen_wrapper)
+
+add_custom_target(
+  ${WrapperTargetName}
+  COMMAND ${Python3_EXECUTABLE} ${WrapperGenScript} --verbose
+  DEPENDS ${UNIFIED_MODULE_NAME}
+  COMMENT "Generating Python wrapper for ${UNIFIED_MODULE_NAME}..."
+  VERBATIM)

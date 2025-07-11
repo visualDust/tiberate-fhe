@@ -33,8 +33,6 @@ using TensorAcc32 = torch::PackedTensorAccessor32<scalar_t, dim>;
 // constant memory layout
 // ------------------------------------------------------------------
 
-#define MAX_CONST_BYTES (64 * 1024)
-
 enum ConstantMemoryGravity { Left = 0, Right = 1 };
 
 // ===================================================================

@@ -4,7 +4,7 @@ from typing import Literal
 import torch
 import torch.nn.functional as F
 
-from tiberate.libs.wrapper import ntt2_ops
+from tiberate.libs.wrapper import const_pool
 
 LayoutGravity = Literal["left", "right"]
 
@@ -17,7 +17,7 @@ def upload_tensor_list(
 ) -> None:
     """Upload a list of tensors to constant memory with specified offsets."""
     layout_flag = 0 if layout == "left" else 1
-    ntt2_ops.upload_tensor_list(tensors, offsets, layout_flag, device_id)
+    const_pool.upload_tensor_list(tensors, offsets, layout_flag, device_id)
 
 
 def read_constant_chunk(
@@ -30,7 +30,7 @@ def read_constant_chunk(
     """Read a chunk of constants from constant memory."""
     dummy = torch.empty(0, device=f"cuda:{device}")
     layout_flag = 0 if layout == "left" else 1
-    return ntt2_ops.read_constant_chunk(
+    return const_pool.read_constant_chunk(
         dummy, offset_bytes, count, dtype, layout_flag
     )
 
