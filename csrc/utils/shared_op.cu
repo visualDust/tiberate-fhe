@@ -15,11 +15,11 @@ int upload_tensor_list_cuda(const std::vector<torch::Tensor> tensors,
   auto layout = static_cast<ConstantMemoryGravity>(layout_int64_t);
   auto device_id = static_cast<int>(device_id_int64_t);
   cudaSetDevice(device_id);
+  TORCH_CHECK(tensors.size() == offsets.size(),
+              "Mismatch: tensor list and offset list must have same length");
   for (size_t i = 0; i < tensors.size(); ++i) {
     auto& t = tensors[i];
     TORCH_CHECK(t.is_contiguous(), "Tensors must be contiguous");
-    TORCH_CHECK(tensors.size() == offsets.size(),
-                "Mismatch: tensor list and offset list must have same length");
     auto stream = at::cuda::getCurrentCUDAStream(device_id);
     const size_t size_bytes = t.nbytes();
     size_t effective_offset = offsets[i];
