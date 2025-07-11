@@ -140,3 +140,13 @@ if(NOT WRAPPER_RESULT EQUAL 0)
   message(FATAL_ERROR "Wrapper script failed with
 code ${WRAPPER_RESULT}")
 endif()
+
+set(WrapperGenScript ${CMAKE_SOURCE_DIR}/tiberate/libs/wrapper/genwrapper.py)
+set(WrapperTargetName gen_wrapper)
+
+add_custom_target(
+  ${WrapperTargetName}
+  COMMAND ${Python3_EXECUTABLE} ${WrapperGenScript} --verbose
+  DEPENDS ${UNIFIED_MODULE_NAME}
+  COMMENT "Generating Python wrapper for ${UNIFIED_MODULE_NAME}..."
+  VERBATIM)
