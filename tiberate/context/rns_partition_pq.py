@@ -203,7 +203,7 @@ class RnsPartition:
         cumsum_element_sizes = lambda arr: np.cumsum(arr)
         remove_empty_parts = lambda arr: [a for a in arr if a > 0]
         regenerate_parts = lambda arr: [
-            list(range(a, b)) for a, b in zip([0] + arr[:-1], arr)
+            list(range(a, b)) for a, b in zip([0, *arr[:-1]], arr)
         ]
 
         part_counts = [count_element_sizes(a) for a in self.prime_allocations]

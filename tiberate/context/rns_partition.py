@@ -113,7 +113,7 @@ class RnsPartition:
             return [a for a in arr if a > 0]
 
         def regenerate_parts(arr):
-            return [list(range(a, b)) for a, b in zip([0] + arr[:-1], arr)]
+            return [list(range(a, b)) for a, b in zip([0, *arr[:-1]], arr)]
 
         part_counts = [count_element_sizes(a) for a in self.prime_allocations]
         part_cumsums = [cumsum_element_sizes(a) for a in part_counts]

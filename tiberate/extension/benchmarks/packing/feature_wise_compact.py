@@ -153,7 +153,7 @@ class FeatureWise_PTPacking(PTPacking):
             output = output.reshape(-1, factor, num_slots)
             output = output.reshape(-1, num_slots)
             # Restore the original batch dimensions with increased rows
-            output_shape = rest_shape[:-1] + (-1, num_slots)
+            output_shape = (*rest_shape[:-1], -1, num_slots)
             output = output.reshape(output_shape)
             return output
         elif num_slots % logical_num_slots == 0:
@@ -178,7 +178,7 @@ class FeatureWise_PTPacking(PTPacking):
             # Reshape to get the last dimension size num_slots
             output = output.reshape(-1, num_slots)
             # Restore the original batch dimensions
-            output_shape = rest_shape[:-1] + (-1, num_slots)
+            output_shape = (*rest_shape[:-1], -1, num_slots)
             output = output.reshape(output_shape)
             return output
 
