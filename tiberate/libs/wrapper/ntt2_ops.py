@@ -2,8 +2,6 @@
 # It wraps the operators from the 'tiberate_ntt2_ops' namespace.
 # Do not edit!
 
-from typing import Any
-
 import torch
 
 
@@ -210,46 +208,4 @@ def ntt_radix2(
     """
     torch.ops.tiberate_ntt2_ops.ntt_radix2(
         a, even, odd, psi, _2q, ql, qh, kl, kh, prime_len
-    )
-
-
-def read_constant_chunk(
-    dummy: torch.Tensor, offset_bytes: int, count: int, dtype: Any, layout: int
-) -> torch.Tensor:
-    """
-    Python wrapper for the 'tiberate_ntt2_ops::read_constant_chunk' custom operator.
-
-    Args:
-    dummy: torch.Tensor
-    offset_bytes: int
-    count: int
-    dtype: Any
-    layout: int
-    Returns:
-        torch.Tensor
-    """
-    return torch.ops.tiberate_ntt2_ops.read_constant_chunk(
-        dummy, offset_bytes, count, dtype, layout
-    )
-
-
-def upload_tensor_list(
-    tensor_list: list[torch.Tensor],
-    offset_list: list[int],
-    layout: int,
-    device_id: int,
-) -> None:
-    """
-    Python wrapper for the 'tiberate_ntt2_ops::upload_tensor_list' custom operator.
-
-    Args:
-    tensor_list: list[torch.Tensor]
-    offset_list: list[int]
-    layout: int
-    device_id: int
-    Returns:
-        None
-    """
-    torch.ops.tiberate_ntt2_ops.upload_tensor_list(
-        tensor_list, offset_list, layout, device_id
     )

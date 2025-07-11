@@ -12,7 +12,7 @@ torch::Tensor read_constant_chunk(const torch::Tensor& dummy,
                                   const torch::Dtype dtype,
                                   const int64_t layout);
 
-TORCH_LIBRARY_FRAGMENT(tiberate_ntt2_ops, m) {
+TORCH_LIBRARY_FRAGMENT(tiberate_const_pool, m) {
   m.def(
       "upload_tensor_list(Tensor[] tensor_list, int[] offset_list, "
       "int layout, int device_id) -> ()");
@@ -20,7 +20,7 @@ TORCH_LIBRARY_FRAGMENT(tiberate_ntt2_ops, m) {
       "read_constant_chunk(Tensor dummy, int offset_bytes, "
       "int count, ScalarType dtype, int layout) -> Tensor");
 }
-TORCH_LIBRARY_IMPL(tiberate_ntt2_ops, CUDA, m) {
+TORCH_LIBRARY_IMPL(tiberate_const_pool, CUDA, m) {
   m.impl("upload_tensor_list", upload_tensor_list);
   m.impl("read_constant_chunk", read_constant_chunk);
 }
