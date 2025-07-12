@@ -46,7 +46,7 @@ class TensorConstLayout:
     entries: list[TensorEntry]
     gravity: LayoutGravity = "left"
     align_bytes: int = 8  # Alignment for safety (especially with int64)
-    max_bytes: int = 64 * 1024
+    max_bytes: int = 4 * 1024
 
     def compute_offsets(self) -> list[int]:
         """Compute byte offsets for each tensor, respecting alignment."""
@@ -173,7 +173,7 @@ def upload_constant_2qRsQlQhKlKhNinv(
     # │                              └────────────────┘└────────────────┘└────────────────┘    │
     # └────────────────────────────────────────────────────────────────────────────────────────┘
     """
-    REGION_LEN = 128
+    REGION_LEN = 64
 
     device_count = len(_2q)
     layout_on_devices: list[tuple[int, TensorConstLayout, list[int]]] = []

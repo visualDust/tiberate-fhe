@@ -3,7 +3,7 @@
 #define SHARED_CONSTANTS_H
 #include <stdint.h>
 
-#define MAX_CONST_BYTES (64 * 1024)
+#define MAX_CONST_BYTES (4 * 1024)  // at most 64* 1024, now  only need 4K
 extern __device__ __constant__ uint8_t constant_mem_pool[MAX_CONST_BYTES];
 #endif  // SHARED_CONSTANTS_H
 
@@ -26,7 +26,12 @@ enum ConstantMemoryGravity { Left = 0, Right = 1 };
 #define KH_CONST_IDX 5
 #define NINV_CONST_IDX 6
 // 128 elements per region with dtype int64_t/int32_t
-#define CONST_MEM_REGION_LEN 128
+#define CONST_MEM_REGION_LEN 64
+
+// regions cannot exceed 64K bytes, assume they are at most int64_t
+static_assert(CONST_MEM_REGION_LEN * (NINV_CONST_IDX + 1) * sizeof(int64_t) <=
+                  MAX_CONST_BYTES,
+              "Constant memory regions exceed maximum allowed size.");
 
 template <typename scalar_t>
 __device__ __forceinline__ const scalar_t* get_const_ptr_gright(
