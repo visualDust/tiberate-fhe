@@ -1,3 +1,4 @@
+#pragma once
 #ifndef SHARED_CONSTANTS_H
 #define SHARED_CONSTANTS_H
 #include <stdint.h>
@@ -26,3 +27,12 @@ enum ConstantMemoryGravity { Left = 0, Right = 1 };
 #define NINV_CONST_IDX 6
 // 128 elements per region with dtype int64_t/int32_t
 #define CONST_MEM_REGION_LEN 128
+
+template <typename scalar_t>
+__device__ __forceinline__ const scalar_t* get_const_ptr_gright(
+    const int region_idx, const int idx) {
+  auto region = reinterpret_cast<const scalar_t*>(
+      &constant_mem_pool[MAX_CONST_BYTES - (region_idx * CONST_MEM_REGION_LEN) *
+                                               sizeof(scalar_t)]);
+  return &region[idx];
+}

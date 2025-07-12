@@ -180,9 +180,10 @@ def upload_constant_2qRsQlQhKlKhNinv(
     plans = []
 
     for i in range(device_count):
+        dev_id = _2q[i].device.index
         # should be on the same device
         if not all(
-            t.device.index == i
+            t.device.index == dev_id
             for t in [_2q[i], Rs[i], ql[i], qh[i], kl[i], kh[i], Ninv[i]]
         ):
             raise ValueError(f"All tensors must be on the same device {i}")
@@ -234,11 +235,11 @@ def upload_constant_2qRsQlQhKlKhNinv(
         offsets = plan.upload()
         plans.append(plan)
         if verbose:
-            layout_on_devices.append((i, plan, offsets))
+            layout_on_devices.append((dev_id, plan, offsets))
 
         # the function ends here. The following are pure debugging prints.
         if verbose:
-            print(f"Device {i} uploaded constants with offsets:")
+            print(f"Device {dev_id} uploaded constants with offsets:")
             for entry, offset in zip(plan.entries, offsets):
                 size = entry.tensor.numel() * entry.tensor.element_size()
                 if gravity == "right":
@@ -254,10 +255,10 @@ def upload_constant_2qRsQlQhKlKhNinv(
     if verbose:
         # debug readback
         error_flag = False
-        for device_id, plan, offsets in layout_on_devices:
+        for dev_id, plan, offsets in layout_on_devices:
             for entry, offset in zip(plan.entries, offsets):
                 actual = read_constant_chunk(
-                    device=device_id,
+                    device=dev_id,
                     offset_bytes=offset,
                     count=entry.tensor.numel(),
                     dtype=entry.tensor.dtype,

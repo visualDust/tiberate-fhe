@@ -1,5 +1,5 @@
 #include "../../extensions.cuh"
-#include "constant_mem.h"
+#include "constant_mem.cuh"
 
 // ------------------------------------------------------------------
 // constant memory pool

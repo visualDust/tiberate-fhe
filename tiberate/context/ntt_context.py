@@ -221,24 +221,17 @@ class NTTContext:
 
         self.generate_parts_pack()
         self.pre_package()
-        self.upload_prepacks_to_constant()
+        self.upload_constants()
 
-    def upload_prepacks_to_constant(self):
-        Rs_list = self.Rs_prepack[-2][0][0]
-        Ninv_list = self.intt_radix2_prepack[0][0][-2][3]
-        _2q_list = self.ntt_radix2_prepack[0][0][-2][3]
-        ql_list = self.ntt_radix2_prepack[0][0][-2][4]
-        qh_list = self.ntt_radix2_prepack[0][0][-2][5]
-        kl_list = self.ntt_radix2_prepack[0][0][-2][6]
-        kh_list = self.ntt_radix2_prepack[0][0][-2][7]
+    def upload_constants(self):
         self.constant_mem_plans = upload_constant_2qRsQlQhKlKhNinv(
-            _2q=_2q_list,
-            Rs=Rs_list,
-            ql=ql_list,
-            qh=qh_list,
-            kl=kl_list,
-            kh=kh_list,
-            Ninv=Ninv_list,
+            _2q=self._2q,
+            Rs=self.Rs,
+            ql=self.ql,
+            qh=self.qh,
+            kl=self.kl,
+            kh=self.kh,
+            Ninv=self.Ninv,
             gravity="right",
             verbose=True,
         )
@@ -782,34 +775,55 @@ class NTTContext:
     def ntt_radix2(self, a, lvl=0, mult_type=-1, part=0):
         ntt2_ops.ntt_radix2(
             a,
-            *self.ntt_radix2_prepack[mult_type][lvl][part],
+            self.even,
+            self.odd,
+            self.psi,
             self.ckksCfg.num_special_primes if mult_type == -1 else 0,
         )
 
     def enter_ntt_radix2(self, a, lvl=0, mult_type=-1, part=0):
         ntt2_ops.enter_ntt_radix2(
             a,
-            self.Rs_prepack[mult_type][lvl][part],
-            *self.ntt_radix2_prepack[mult_type][lvl][part],
+            self.even,
+            self.odd,
+            self.psi,
             self.ckksCfg.num_special_primes if mult_type == -1 else 0,
         )
 
     def intt_radix2(self, a, lvl=0, mult_type=-1, part=0):
-        ntt2_ops.intt_radix2(a, *self.intt_radix2_prepack[mult_type][lvl][part])
+        ntt2_ops.intt_radix2(
+            a,
+            self.ieven,
+            self.iodd,
+            self.ipsi,
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
+        )
 
     def intt_radix2_exit(self, a, lvl=0, mult_type=-1, part=0):
         ntt2_ops.intt_radix2_exit(
-            a, *self.intt_radix2_prepack[mult_type][lvl][part]
+            a,
+            self.ieven,
+            self.iodd,
+            self.ipsi,
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
         )
 
     def intt_radix2_exit_reduce(self, a, lvl=0, mult_type=-1, part=0):
         ntt2_ops.intt_radix2_exit_reduce(
-            a, *self.intt_radix2_prepack[mult_type][lvl][part]
+            a,
+            self.ieven,
+            self.iodd,
+            self.ipsi,
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
         )
 
     def intt_radix2_exit_reduce_signed(self, a, lvl=0, mult_type=-1, part=0):
         ntt2_ops.intt_radix2_exit_reduce_signed(
-            a, *self.intt_radix2_prepack[mult_type][lvl][part]
+            a,
+            self.ieven,
+            self.iodd,
+            self.ipsi,
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
         )
 
     # ===========================================

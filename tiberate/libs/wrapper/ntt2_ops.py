@@ -7,37 +7,25 @@ import torch
 
 def enter_ntt_radix2(
     a: list[torch.Tensor],
-    Rs: list[torch.Tensor],
     even: list[torch.Tensor],
     odd: list[torch.Tensor],
     psi: list[torch.Tensor],
-    _2q: list[torch.Tensor],
-    ql: list[torch.Tensor],
-    qh: list[torch.Tensor],
-    kl: list[torch.Tensor],
-    kh: list[torch.Tensor],
-    prime_len: int,
+    sp_prime_len: int,
 ) -> None:
     """
     Python wrapper for the 'tiberate_ntt2_ops::enter_ntt_radix2' custom operator.
 
     Args:
     a: list[torch.Tensor] (modified in-place)
-    Rs: list[torch.Tensor]
     even: list[torch.Tensor]
     odd: list[torch.Tensor]
     psi: list[torch.Tensor]
-    _2q: list[torch.Tensor]
-    ql: list[torch.Tensor]
-    qh: list[torch.Tensor]
-    kl: list[torch.Tensor]
-    kh: list[torch.Tensor]
-    prime_len: int
+    sp_prime_len: int
     Returns:
         None
     """
     torch.ops.tiberate_ntt2_ops.enter_ntt_radix2(
-        a, Rs, even, odd, psi, _2q, ql, qh, kl, kh, prime_len
+        a, even, odd, psi, sp_prime_len
     )
 
 
@@ -46,12 +34,7 @@ def intt_radix2(
     even: list[torch.Tensor],
     odd: list[torch.Tensor],
     psi: list[torch.Tensor],
-    Ninv: list[torch.Tensor],
-    _2q: list[torch.Tensor],
-    ql: list[torch.Tensor],
-    qh: list[torch.Tensor],
-    kl: list[torch.Tensor],
-    kh: list[torch.Tensor],
+    sp_prime_len: int,
 ) -> None:
     """
     Python wrapper for the 'tiberate_ntt2_ops::intt_radix2' custom operator.
@@ -61,18 +44,11 @@ def intt_radix2(
     even: list[torch.Tensor]
     odd: list[torch.Tensor]
     psi: list[torch.Tensor]
-    Ninv: list[torch.Tensor]
-    _2q: list[torch.Tensor]
-    ql: list[torch.Tensor]
-    qh: list[torch.Tensor]
-    kl: list[torch.Tensor]
-    kh: list[torch.Tensor]
+    sp_prime_len: int
     Returns:
         None
     """
-    torch.ops.tiberate_ntt2_ops.intt_radix2(
-        a, even, odd, psi, Ninv, _2q, ql, qh, kl, kh
-    )
+    torch.ops.tiberate_ntt2_ops.intt_radix2(a, even, odd, psi, sp_prime_len)
 
 
 def intt_radix2_exit(
@@ -80,12 +56,7 @@ def intt_radix2_exit(
     even: list[torch.Tensor],
     odd: list[torch.Tensor],
     psi: list[torch.Tensor],
-    Ninv: list[torch.Tensor],
-    _2q: list[torch.Tensor],
-    ql: list[torch.Tensor],
-    qh: list[torch.Tensor],
-    kl: list[torch.Tensor],
-    kh: list[torch.Tensor],
+    sp_prime_len: int,
 ) -> None:
     """
     Python wrapper for the 'tiberate_ntt2_ops::intt_radix2_exit' custom operator.
@@ -95,17 +66,12 @@ def intt_radix2_exit(
     even: list[torch.Tensor]
     odd: list[torch.Tensor]
     psi: list[torch.Tensor]
-    Ninv: list[torch.Tensor]
-    _2q: list[torch.Tensor]
-    ql: list[torch.Tensor]
-    qh: list[torch.Tensor]
-    kl: list[torch.Tensor]
-    kh: list[torch.Tensor]
+    sp_prime_len: int
     Returns:
         None
     """
     torch.ops.tiberate_ntt2_ops.intt_radix2_exit(
-        a, even, odd, psi, Ninv, _2q, ql, qh, kl, kh
+        a, even, odd, psi, sp_prime_len
     )
 
 
@@ -114,12 +80,7 @@ def intt_radix2_exit_reduce(
     even: list[torch.Tensor],
     odd: list[torch.Tensor],
     psi: list[torch.Tensor],
-    Ninv: list[torch.Tensor],
-    _2q: list[torch.Tensor],
-    ql: list[torch.Tensor],
-    qh: list[torch.Tensor],
-    kl: list[torch.Tensor],
-    kh: list[torch.Tensor],
+    sp_prime_len: int,
 ) -> None:
     """
     Python wrapper for the 'tiberate_ntt2_ops::intt_radix2_exit_reduce' custom operator.
@@ -129,17 +90,12 @@ def intt_radix2_exit_reduce(
     even: list[torch.Tensor]
     odd: list[torch.Tensor]
     psi: list[torch.Tensor]
-    Ninv: list[torch.Tensor]
-    _2q: list[torch.Tensor]
-    ql: list[torch.Tensor]
-    qh: list[torch.Tensor]
-    kl: list[torch.Tensor]
-    kh: list[torch.Tensor]
+    sp_prime_len: int
     Returns:
         None
     """
     torch.ops.tiberate_ntt2_ops.intt_radix2_exit_reduce(
-        a, even, odd, psi, Ninv, _2q, ql, qh, kl, kh
+        a, even, odd, psi, sp_prime_len
     )
 
 
@@ -148,12 +104,7 @@ def intt_radix2_exit_reduce_signed(
     even: list[torch.Tensor],
     odd: list[torch.Tensor],
     psi: list[torch.Tensor],
-    Ninv: list[torch.Tensor],
-    _2q: list[torch.Tensor],
-    ql: list[torch.Tensor],
-    qh: list[torch.Tensor],
-    kl: list[torch.Tensor],
-    kh: list[torch.Tensor],
+    sp_prime_len: int,
 ) -> None:
     """
     Python wrapper for the 'tiberate_ntt2_ops::intt_radix2_exit_reduce_signed' custom operator.
@@ -163,17 +114,12 @@ def intt_radix2_exit_reduce_signed(
     even: list[torch.Tensor]
     odd: list[torch.Tensor]
     psi: list[torch.Tensor]
-    Ninv: list[torch.Tensor]
-    _2q: list[torch.Tensor]
-    ql: list[torch.Tensor]
-    qh: list[torch.Tensor]
-    kl: list[torch.Tensor]
-    kh: list[torch.Tensor]
+    sp_prime_len: int
     Returns:
         None
     """
     torch.ops.tiberate_ntt2_ops.intt_radix2_exit_reduce_signed(
-        a, even, odd, psi, Ninv, _2q, ql, qh, kl, kh
+        a, even, odd, psi, sp_prime_len
     )
 
 
@@ -182,12 +128,7 @@ def ntt_radix2(
     even: list[torch.Tensor],
     odd: list[torch.Tensor],
     psi: list[torch.Tensor],
-    _2q: list[torch.Tensor],
-    ql: list[torch.Tensor],
-    qh: list[torch.Tensor],
-    kl: list[torch.Tensor],
-    kh: list[torch.Tensor],
-    prime_len: int,
+    sp_prime_len: int,
 ) -> None:
     """
     Python wrapper for the 'tiberate_ntt2_ops::ntt_radix2' custom operator.
@@ -197,15 +138,8 @@ def ntt_radix2(
     even: list[torch.Tensor]
     odd: list[torch.Tensor]
     psi: list[torch.Tensor]
-    _2q: list[torch.Tensor]
-    ql: list[torch.Tensor]
-    qh: list[torch.Tensor]
-    kl: list[torch.Tensor]
-    kh: list[torch.Tensor]
-    prime_len: int
+    sp_prime_len: int
     Returns:
         None
     """
-    torch.ops.tiberate_ntt2_ops.ntt_radix2(
-        a, even, odd, psi, _2q, ql, qh, kl, kh, prime_len
-    )
+    torch.ops.tiberate_ntt2_ops.ntt_radix2(a, even, odd, psi, sp_prime_len)
