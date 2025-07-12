@@ -79,6 +79,34 @@ class BenchmarkResult:
             }
         )
 
+    def get_metrics(
+        self,
+        name: str | None = None,
+        metric_type: BenchmarkResultMetricType | None = None,
+    ):
+        """
+        Get the metrics of the benchmark result.
+
+        Parameters
+        ----------
+        name : str | None
+            The name of the metric to retrieve. If None, all metrics will be returned.
+        metric_type : BenchmarkResultMetricType | None
+            The type of the metric to retrieve. If None, all types will be returned.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the requested metrics.
+        """
+        if name is not None and metric_type is not None:
+            return self.metrics.get(metric_type, {}).get(name, {})
+
+        if metric_type is not None:
+            return self.metrics.get(metric_type, {})
+
+        return self.metrics
+
     def __repr__(self):
         return f"BenchmarkResult(metrics={self.metrics}, misc={self.misc}, errors={self.errors}, warnings={self.warnings})"
 
@@ -165,3 +193,11 @@ It should be decorated with the `@benchreg.register(name="your bench mark name")
 
         """
         raise NotImplementedError("run() must be implemented in subclasses")
+
+    def post_run(self, result: BenchmarkResult | None = None) -> None:
+        """
+        This method is called after the benchmark run.
+        It can be used to perform any post-processing on the result. the arg "result" is not necessarily used, since the class object itself can store the result. For example, you can have logic to save it to a file, or perform any other actions.
+        Dont return anything from this method, as it is not expected to return anything.
+        """
+        pass

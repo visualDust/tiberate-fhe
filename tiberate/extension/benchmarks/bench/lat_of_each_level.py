@@ -190,6 +190,7 @@ class ConsumeAllLevelsBenchmark(BenchmarkBase):
         assert (
             option_name in self.config_matrix
         ), f"Invalid benchmark name: {option_name}"
+        self.option_name = option_name
         config = self.config_matrix[option_name]
         ckks_params = config["ckks_params"]
         devices = config.get("devices", ["cuda:0"])
@@ -272,19 +273,22 @@ class ConsumeAllLevelsBenchmark(BenchmarkBase):
 
         # =========== Test Latency and Size ========== #
 
-        lat_table = test_lat_and_size_until_level_used_up(engine)
+        self.lat_table = test_lat_and_size_until_level_used_up(engine)
         benchmark_result.add_metric(
             name="Latency / Data Size by Level",
             metric_type=BenchmarkResultMetricType.TABLE,
-            value=lat_table,
+            value=self.lat_table,
             description="Latency and size/level",
         )
 
+        return benchmark_result
+
+    def post_run(self, *args):
         """Prompt the user to optionally save benchmark results to a file."""
         if click.confirm(
             "Do you want to save the result after benchmark?", default=False
         ):
-            default_filename = f"./{self.name}_{option_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            default_filename = f"./{self.name}_{self.option_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
             default_filename = legal_file_name_of(default_filename)
             file_name = click.prompt(
                 "Enter file name to save the benchmark result",
@@ -294,15 +298,13 @@ class ConsumeAllLevelsBenchmark(BenchmarkBase):
             try:
                 with open(file_name, "w") as f:
                     f.writelines(
-                        ",".join(map(str, row)) + "\n" for row in lat_table
+                        ",".join(map(str, row)) + "\n" for row in self.lat_table
                     )
                 logger.info(f"Benchmark result saved to {file_name}.")
             except Exception as e:
                 logger.error(f"Failed to save benchmark result: {e}")
         else:
             logger.info("Benchmark result not saved.")
-
-        return benchmark_result
 
 
 if __name__ == "__main__":

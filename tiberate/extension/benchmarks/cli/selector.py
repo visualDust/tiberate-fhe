@@ -231,6 +231,8 @@ def main():
                 f"Failed to run benchmark {app._selected_bench.name}: {e}"
             )
             raise e
+        finally:
+            app._selected_bench.post_run(result)
 
 
 if __name__ == "__main__":
