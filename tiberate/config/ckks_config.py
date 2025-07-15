@@ -142,8 +142,8 @@ class CkksConfig:
                     num_scales += 1
                     available_bits -= math.log2(scale_primes[num_scales])
 
-            self.num_scales = num_scales
-            self.q = scale_primes[:num_scales] + base_special_primes
+                self.num_scales = num_scales
+            self.q = scale_primes[: self.num_scales] + base_special_primes
         except IndexError:
             raise errors.NotEnoughPrimes(scale_bits=self.scale_bits, N=self.N)
 
