@@ -212,6 +212,8 @@ def main():
         logger.info(
             f"Running Benchmark: {app._selected_bench.name} | Option: {app._selected_option}]"
         )
+        error_flag = False
+        result = None
         try:
             result = app._selected_bench.run(app._selected_option)
             logger.success(f"Benchmark {app._selected_bench.name} completed.")
@@ -230,9 +232,11 @@ def main():
             logger.error(
                 f"Failed to run benchmark {app._selected_bench.name}: {e}"
             )
+            error_flag = True
             raise e
         finally:
-            app._selected_bench.post_run(result)
+            if not error_flag:
+                app._selected_bench.post_run(result)
 
 
 if __name__ == "__main__":
