@@ -1,5 +1,6 @@
 #include "mont_extra_cuda.h"
 #include "../../extensions.cuh"
+#include "constant_mem.cuh"
 #include "mont_scalar_kernel.cuh"
 
 // ------------------------------------------------------------------

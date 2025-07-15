@@ -5,7 +5,7 @@ from tiberate.context.constant_mem_context import (
     TensorConstLayout,
     TensorEntry,
     read_constant_chunk,
-    upload_constant_2qRsQlQhKlKhNinv,
+    upload_constant_2qQlQhKlKhRsNinv,
 )
 
 
@@ -112,7 +112,7 @@ def test_upload_constants_2qRsQlQhKlKhNinv(gravity: str):
     kh_list = make_rand_tensors(torch.cuda.device_count())
     Ninv_list = make_rand_tensors(torch.cuda.device_count())
 
-    upload_constant_2qRsQlQhKlKhNinv(
+    upload_constant_2qQlQhKlKhRsNinv(
         _2q=_2q_list,
         Rs=Rs_list,
         ql=ql_list,

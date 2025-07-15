@@ -4,7 +4,7 @@ from loguru import logger
 
 from tiberate.config.ckks_config import CkksConfig
 from tiberate.context.constant_mem_context import (
-    upload_constant_2qRsQlQhKlKhNinv,
+    upload_constant_2qQlQhKlKhRsNinv,
 )
 from tiberate.context.mont_context import MontgomeryContext
 from tiberate.context.rns_partition import RnsPartition
@@ -221,16 +221,16 @@ class NTTContext:
 
         self.generate_parts_pack()
         self.pre_package()
-        self.upload_constants()
 
     def upload_constants(self):
-        self.constant_mem_plans = upload_constant_2qRsQlQhKlKhNinv(
+        self.constant_mem_plans = upload_constant_2qQlQhKlKhRsNinv(
             _2q=self._2q,
-            Rs=self.Rs,
             ql=self.ql,
             qh=self.qh,
             kl=self.kl,
             kh=self.kh,
+            Rs=self.Rs,
+            Rs_scale=self.Rs_scale,
             Ninv=self.Ninv,
             gravity="right",
             verbose=True,
@@ -258,22 +258,28 @@ class NTTContext:
 
         return v_special
 
+    # def psi_enter(self):
+    #     Rs = self.Rs
+    #     ql = self.ql
+    #     qh = self.qh
+    #     kl = self.kl
+    #     kh = self.kh
+
+    #     p = self.psi
+
+    #     a = [psi.view(psi.size(0), -1) for psi in p]
+
+    #     mont_ops.mont_enter(a, Rs, ql, qh, kl, kh)
+
+    #     p = self.ipsi
+    #     a = [psi.view(psi.size(0), -1) for psi in p]
+    #     mont_ops.mont_enter(a, Rs, ql, qh, kl, kh)
+
     def psi_enter(self):
-        Rs = self.Rs
-        ql = self.ql
-        qh = self.qh
-        kl = self.kl
-        kh = self.kh
-
-        p = self.psi
-
-        a = [psi.view(psi.size(0), -1) for psi in p]
-
-        mont_ops.mont_enter(a, Rs, ql, qh, kl, kh)
-
-        p = self.ipsi
-        a = [psi.view(psi.size(0), -1) for psi in p]
-        mont_ops.mont_enter(a, Rs, ql, qh, kl, kh)
+        a = [psi.view(psi.size(0), -1) for psi in self.psi]
+        mont_ops.mont_enter_Rs(a, 0)
+        a = [ipsi.view(ipsi.size(0), -1) for ipsi in self.ipsi]
+        mont_ops.mont_enter_Rs(a, 0)
 
     def Ninv_enter(self):
         self.Ninv = [
@@ -325,6 +331,8 @@ class NTTContext:
 
         self.Ninv_enter()
         self.Ninv = self.partition_variable(self.Ninv)
+
+        self.upload_constants()  # upload constants to GPU after parameters are prepared.
 
         self.psi_enter()
 
@@ -706,29 +714,36 @@ class NTTContext:
     # -------------------------------------------------------------------------------------------------
 
     def mont_enter(self, a, lvl=0, mult_type=-1, part=0):
-        mont_ops.mont_enter(
+        mont_ops.mont_enter_Rs(
             a,
-            self.Rs_prepack[mult_type][lvl][part],
-            *self.mont_prepack[mult_type][lvl][part],
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
         )
 
     def mont_enter_scale(self, a, lvl=0, mult_type=-1, part=0):
-        mont_ops.mont_enter(
+        mont_ops.mont_enter_Rs_scale(
             a,
-            self.Rs_scale_prepack[mult_type][lvl][part],
-            *self.mont_prepack[mult_type][lvl][part],
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
         )
 
     def mont_enter_scalar(self, a, b, lvl=0, mult_type=-1, part=0):
-        mont_ops.mont_enter(a, b, *self.mont_prepack[mult_type][lvl][part])
+        mont_ops.mont_enter_scalar(
+            a,
+            b,
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
+        )
 
     def mont_mult(self, a, b, lvl=0, mult_type=-1, part=0):
         return mont_ops.mont_mult(
-            a, b, *self.mont_prepack[mult_type][lvl][part]
+            a,
+            b,
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
         )
 
     def mont_reduce(self, a, lvl=0, mult_type=-1, part=0):
-        mont_ops.mont_reduce(a, *self.mont_prepack[mult_type][lvl][part])
+        mont_ops.mont_reduce(
+            a,
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
+        )
 
     def reduce_2q(self, a, lvl=0, mult_type=-1, part=0):
         mont_ops.reduce_2q(a, self._2q_prepack[mult_type][lvl][part])

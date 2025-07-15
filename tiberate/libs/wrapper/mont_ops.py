@@ -90,7 +90,7 @@ def mont_enter(
     Python wrapper for the 'tiberate_mont_ops::mont_enter' custom operator.
 
     Args:
-    a: list[torch.Tensor] (modified in-place)
+    a: list[torch.Tensor]
     Rs: list[torch.Tensor]
     ql: list[torch.Tensor]
     qh: list[torch.Tensor]
@@ -100,6 +100,32 @@ def mont_enter(
         None
     """
     torch.ops.tiberate_mont_ops.mont_enter(a, Rs, ql, qh, kl, kh)
+
+
+def mont_enter_Rs(a: list[torch.Tensor], sp_prime_len: int) -> None:
+    """
+    Python wrapper for the 'tiberate_mont_ops::mont_enter_Rs' custom operator.
+
+    Args:
+    a: list[torch.Tensor] (modified in-place)
+    sp_prime_len: int
+    Returns:
+        None
+    """
+    torch.ops.tiberate_mont_ops.mont_enter_Rs(a, sp_prime_len)
+
+
+def mont_enter_Rs_scale(a: list[torch.Tensor], sp_prime_len: int) -> None:
+    """
+    Python wrapper for the 'tiberate_mont_ops::mont_enter_Rs_scale' custom operator.
+
+    Args:
+    a: list[torch.Tensor] (modified in-place)
+    sp_prime_len: int
+    Returns:
+        None
+    """
+    torch.ops.tiberate_mont_ops.mont_enter_Rs_scale(a, sp_prime_len)
 
 
 def mont_enter_reduce_2q(
@@ -130,13 +156,24 @@ def mont_enter_reduce_2q(
     )
 
 
+def mont_enter_scalar(
+    a: list[torch.Tensor], b: list[torch.Tensor], sp_prime_len: int
+) -> None:
+    """
+    Python wrapper for the 'tiberate_mont_ops::mont_enter_scalar' custom operator.
+
+    Args:
+    a: list[torch.Tensor] (modified in-place)
+    b: list[torch.Tensor]
+    sp_prime_len: int
+    Returns:
+        None
+    """
+    torch.ops.tiberate_mont_ops.mont_enter_scalar(a, b, sp_prime_len)
+
+
 def mont_mult(
-    a: list[torch.Tensor],
-    b: list[torch.Tensor],
-    ql: list[torch.Tensor],
-    qh: list[torch.Tensor],
-    kl: list[torch.Tensor],
-    kh: list[torch.Tensor],
+    a: list[torch.Tensor], b: list[torch.Tensor], sp_prime_len: int
 ) -> list[torch.Tensor]:
     """
     Python wrapper for the 'tiberate_mont_ops::mont_mult' custom operator.
@@ -144,36 +181,24 @@ def mont_mult(
     Args:
     a: list[torch.Tensor]
     b: list[torch.Tensor]
-    ql: list[torch.Tensor]
-    qh: list[torch.Tensor]
-    kl: list[torch.Tensor]
-    kh: list[torch.Tensor]
+    sp_prime_len: int
     Returns:
         list[torch.Tensor]
     """
-    return torch.ops.tiberate_mont_ops.mont_mult(a, b, ql, qh, kl, kh)
+    return torch.ops.tiberate_mont_ops.mont_mult(a, b, sp_prime_len)
 
 
-def mont_reduce(
-    a: list[torch.Tensor],
-    ql: list[torch.Tensor],
-    qh: list[torch.Tensor],
-    kl: list[torch.Tensor],
-    kh: list[torch.Tensor],
-) -> None:
+def mont_reduce(a: list[torch.Tensor], sp_prime_len: int) -> None:
     """
     Python wrapper for the 'tiberate_mont_ops::mont_reduce' custom operator.
 
     Args:
     a: list[torch.Tensor] (modified in-place)
-    ql: list[torch.Tensor]
-    qh: list[torch.Tensor]
-    kl: list[torch.Tensor]
-    kh: list[torch.Tensor]
+    sp_prime_len: int
     Returns:
         None
     """
-    torch.ops.tiberate_mont_ops.mont_reduce(a, ql, qh, kl, kh)
+    torch.ops.tiberate_mont_ops.mont_reduce(a, sp_prime_len)
 
 
 def mont_reduce_add_many_3d(

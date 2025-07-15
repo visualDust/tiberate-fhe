@@ -123,13 +123,14 @@ def make_padded(t: torch.Tensor, length: int, pad_left: bool) -> torch.Tensor:
     return padded
 
 
-def upload_constant_2qRsQlQhKlKhNinv(
+def upload_constant_2qQlQhKlKhRsNinv(
     _2q: list[torch.Tensor],  # [2q_dev0, 2q_dev1, ...]
-    Rs: list[torch.Tensor],  # [Rs_dev0, Rs_dev1, ...]
     ql: list[torch.Tensor],
     qh: list[torch.Tensor],
     kl: list[torch.Tensor],
     kh: list[torch.Tensor],
+    Rs: list[torch.Tensor],  # [Rs_dev0, Rs_dev1, ...]
+    Rs_scale: list[torch.Tensor],  # [Rs_dev0, Rs_dev1, ...]
     Ninv: list[torch.Tensor],
     gravity: LayoutGravity = "right",
     verbose: bool = False,
@@ -137,7 +138,7 @@ def upload_constant_2qRsQlQhKlKhNinv(
     """
         Upload constants to constant memory across multiple devices.
 
-        Args: _2q, Rs, ql, qh, kl, kh, Ninv: Lists of tensors for each device.
+        Args: _2q, ql, qh, kl, kh, Rs, Rs_scale Ninv: Lists of tensors for each device.
                 layout: "left" or "right" for constant memory layout.
 
         Raises:
@@ -184,19 +185,28 @@ def upload_constant_2qRsQlQhKlKhNinv(
         # should be on the same device
         if not all(
             t.device.index == dev_id
-            for t in [_2q[i], Rs[i], ql[i], qh[i], kl[i], kh[i], Ninv[i]]
+            for t in [
+                _2q[i],
+                ql[i],
+                qh[i],
+                kl[i],
+                kh[i],
+                Rs[i],
+                Rs_scale[i],
+                Ninv[i],
+            ]
         ):
             raise ValueError(f"All tensors must be on the same device {i}")
         # should have the same shape
         if not all(
             t.shape == _2q[i].shape
-            for t in [Rs[i], ql[i], qh[i], kl[i], kh[i], Ninv[i]]
+            for t in [ql[i], qh[i], kl[i], kh[i], Rs[i], Rs_scale[i], Ninv[i]]
         ):
             raise ValueError("All tensors must have the same shape")
         # should be on the same dtype
         if not all(
             t.dtype == _2q[i].dtype
-            for t in [Rs[i], ql[i], qh[i], kl[i], kh[i], Ninv[i]]
+            for t in [ql[i], qh[i], kl[i], kh[i], Rs[i], Rs_scale[i], Ninv[i]]
         ):
             raise ValueError("All tensors must have the same dtype")
         pad_left = gravity == "right"  # Right layout -> pad 0 on the left side
@@ -204,10 +214,6 @@ def upload_constant_2qRsQlQhKlKhNinv(
             TensorEntry(
                 make_padded(_2q[i], REGION_LEN, pad_left),
                 "_2q",
-            ),
-            TensorEntry(
-                make_padded(Rs[i], REGION_LEN, pad_left),
-                "Rs",
             ),
             TensorEntry(
                 make_padded(ql[i], REGION_LEN, pad_left),
@@ -224,6 +230,14 @@ def upload_constant_2qRsQlQhKlKhNinv(
             TensorEntry(
                 make_padded(kh[i], REGION_LEN, pad_left),
                 "kh",
+            ),
+            TensorEntry(
+                make_padded(Rs[i], REGION_LEN, pad_left),
+                "Rs",
+            ),
+            TensorEntry(
+                make_padded(Rs_scale[i], REGION_LEN, pad_left),
+                "Rs_scale",
             ),
             TensorEntry(
                 make_padded(Ninv[i], REGION_LEN, pad_left),

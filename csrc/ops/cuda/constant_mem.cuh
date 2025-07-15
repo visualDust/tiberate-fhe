@@ -19,12 +19,13 @@ enum ConstantMemoryGravity { Left = 0, Right = 1 };
 // ===================================================================
 
 #define _2Q_CONST_IDX 0
-#define RS_CONST_IDX 1
-#define QL_CONST_IDX 2
-#define QH_CONST_IDX 3
-#define KL_CONST_IDX 4
-#define KH_CONST_IDX 5
-#define NINV_CONST_IDX 6
+#define QL_CONST_IDX 1
+#define QH_CONST_IDX 2
+#define KL_CONST_IDX 3
+#define KH_CONST_IDX 4
+#define RS_CONST_IDX 5
+#define RS_SCALE_CONST_IDX 6
+#define NINV_CONST_IDX 7
 // 128 elements per region with dtype int64_t/int32_t
 #define CONST_MEM_REGION_LEN 64
 

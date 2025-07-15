@@ -1,6 +1,7 @@
 #include "mont_cuda.h"
 #include <c10/cuda/CUDAStream.h>
 #include "../../extensions.cuh"
+#include "constant_mem.cuh"
 #include "mont_scalar_kernel.cuh"
 
 //------------------------------------------------------------------
@@ -12,10 +13,7 @@ __global__ void mont_mult_cuda_kernel(
     const TensorAcc32Restrict<scalar_t, 2> a_acc,
     const TensorAcc32Restrict<scalar_t, 2> b_acc,
     TensorAcc32Restrict<scalar_t, 2> out_acc,
-    const TensorAcc32Restrict<scalar_t, 1> ql_acc,
-    const TensorAcc32Restrict<scalar_t, 1> qh_acc,
-    const TensorAcc32Restrict<scalar_t, 1> kl_acc,
-    const TensorAcc32Restrict<scalar_t, 1> kh_acc) {
+    const int sp_prime_len) {
   // Indexing
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
@@ -23,10 +21,15 @@ __global__ void mont_mult_cuda_kernel(
   // Inputs.
   const scalar_t a = a_acc[i][j];
   const scalar_t b = b_acc[i][j];
-  const scalar_t ql = ql_acc[i];
-  const scalar_t qh = qh_acc[i];
-  const scalar_t kl = kl_acc[i];
-  const scalar_t kh = kh_acc[i];
+
+  // Montgomery constants.
+  const int prime_offset = -gridDim.x - sp_prime_len + i;
+  const scalar_t* const_mem_2q =
+      get_const_ptr_gright<scalar_t>(0, prime_offset);
+  const scalar_t ql = const_mem_2q[-QL_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t qh = const_mem_2q[-QH_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t kl = const_mem_2q[-KL_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t kh = const_mem_2q[-KH_CONST_IDX * CONST_MEM_REGION_LEN];
 
   // Store the result.
   out_acc[i][j] = mont_mult_scalar_cuda_kernel(a, b, ql, qh, kl, kh);
@@ -36,10 +39,7 @@ template <typename scalar_t>
 void mont_mult_cuda_typed(const torch::Tensor a,
                           const torch::Tensor b,
                           torch::Tensor out,
-                          const torch::Tensor ql,
-                          const torch::Tensor qh,
-                          const torch::Tensor kl,
-                          const torch::Tensor kh) {
+                          const int sp_prime_len) {
   // Retrieve the device index, then set the corresponding device and stream.
   auto device_id = a.device().index();
   cudaSetDevice(device_id);
@@ -58,34 +58,215 @@ void mont_mult_cuda_typed(const torch::Tensor a,
   const auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
   const auto b_acc = makeAcc32Restrict(b, scalar_t, 2);
   auto out_acc = makeAcc32Restrict(out, scalar_t, 2);
-  const auto ql_acc = makeAcc32Restrict(ql, scalar_t, 1);
-  const auto qh_acc = makeAcc32Restrict(qh, scalar_t, 1);
-  const auto kl_acc = makeAcc32Restrict(kl, scalar_t, 1);
-  const auto kh_acc = makeAcc32Restrict(kh, scalar_t, 1);
-  mont_mult_cuda_kernel<scalar_t><<<dim_grid, dim_block, 0, stream>>>(
-      a_acc, b_acc, out_acc, ql_acc, qh_acc, kl_acc, kh_acc);
+  mont_mult_cuda_kernel<scalar_t>
+      <<<dim_grid, dim_block, 0, stream>>>(a_acc, b_acc, out_acc, sp_prime_len);
 }
 
 torch::Tensor mont_mult_cuda(const torch::Tensor a,
                              const torch::Tensor b,
-                             const torch::Tensor ql,
-                             const torch::Tensor qh,
-                             const torch::Tensor kl,
-                             const torch::Tensor kh) {
+                             const int64_t sp_prime_len) {
+  const int prime_len_int = static_cast<int>(sp_prime_len);
   // Prepare the output.
   torch::Tensor out = torch::empty_like(a);
 
   // Dispatch to the correct data type.
   AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_mont_mult_cuda", ([&] {
                                mont_mult_cuda_typed<scalar_t>(
-                                   a, b, out, ql, qh, kl, kh);
+                                   a, b, out, prime_len_int);
                              }));
 
   return out;
 }
 
 //------------------------------------------------------------------
-// mont enter
+// mont_enter_scalar
+//------------------------------------------------------------------
+
+template <typename scalar_t>
+__global__ void mont_enter_scalar_cuda_kernel(
+    TensorAcc32Restrict<scalar_t, 2> a_acc,
+    const TensorAcc32Restrict<scalar_t, 1> b_acc,
+    const int sp_prime_len) {
+  // Indexing
+  const int i = blockIdx.x;
+  const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
+
+  // Inputs.
+  scalar_t& a = a_acc[i][j];
+  const scalar_t b = b_acc[i];
+
+  // Montgomery constants.
+  const int prime_offset = -gridDim.x - sp_prime_len + i;
+  const scalar_t* const_mem_2q =
+      get_const_ptr_gright<scalar_t>(0, prime_offset);
+  const scalar_t ql = const_mem_2q[-QL_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t qh = const_mem_2q[-QH_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t kl = const_mem_2q[-KL_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t kh = const_mem_2q[-KH_CONST_IDX * CONST_MEM_REGION_LEN];
+
+  // Store the result.
+  a = mont_mult_scalar_cuda_kernel(a, b, ql, qh, kl, kh);
+}
+
+template <typename scalar_t>
+void mont_enter_scalar_cuda_typed(torch::Tensor a,
+                                  const torch::Tensor b,
+                                  const int sp_prime_len) {
+  // Retrieve the device index, then set the corresponding device and stream.
+  auto device_id = a.device().index();
+  cudaSetDevice(device_id);
+
+  // Use a preallocated pytorch stream.
+  auto stream = at::cuda::getCurrentCUDAStream(device_id);
+
+  // The problem dimension.
+  auto C = a.size(0);
+  auto N = a.size(1);
+
+  int dim_block = BLOCK_SIZE;
+  dim3 dim_grid(C, N / BLOCK_SIZE);
+
+  // Run the cuda kernel.
+  auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
+  const auto b_acc = makeAcc32Restrict(b, scalar_t, 1);
+  mont_enter_scalar_cuda_kernel<scalar_t>
+      <<<dim_grid, dim_block, 0, stream>>>(a_acc, b_acc, sp_prime_len);
+}
+
+void mont_enter_scalar_cuda(torch::Tensor a,
+                            const torch::Tensor b,
+                            const int64_t sp_prime_len) {
+  const int prime_len_int = static_cast<int>(sp_prime_len);
+  // Dispatch to the correct data type.
+  AT_DISPATCH_INTEGRAL_TYPES(
+      a.scalar_type(), "typed_mont_mult_inplace_cuda", ([&] {
+        mont_enter_scalar_cuda_typed<scalar_t>(a, b, prime_len_int);
+      }));
+}
+
+//------------------------------------------------------------------
+// mont enter Rs
+//------------------------------------------------------------------
+
+template <typename scalar_t>
+__global__ void mont_enter_Rs_cuda_kernel(
+    TensorAcc32Restrict<scalar_t, 2> a_acc, const int sp_prime_len) {
+  // Indexing
+  const int i = blockIdx.x;
+  const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
+
+  // Inputs.
+  const scalar_t a = a_acc[i][j];
+
+  // Montgomery constants.
+  const int prime_offset = -gridDim.x - sp_prime_len + i;
+  const scalar_t* const_mem_2q =
+      get_const_ptr_gright<scalar_t>(0, prime_offset);
+  const scalar_t Rs = const_mem_2q[-RS_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t ql = const_mem_2q[-QL_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t qh = const_mem_2q[-QH_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t kl = const_mem_2q[-KL_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t kh = const_mem_2q[-KH_CONST_IDX * CONST_MEM_REGION_LEN];
+
+  // Store the result.
+  a_acc[i][j] = mont_mult_scalar_cuda_kernel(a, Rs, ql, qh, kl, kh);
+}
+
+template <typename scalar_t>
+void mont_enter_Rs_cuda_typed(torch::Tensor a, int sp_prime_len) {
+  // Retrieve the device index, then set the corresponding device and stream.
+  auto device_id = a.device().index();
+  cudaSetDevice(device_id);
+
+  // Use a preallocated pytorch stream.
+  auto stream = at::cuda::getCurrentCUDAStream(device_id);
+
+  // The problem dimension.
+  auto C = a.size(0);
+  auto N = a.size(1);
+
+  int dim_block = BLOCK_SIZE;
+  dim3 dim_grid(C, N / BLOCK_SIZE);
+
+  // Run the cuda kernel.
+  auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
+
+  mont_enter_Rs_cuda_kernel<scalar_t>
+      <<<dim_grid, dim_block, 0, stream>>>(a_acc, sp_prime_len);
+}
+
+void mont_enter_Rs_cuda(torch::Tensor a, const int64_t sp_prime_len) {
+  const int prime_len_int = static_cast<int>(sp_prime_len);
+  // Dispatch to the correct data type.
+  AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_mont_enter_Rs_cuda", ([&] {
+                               mont_enter_Rs_cuda_typed<scalar_t>(
+                                   a, prime_len_int);
+                             }));
+}
+
+//------------------------------------------------------------------
+// mont enter Rs scale
+//------------------------------------------------------------------
+
+template <typename scalar_t>
+__global__ void mont_enter_Rs_scale_cuda_kernel(
+    TensorAcc32Restrict<scalar_t, 2> a_acc, const int sp_prime_len) {
+  // Indexing
+  const int i = blockIdx.x;
+  const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
+
+  // Inputs.
+  const scalar_t a = a_acc[i][j];
+
+  // Montgomery constants.
+  const int prime_offset = -gridDim.x - sp_prime_len + i;
+  const scalar_t* const_mem_2q =
+      get_const_ptr_gright<scalar_t>(0, prime_offset);
+  const scalar_t Rs_scale =
+      const_mem_2q[-RS_SCALE_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t ql = const_mem_2q[-QL_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t qh = const_mem_2q[-QH_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t kl = const_mem_2q[-KL_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t kh = const_mem_2q[-KH_CONST_IDX * CONST_MEM_REGION_LEN];
+
+  // Store the result.
+  a_acc[i][j] = mont_mult_scalar_cuda_kernel(a, Rs_scale, ql, qh, kl, kh);
+}
+
+template <typename scalar_t>
+void mont_enter_Rs_scale_cuda_typed(torch::Tensor a, int sp_prime_len) {
+  // Retrieve the device index, then set the corresponding device and stream.
+  auto device_id = a.device().index();
+  cudaSetDevice(device_id);
+
+  // Use a preallocated pytorch stream.
+  auto stream = at::cuda::getCurrentCUDAStream(device_id);
+
+  // The problem dimension.
+  auto C = a.size(0);
+  auto N = a.size(1);
+
+  int dim_block = BLOCK_SIZE;
+  dim3 dim_grid(C, N / BLOCK_SIZE);
+
+  // Run the cuda kernel.
+  auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
+
+  mont_enter_Rs_scale_cuda_kernel<scalar_t>
+      <<<dim_grid, dim_block, 0, stream>>>(a_acc, sp_prime_len);
+}
+
+void mont_enter_Rs_scale_cuda(torch::Tensor a, const int64_t sp_prime_len) {
+  const int prime_len_int = static_cast<int>(sp_prime_len);
+  // Dispatch to the correct data type.
+  AT_DISPATCH_INTEGRAL_TYPES(
+      a.scalar_type(), "typed_mont_enter_Rs_scale_cuda", ([&] {
+        mont_enter_Rs_scale_cuda_typed<scalar_t>(a, prime_len_int);
+      }));
+}
+
+//------------------------------------------------------------------
+// mont enter legacy support
 //------------------------------------------------------------------
 
 template <typename scalar_t>
@@ -158,6 +339,63 @@ void mont_enter_cuda(torch::Tensor a,
 }
 
 //------------------------------------------------------------------
+// mont reduce
+//------------------------------------------------------------------
+
+template <typename scalar_t>
+__global__ void mont_reduce_cuda_kernel(TensorAcc32Restrict<scalar_t, 2> a_acc,
+                                        const int sp_prime_len) {
+  // Indexing
+  const int i = blockIdx.x;
+  const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
+
+  // Inputs.
+  const scalar_t x = a_acc[i][j];
+  // Montgomery constants.
+  const int prime_offset = -gridDim.x - sp_prime_len + i;
+  const scalar_t* const_mem_2q =
+      get_const_ptr_gright<scalar_t>(0, prime_offset);
+  const scalar_t ql = const_mem_2q[-QL_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t qh = const_mem_2q[-QH_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t kl = const_mem_2q[-KL_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t kh = const_mem_2q[-KH_CONST_IDX * CONST_MEM_REGION_LEN];
+
+  a_acc[i][j] = mont_reduce_scalar_cuda_kernel(x, ql, qh, kl, kh);
+}
+
+template <typename scalar_t>
+void mont_reduce_cuda_typed(torch::Tensor a, const int sp_prime_len) {
+  // Retrieve the device index, then set the corresponding device and stream.
+  auto device_id = a.device().index();
+  cudaSetDevice(device_id);
+
+  // Use a preallocated pytorch stream.
+  auto stream = at::cuda::getCurrentCUDAStream(device_id);
+
+  // The problem dimension.
+  auto C = a.size(0);
+  auto N = a.size(1);
+
+  int dim_block = BLOCK_SIZE;
+  dim3 dim_grid(C, N / BLOCK_SIZE);
+
+  // Run the cuda kernel.
+  auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
+
+  mont_reduce_cuda_kernel<scalar_t>
+      <<<dim_grid, dim_block, 0, stream>>>(a_acc, sp_prime_len);
+}
+
+void mont_reduce_cuda(torch::Tensor a, const int64_t sp_prime_len) {
+  const int prime_len_int = static_cast<int>(sp_prime_len);
+  // Dispatch to the correct data type.
+  AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_mont_reduce_cuda", ([&] {
+                               mont_reduce_cuda_typed<scalar_t>(a,
+                                                                prime_len_int);
+                             }));
+}
+
+//------------------------------------------------------------------
 // reduce 2q
 //------------------------------------------------------------------
 
@@ -206,71 +444,8 @@ void reduce_2q_cuda(torch::Tensor a, const torch::Tensor _2q) {
 }
 
 //------------------------------------------------------------------
-// mont reduce
+// mont_add
 //------------------------------------------------------------------
-
-template <typename scalar_t>
-__global__ void mont_reduce_cuda_kernel(
-    TensorAcc32Restrict<scalar_t, 2> a_acc,
-    const TensorAcc32Restrict<scalar_t, 1> ql_acc,
-    const TensorAcc32Restrict<scalar_t, 1> qh_acc,
-    const TensorAcc32Restrict<scalar_t, 1> kl_acc,
-    const TensorAcc32Restrict<scalar_t, 1> kh_acc) {
-  // Indexing
-  const int i = blockIdx.x;
-  const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
-
-  // Inputs.
-  const scalar_t x = a_acc[i][j];
-  const scalar_t ql = ql_acc[i];
-  const scalar_t qh = qh_acc[i];
-  const scalar_t kl = kl_acc[i];
-  const scalar_t kh = kh_acc[i];
-
-  a_acc[i][j] = mont_reduce_scalar_cuda_kernel(x, ql, qh, kl, kh);
-}
-
-template <typename scalar_t>
-void mont_reduce_cuda_typed(torch::Tensor a,
-                            const torch::Tensor ql,
-                            const torch::Tensor qh,
-                            const torch::Tensor kl,
-                            const torch::Tensor kh) {
-  // Retrieve the device index, then set the corresponding device and stream.
-  auto device_id = a.device().index();
-  cudaSetDevice(device_id);
-
-  // Use a preallocated pytorch stream.
-  auto stream = at::cuda::getCurrentCUDAStream(device_id);
-
-  // The problem dimension.
-  auto C = a.size(0);
-  auto N = a.size(1);
-
-  int dim_block = BLOCK_SIZE;
-  dim3 dim_grid(C, N / BLOCK_SIZE);
-
-  // Run the cuda kernel.
-  auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
-  const auto ql_acc = makeAcc32Restrict(ql, scalar_t, 1);
-  const auto qh_acc = makeAcc32Restrict(qh, scalar_t, 1);
-  const auto kl_acc = makeAcc32Restrict(kl, scalar_t, 1);
-  const auto kh_acc = makeAcc32Restrict(kh, scalar_t, 1);
-  mont_reduce_cuda_kernel<scalar_t><<<dim_grid, dim_block, 0, stream>>>(
-      a_acc, ql_acc, qh_acc, kl_acc, kh_acc);
-}
-
-void mont_reduce_cuda(torch::Tensor a,
-                      const torch::Tensor ql,
-                      const torch::Tensor qh,
-                      const torch::Tensor kl,
-                      const torch::Tensor kh) {
-  // Dispatch to the correct data type.
-  AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_mont_reduce_cuda", ([&] {
-                               mont_reduce_cuda_typed<scalar_t>(
-                                   a, ql, qh, kl, kh);
-                             }));
-}
 
 template <typename scalar_t>
 __global__ void mont_add_cuda_kernel(
@@ -316,6 +491,20 @@ void mont_add_cuda_typed(const torch::Tensor a,
       <<<dim_grid, dim_block, 0, stream>>>(out_acc, a_acc, b_acc, _2q_acc);
 }
 
+torch::Tensor mont_add_cuda(const torch::Tensor a,
+                            const torch::Tensor b,
+                            const torch::Tensor _2q) {
+  torch::Tensor out = torch::empty_like(a);
+  AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_mont_add_cuda", ([&] {
+                               mont_add_cuda_typed<scalar_t>(a, b, out, _2q);
+                             }));
+  return out;
+}
+
+// ------------------------------------------------------------------
+// mont_sub
+//------------------------------------------------------------------
+
 template <typename scalar_t>
 __global__ void mont_sub_cuda_kernel(
     TensorAcc32Restrict<scalar_t, 2> out_acc,
@@ -358,16 +547,6 @@ void mont_sub_cuda_typed(const torch::Tensor a,
   const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
   mont_sub_cuda_kernel<scalar_t>
       <<<dim_grid, dim_block, 0, stream>>>(out_acc, a_acc, b_acc, _2q_acc);
-}
-
-torch::Tensor mont_add_cuda(const torch::Tensor a,
-                            const torch::Tensor b,
-                            const torch::Tensor _2q) {
-  torch::Tensor out = torch::empty_like(a);
-  AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_mont_add_cuda", ([&] {
-                               mont_add_cuda_typed<scalar_t>(a, b, out, _2q);
-                             }));
-  return out;
 }
 
 torch::Tensor mont_sub_cuda(const torch::Tensor a,

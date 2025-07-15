@@ -6,20 +6,41 @@
 
 std::vector<torch::Tensor> mont_mult(const std::vector<torch::Tensor> a,
                                      const std::vector<torch::Tensor> b,
-                                     const std::vector<torch::Tensor> ql,
-                                     const std::vector<torch::Tensor> qh,
-                                     const std::vector<torch::Tensor> kl,
-                                     const std::vector<torch::Tensor> kh) {
+                                     const int64_t sp_prime_len) {
   std::vector<torch::Tensor> outputs;
 
   const auto num_devices = a.size();
   for (size_t i = 0; i < num_devices; ++i) {
-    auto c = mont_mult_cuda(a[i], b[i], ql[i], qh[i], kl[i], kh[i]);
+    auto c = mont_mult_cuda(a[i], b[i], sp_prime_len);
 
     outputs.push_back(c);
   }
 
   return outputs;
+}
+
+void mont_enter_scalar(std::vector<torch::Tensor> a,
+                       const std::vector<torch::Tensor> b,
+                       const int64_t sp_prime_len) {
+  const auto num_devices = a.size();
+  for (size_t i = 0; i < num_devices; ++i) {
+    mont_enter_scalar_cuda(a[i], b[i], sp_prime_len);
+  }
+}
+
+void mont_enter_Rs(std::vector<torch::Tensor> a, const int64_t sp_prime_len) {
+  const auto num_devices = a.size();
+  for (size_t i = 0; i < num_devices; ++i) {
+    mont_enter_Rs_cuda(a[i], sp_prime_len);
+  }
+}
+
+void mont_enter_Rs_scale(std::vector<torch::Tensor> a,
+                         const int64_t sp_prime_len) {
+  const auto num_devices = a.size();
+  for (size_t i = 0; i < num_devices; ++i) {
+    mont_enter_Rs_scale_cuda(a[i], sp_prime_len);
+  }
 }
 
 void mont_enter(std::vector<torch::Tensor> a,
@@ -34,14 +55,10 @@ void mont_enter(std::vector<torch::Tensor> a,
   }
 }
 
-void mont_reduce(std::vector<torch::Tensor> a,
-                 const std::vector<torch::Tensor> ql,
-                 const std::vector<torch::Tensor> qh,
-                 const std::vector<torch::Tensor> kl,
-                 const std::vector<torch::Tensor> kh) {
+void mont_reduce(std::vector<torch::Tensor> a, const int64_t sp_prime_len) {
   const auto num_devices = a.size();
   for (size_t i = 0; i < num_devices; ++i) {
-    mont_reduce_cuda(a[i], ql[i], qh[i], kl[i], kh[i]);
+    mont_reduce_cuda(a[i], sp_prime_len);
   }
 }
 
@@ -108,15 +125,15 @@ std::vector<torch::Tensor> tile_unsigned(std::vector<torch::Tensor> a,
 }
 
 TORCH_LIBRARY_FRAGMENT(tiberate_mont_ops, m) {
+  m.def("mont_mult(Tensor[] a, Tensor[] b, int sp_prime_len) -> Tensor[]");
   m.def(
-      "mont_mult(Tensor[] a, Tensor[] b, Tensor[] ql, Tensor[] qh, "
-      "Tensor[] kl, Tensor[] kh) -> Tensor[]");
+      "mont_enter_scalar(Tensor[](a!) a, Tensor[] b, int sp_prime_len) -> ()");
+  m.def("mont_enter_Rs(Tensor[](a!) a, int sp_prime_len) -> ()");
+  m.def("mont_enter_Rs_scale(Tensor[](a!) a, int sp_prime_len) -> ()");
   m.def(
-      "mont_enter(Tensor[](a!) a, Tensor[] Rs, Tensor[] ql, Tensor[] qh, "
+      "mont_enter(Tensor[] a, Tensor[] Rs, Tensor[] ql, Tensor[] qh, "
       "Tensor[] kl, Tensor[] kh) -> ()");
-  m.def(
-      "mont_reduce(Tensor[](a!) a, Tensor[] ql, Tensor[] qh, "
-      "Tensor[] kl, Tensor[] kh) -> ()");
+  m.def("mont_reduce(Tensor[](a!) a, int sp_prime_len) -> ()");
   m.def("mont_add(Tensor[] a, Tensor[] b, Tensor[] _2q) -> Tensor[]");
   m.def("mont_sub(Tensor[] a, Tensor[] b, Tensor[] _2q) -> Tensor[]");
   m.def("reduce_2q(Tensor[](a!) a, Tensor[] _2q) -> ()");
@@ -126,6 +143,9 @@ TORCH_LIBRARY_FRAGMENT(tiberate_mont_ops, m) {
 }
 TORCH_LIBRARY_IMPL(tiberate_mont_ops, CUDA, m) {
   m.impl("mont_mult", &mont_mult);
+  m.impl("mont_enter_scalar", &mont_enter_scalar);
+  m.impl("mont_enter_Rs", &mont_enter_Rs);
+  m.impl("mont_enter_Rs_scale", &mont_enter_Rs_scale);
   m.impl("mont_enter", &mont_enter);
   m.impl("mont_reduce", &mont_reduce);
   m.impl("mont_add", &mont_add);
