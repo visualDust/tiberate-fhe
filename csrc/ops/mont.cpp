@@ -64,7 +64,21 @@ void mont_reduce(std::vector<torch::Tensor> a, const int64_t sp_prime_len) {
 
 std::vector<torch::Tensor> mont_add(const std::vector<torch::Tensor> a,
                                     const std::vector<torch::Tensor> b,
-                                    const std::vector<torch::Tensor> _2q) {
+                                    const int64_t sp_prime_len) {
+  std::vector<torch::Tensor> outputs;
+
+  const auto num_devices = a.size();
+  for (size_t i = 0; i < num_devices; ++i) {
+    auto c = mont_add_cuda(a[i], b[i], sp_prime_len);
+    outputs.push_back(c);
+  }
+  return outputs;
+}
+
+std::vector<torch::Tensor> mont_add_legacy(
+    const std::vector<torch::Tensor> a,
+    const std::vector<torch::Tensor> b,
+    const std::vector<torch::Tensor> _2q) {
   std::vector<torch::Tensor> outputs;
 
   const auto num_devices = a.size();
@@ -77,38 +91,35 @@ std::vector<torch::Tensor> mont_add(const std::vector<torch::Tensor> a,
 
 std::vector<torch::Tensor> mont_sub(const std::vector<torch::Tensor> a,
                                     const std::vector<torch::Tensor> b,
-                                    const std::vector<torch::Tensor> _2q) {
+                                    const int64_t sp_prime_len) {
   std::vector<torch::Tensor> outputs;
 
   const auto num_devices = a.size();
   for (size_t i = 0; i < num_devices; ++i) {
-    auto c = mont_sub_cuda(a[i], b[i], _2q[i]);
+    auto c = mont_sub_cuda(a[i], b[i], sp_prime_len);
     outputs.push_back(c);
   }
   return outputs;
 }
 
-void reduce_2q(std::vector<torch::Tensor> a,
-               const std::vector<torch::Tensor> _2q) {
+void reduce_2q(std::vector<torch::Tensor> a, const int64_t sp_prime_len) {
   const auto num_devices = a.size();
   for (size_t i = 0; i < num_devices; ++i) {
-    reduce_2q_cuda(a[i], _2q[i]);
+    reduce_2q_cuda(a[i], sp_prime_len);
   }
 }
 
-void make_signed(std::vector<torch::Tensor> a,
-                 const std::vector<torch::Tensor> _2q) {
+void make_signed(std::vector<torch::Tensor> a, const int64_t sp_prime_len) {
   const auto num_devices = a.size();
   for (size_t i = 0; i < num_devices; ++i) {
-    make_signed_cuda(a[i], _2q[i]);
+    make_signed_cuda(a[i], sp_prime_len);
   }
 }
 
-void make_unsigned(std::vector<torch::Tensor> a,
-                   const std::vector<torch::Tensor> _2q) {
+void make_unsigned(std::vector<torch::Tensor> a, const int64_t sp_prime_len) {
   const auto num_devices = a.size();
   for (size_t i = 0; i < num_devices; ++i) {
-    make_unsigned_cuda(a[i], _2q[i]);
+    make_unsigned_cuda(a[i], sp_prime_len);
   }
 }
 
@@ -134,11 +145,12 @@ TORCH_LIBRARY_FRAGMENT(tiberate_mont_ops, m) {
       "mont_enter(Tensor[] a, Tensor[] Rs, Tensor[] ql, Tensor[] qh, "
       "Tensor[] kl, Tensor[] kh) -> ()");
   m.def("mont_reduce(Tensor[](a!) a, int sp_prime_len) -> ()");
-  m.def("mont_add(Tensor[] a, Tensor[] b, Tensor[] _2q) -> Tensor[]");
-  m.def("mont_sub(Tensor[] a, Tensor[] b, Tensor[] _2q) -> Tensor[]");
-  m.def("reduce_2q(Tensor[](a!) a, Tensor[] _2q) -> ()");
-  m.def("make_signed(Tensor[](a!) a, Tensor[] _2q) -> ()");
-  m.def("make_unsigned(Tensor[](a!) a, Tensor[] _2q) -> ()");
+  m.def("mont_add(Tensor[] a, Tensor[] b, int sp_prime_len) -> Tensor[]");
+  m.def("mont_add_legacy(Tensor[] a, Tensor[] b, Tensor[] _2q) -> Tensor[]");
+  m.def("mont_sub(Tensor[] a, Tensor[] b, int sp_prime_len) -> Tensor[]");
+  m.def("reduce_2q(Tensor[](a!) a, int sp_prime_len) -> ()");
+  m.def("make_signed(Tensor[](a!) a, int sp_prime_len) -> ()");
+  m.def("make_unsigned(Tensor[](a!) a, int sp_prime_len) -> ()");
   m.def("tile_unsigned(Tensor[] a, Tensor[] _2q) -> Tensor[]");
 }
 TORCH_LIBRARY_IMPL(tiberate_mont_ops, CUDA, m) {
@@ -149,6 +161,7 @@ TORCH_LIBRARY_IMPL(tiberate_mont_ops, CUDA, m) {
   m.impl("mont_enter", &mont_enter);
   m.impl("mont_reduce", &mont_reduce);
   m.impl("mont_add", &mont_add);
+  m.impl("mont_add_legacy", &mont_add_legacy);
   m.impl("mont_sub", &mont_sub);
   m.impl("reduce_2q", &reduce_2q);
   m.impl("make_signed", &make_signed);

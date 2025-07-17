@@ -9,7 +9,6 @@ from tiberate.context.constant_mem_context import (
 from tiberate.context.mont_context import MontgomeryContext
 from tiberate.context.rns_partition import RnsPartition
 from tiberate.libs.wrapper import (
-    he_ops,
     mont_ops,
     ntt2_ops,
 )
@@ -732,6 +731,13 @@ class NTTContext:
             self.ckksCfg.num_special_primes if mult_type == -1 else 0,
         )
 
+    def mont_enter_scalar_reduce_2q(self, a, b, lvl=0, mult_type=-1, part=0):
+        mont_ops.mont_enter_scalar_reduce_2q(
+            a,
+            b,
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
+        )
+
     def mont_mult(self, a, b, lvl=0, mult_type=-1, part=0):
         return mont_ops.mont_mult(
             a,
@@ -746,19 +752,36 @@ class NTTContext:
         )
 
     def reduce_2q(self, a, lvl=0, mult_type=-1, part=0):
-        mont_ops.reduce_2q(a, self._2q_prepack[mult_type][lvl][part])
+        mont_ops.reduce_2q(
+            a,
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
+        )
 
     def make_signed(self, a, lvl=0, mult_type=-1, part=0):
-        mont_ops.make_signed(a, self._2q_prepack[mult_type][lvl][part])
+        mont_ops.make_signed(
+            a,
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
+        )
 
     def make_unsigned(self, a, lvl=0, mult_type=-1, part=0):
-        mont_ops.make_unsigned(a, self._2q_prepack[mult_type][lvl][part])
+        mont_ops.make_unsigned(
+            a,
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
+        )
 
     def mont_add(self, a, b, lvl=0, mult_type=-1, part=0):
-        return mont_ops.mont_add(a, b, self._2q_prepack[mult_type][lvl][part])
+        return mont_ops.mont_add(
+            a,
+            b,
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
+        )
 
     def mont_sub(self, a, b, lvl=0, mult_type=-1, part=0):
-        return mont_ops.mont_sub(a, b, self._2q_prepack[mult_type][lvl][part])
+        return mont_ops.mont_sub(
+            a,
+            b,
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
+        )
 
     def tile_unsigned(self, a, lvl=0, mult_type=-1, part=0):
         return mont_ops.tile_unsigned(a, self._2q_prepack[mult_type][lvl][part])
@@ -767,24 +790,30 @@ class NTTContext:
         self, stacked: torch.Tensor, lvl=0, mult_type=-1, part=0
     ):
         return mont_ops.mont_add_many_3d(
-            stacked, self._2q_prepack[mult_type][lvl][part]
+            stacked,
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
         )
 
     def mont_reduce_add_many_3d(
         self, stacked: torch.Tensor, lvl=0, mult_type=-1, part=0
     ):
         return mont_ops.mont_reduce_add_many_3d(
-            stacked, self._2q_prepack[mult_type][lvl][part]
+            stacked,
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
         )
 
     def mont_add_reduce_2q(self, a, b, lvl=0, mult_type=-1, part=0):
         return mont_ops.mont_add_reduce_2q(
-            a, b, self._2q_prepack[mult_type][lvl][part]
+            a,
+            b,
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
         )
 
     def mont_sub_reduce_2q(self, a, b, lvl=0, mult_type=-1, part=0):
         return mont_ops.mont_sub_reduce_2q(
-            a, b, self._2q_prepack[mult_type][lvl][part]
+            a,
+            b,
+            self.ckksCfg.num_special_primes if mult_type == -1 else 0,
         )
 
     def ntt_radix2(self, a, lvl=0, mult_type=-1, part=0):
@@ -839,19 +868,6 @@ class NTTContext:
             self.iodd,
             self.ipsi,
             self.ckksCfg.num_special_primes if mult_type == -1 else 0,
-        )
-
-    # ===========================================
-    # fused ops
-    # ===========================================
-
-    def pc_add_fused(self, ct_data, pt_data, lvl=0, mult_type=-1, part=0):
-        return he_ops.pc_add_fused(
-            ct_data,
-            pt_data,
-            self._2q_prepack[mult_type][lvl][part],
-            self.Rs_prepack[mult_type][lvl][part],
-            *self.mont_prepack[mult_type][lvl][part],
         )
 
     def __repr__(self):

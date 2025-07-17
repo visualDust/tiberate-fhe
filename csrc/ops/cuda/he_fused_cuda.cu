@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cstdio>
 #include "../../extensions.cuh"
+#include "constant_mem.cuh"
 #include "mont_scalar_kernel.cuh"
 
 // ------------------------------------------------------------------
@@ -13,12 +14,7 @@ __global__ void pc_add_fused_cuda_kernel(
     TensorAcc32Restrict<scalar_t, 2> out_acc,
     const TensorAcc32Restrict<scalar_t, 2> ct_acc,
     const TensorAcc32Restrict<scalar_t, 2> pt_acc,
-    const TensorAcc32Restrict<scalar_t, 1> _2q_acc,
-    const TensorAcc32Restrict<scalar_t, 1> Rs_acc,
-    const TensorAcc32Restrict<scalar_t, 1> ql_acc,
-    const TensorAcc32Restrict<scalar_t, 1> qh_acc,
-    const TensorAcc32Restrict<scalar_t, 1> kl_acc,
-    const TensorAcc32Restrict<scalar_t, 1> kh_acc) {
+    const int sp_prime_len) {
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
 
@@ -33,12 +29,16 @@ __global__ void pc_add_fused_cuda_kernel(
   const scalar_t ct_in = ct_acc[i][j];
   const scalar_t pt_in = pt_acc[i][j];
 
-  const scalar_t Rs = Rs_acc[i];
-  const scalar_t ql = ql_acc[i];
-  const scalar_t qh = qh_acc[i];
-  const scalar_t kl = kl_acc[i];
-  const scalar_t kh = kh_acc[i];
-  const scalar_t _2q = _2q_acc[i];
+  // Montgomery constants.
+  const int prime_offset = -gridDim.x - sp_prime_len + i;
+  const scalar_t* const_mem_2q =
+      get_const_ptr_gright<scalar_t>(0, prime_offset);
+  const scalar_t _2q = const_mem_2q[-_2Q_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t Rs = const_mem_2q[-RS_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t ql = const_mem_2q[-QL_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t qh = const_mem_2q[-QH_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t kl = const_mem_2q[-KL_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t kh = const_mem_2q[-KH_CONST_IDX * CONST_MEM_REGION_LEN];
 
   scalar_t x =
       mont_mult_scalar_cuda_kernel(ct_in, Rs, ql, qh, kl, kh);  // mont mult
@@ -51,15 +51,10 @@ __global__ void pc_add_fused_cuda_kernel(
 }
 
 template <typename scalar_t>
-void pc_add_fused_cuda_typed(const torch::Tensor ct_data,
+void pc_add_fused_cuda_typed(torch::Tensor out,
+                             const torch::Tensor ct_data,
                              const torch::Tensor pt_data,
-                             torch::Tensor out,
-                             const torch::Tensor _2q,
-                             const torch::Tensor Rs,
-                             const torch::Tensor ql,
-                             const torch::Tensor qh,
-                             const torch::Tensor kl,
-                             const torch::Tensor kh) {
+                             const int sp_prime_len) {
   // Retrieve the device index, then set the corresponding device and stream.
   auto device_id = ct_data.device().index();
   cudaSetDevice(device_id);
@@ -78,30 +73,21 @@ void pc_add_fused_cuda_typed(const torch::Tensor ct_data,
   auto out_acc = makeAcc32Restrict(out, scalar_t, 2);
   const auto ct_acc = makeAcc32Restrict(ct_data, scalar_t, 2);
   const auto pt_acc = makeAcc32Restrict(pt_data, scalar_t, 2);
-  const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
-  const auto Rs_acc = makeAcc32Restrict(Rs, scalar_t, 1);
-  const auto ql_acc = makeAcc32Restrict(ql, scalar_t, 1);
-  const auto qh_acc = makeAcc32Restrict(qh, scalar_t, 1);
-  const auto kl_acc = makeAcc32Restrict(kl, scalar_t, 1);
-  const auto kh_acc = makeAcc32Restrict(kh, scalar_t, 1);
 
   pc_add_fused_cuda_kernel<scalar_t><<<dim_grid, dim_block, 0, stream>>>(
-      out_acc, ct_acc, pt_acc, _2q_acc, Rs_acc, ql_acc, qh_acc, kl_acc, kh_acc);
+      out_acc, ct_acc, pt_acc, sp_prime_len);
 }
 
 torch::Tensor pc_add_fused_cuda(const torch::Tensor a,  // ct_data
                                 const torch::Tensor b,  // pt_data
-                                const torch::Tensor _2q,
-                                const torch::Tensor Rs,
-                                const torch::Tensor ql,
-                                const torch::Tensor qh,
-                                const torch::Tensor kl,
-                                const torch::Tensor kh) {
+                                const int64_t sp_prime_len) {
+  const int prime_len_int = static_cast<int>(sp_prime_len);
+
   // Dispatch to the correct data type.
   torch::Tensor out = torch::empty_like(a);
   AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_pc_add_fused_cuda", ([&] {
                                pc_add_fused_cuda_typed<scalar_t>(
-                                   a, b, out, _2q, Rs, ql, qh, kl, kh);
+                                   out, a, b, prime_len_int);
                              }));
   return out;
 }
@@ -113,14 +99,10 @@ torch::Tensor pc_add_fused_cuda(const torch::Tensor a,  // ct_data
 template <typename scalar_t>
 __global__ void rescale_exact_rounding_fused_cuda_kernel(
     TensorAcc32Restrict<scalar_t, 2> a_acc,
-    const TensorAcc32Restrict<scalar_t, 1> Rs_acc,
+    const TensorAcc32Restrict<scalar_t, 1> scales_acc,
     const TensorAcc32Restrict<scalar_t, 1> rescaler,  // rescaler0
     const int64_t round_at,
-    const TensorAcc32Restrict<scalar_t, 1> _2q_acc,
-    const TensorAcc32Restrict<scalar_t, 1> ql_acc,
-    const TensorAcc32Restrict<scalar_t, 1> qh_acc,
-    const TensorAcc32Restrict<scalar_t, 1> kl_acc,
-    const TensorAcc32Restrict<scalar_t, 1> kh_acc) {
+    const int sp_prime_len) {
   // Indexing
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
@@ -130,12 +112,18 @@ __global__ void rescale_exact_rounding_fused_cuda_kernel(
 
   // Inputs.
   const scalar_t a = a_acc[i][j];
-  const scalar_t b = Rs_acc[i];
-  const scalar_t ql = ql_acc[i];
-  const scalar_t qh = qh_acc[i];
-  const scalar_t kl = kl_acc[i];
-  const scalar_t kh = kh_acc[i];
-  const scalar_t _2q = _2q_acc[i];
+  const scalar_t b = scales_acc[i];
+
+  // Montgomery constants.
+  const int prime_offset = -gridDim.x - sp_prime_len + i;
+  const scalar_t* const_mem_2q =
+      get_const_ptr_gright<scalar_t>(0, prime_offset);
+  const scalar_t _2q = const_mem_2q[-_2Q_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t Rs = const_mem_2q[-RS_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t ql = const_mem_2q[-QL_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t qh = const_mem_2q[-QH_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t kl = const_mem_2q[-KL_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t kh = const_mem_2q[-KH_CONST_IDX * CONST_MEM_REGION_LEN];
 
   // in python, its rounder = torch.where(rescaler > round_at, 1, 0)
   const scalar_t resclr = rescaler[j];
@@ -156,14 +144,10 @@ __global__ void rescale_exact_rounding_fused_cuda_kernel(
 template <typename scalar_t>
 void rescale_exact_rounding_fused_cuda_typed(
     torch::Tensor a,
-    const torch::Tensor Rs,
+    const torch::Tensor scales,
     const torch::Tensor rescaler,  // rescaler0
     const int64_t round_at,
-    const torch::Tensor _2q,
-    const torch::Tensor ql,
-    const torch::Tensor qh,
-    const torch::Tensor kl,
-    const torch::Tensor kh) {
+    const int sp_prime_len) {
   auto device_id = a.device().index();
   cudaSetDevice(device_id);
   auto stream = at::cuda::getCurrentCUDAStream(device_id);
@@ -176,41 +160,26 @@ void rescale_exact_rounding_fused_cuda_typed(
 
   // Run the cuda kernel.
   auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
-  const auto Rs_acc = makeAcc32Restrict(Rs, scalar_t, 1);
+  const auto scales_acc = makeAcc32Restrict(scales, scalar_t, 1);
   const auto rescaler_acc = makeAcc32Restrict(rescaler, scalar_t, 1);
-  const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
-  const auto ql_acc = makeAcc32Restrict(ql, scalar_t, 1);
-  const auto qh_acc = makeAcc32Restrict(qh, scalar_t, 1);
-  const auto kl_acc = makeAcc32Restrict(kl, scalar_t, 1);
-  const auto kh_acc = makeAcc32Restrict(kh, scalar_t, 1);
 
   rescale_exact_rounding_fused_cuda_kernel<scalar_t>
-      <<<dim_grid, dim_block, 0, stream>>>(a_acc,
-                                           Rs_acc,
-                                           rescaler_acc,
-                                           round_at,
-                                           _2q_acc,
-                                           ql_acc,
-                                           qh_acc,
-                                           kl_acc,
-                                           kh_acc);
+      <<<dim_grid, dim_block, 0, stream>>>(
+          a_acc, scales_acc, rescaler_acc, round_at, sp_prime_len);
 }
 
 void rescale_exact_rounding_fused_cuda(
     torch::Tensor a,  // inplace of a
-    const torch::Tensor Rs,
+    const torch::Tensor scales,
     const torch::Tensor rescaler,  // rescaler0
     const int64_t round_at,
-    const torch::Tensor _2q,
-    const torch::Tensor ql,
-    const torch::Tensor qh,
-    const torch::Tensor kl,
-    const torch::Tensor kh) {
+    const int64_t sp_prime_len) {
+  const int prime_len_int = static_cast<int>(sp_prime_len);
   // Dispatch to the correct data type.
   AT_DISPATCH_INTEGRAL_TYPES(
       a.scalar_type(), "typed_rescale_exact_rounding_fused_cuda", ([&] {
         rescale_exact_rounding_fused_cuda_typed<scalar_t>(
-            a, Rs, rescaler, round_at, _2q, ql, qh, kl, kh);
+            a, scales, rescaler, round_at, prime_len_int);
       }));
 }
 
@@ -221,13 +190,9 @@ void rescale_exact_rounding_fused_cuda(
 template <typename scalar_t>
 __global__ void rescale_non_exact_rounding_fused_cuda_kernel(
     TensorAcc32Restrict<scalar_t, 2> a_acc,
-    const TensorAcc32Restrict<scalar_t, 1> Rs_acc,
+    const TensorAcc32Restrict<scalar_t, 1> scales_acc,
     const TensorAcc32Restrict<scalar_t, 1> rescaler,  // rescaler0
-    const TensorAcc32Restrict<scalar_t, 1> _2q_acc,
-    const TensorAcc32Restrict<scalar_t, 1> ql_acc,
-    const TensorAcc32Restrict<scalar_t, 1> qh_acc,
-    const TensorAcc32Restrict<scalar_t, 1> kl_acc,
-    const TensorAcc32Restrict<scalar_t, 1> kh_acc) {
+    const int sp_prime_len) {
   // Indexing
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
@@ -237,12 +202,19 @@ __global__ void rescale_non_exact_rounding_fused_cuda_kernel(
 
   // Inputs.
   const scalar_t a = a_acc[i][j];
-  const scalar_t b = Rs_acc[i];
-  const scalar_t ql = ql_acc[i];
-  const scalar_t qh = qh_acc[i];
-  const scalar_t kl = kl_acc[i];
-  const scalar_t kh = kh_acc[i];
-  const scalar_t _2q = _2q_acc[i];
+  const scalar_t b = scales_acc[i];
+
+  // Montgomery constants.
+  const int prime_offset = -gridDim.x - sp_prime_len + i;
+  const scalar_t* const_mem_2q =
+      get_const_ptr_gright<scalar_t>(0, prime_offset);
+  const scalar_t _2q = const_mem_2q[-_2Q_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t Rs = const_mem_2q[-RS_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t ql = const_mem_2q[-QL_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t qh = const_mem_2q[-QH_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t kl = const_mem_2q[-KL_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t kh = const_mem_2q[-KH_CONST_IDX * CONST_MEM_REGION_LEN];
+
   // in python, its rounder = torch.where(rescaler > round_at, 1, 0)
   const scalar_t resclr = rescaler[j];
 
@@ -260,13 +232,9 @@ __global__ void rescale_non_exact_rounding_fused_cuda_kernel(
 template <typename scalar_t>
 void rescale_non_exact_rounding_fused_cuda_typed(
     torch::Tensor a,
-    const torch::Tensor Rs,
+    const torch::Tensor scales,
     const torch::Tensor rescaler,  // rescaler0
-    const torch::Tensor _2q,
-    const torch::Tensor ql,
-    const torch::Tensor qh,
-    const torch::Tensor kl,
-    const torch::Tensor kh) {
+    const int sp_prime_len) {
   auto device_id = a.device().index();
   cudaSetDevice(device_id);
   auto stream = at::cuda::getCurrentCUDAStream(device_id);
@@ -279,33 +247,25 @@ void rescale_non_exact_rounding_fused_cuda_typed(
 
   // Run the cuda kernel.
   auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
-  const auto Rs_acc = makeAcc32Restrict(Rs, scalar_t, 1);
+  const auto scales_acc = makeAcc32Restrict(scales, scalar_t, 1);
   const auto rescaler_acc = makeAcc32Restrict(rescaler, scalar_t, 1);
-  const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
-  const auto ql_acc = makeAcc32Restrict(ql, scalar_t, 1);
-  const auto qh_acc = makeAcc32Restrict(qh, scalar_t, 1);
-  const auto kl_acc = makeAcc32Restrict(kl, scalar_t, 1);
-  const auto kh_acc = makeAcc32Restrict(kh, scalar_t, 1);
 
   rescale_non_exact_rounding_fused_cuda_kernel<scalar_t>
       <<<dim_grid, dim_block, 0, stream>>>(
-          a_acc, Rs_acc, rescaler_acc, _2q_acc, ql_acc, qh_acc, kl_acc, kh_acc);
+          a_acc, scales_acc, rescaler_acc, sp_prime_len);
 }
 
 void rescale_non_exact_rounding_fused_cuda(
     torch::Tensor a,  // inplace of a
-    const torch::Tensor Rs,
+    const torch::Tensor scales,
     const torch::Tensor rescaler,  // rescaler0
-    const torch::Tensor _2q,
-    const torch::Tensor ql,
-    const torch::Tensor qh,
-    const torch::Tensor kl,
-    const torch::Tensor kh) {
+    const int64_t sp_prime_len) {
+  const int prime_len_int = static_cast<int>(sp_prime_len);
   // Dispatch to the correct data type.
   AT_DISPATCH_INTEGRAL_TYPES(
       a.scalar_type(), "typed_rescale_non_exact_rounding_fused_cuda", ([&] {
         rescale_non_exact_rounding_fused_cuda_typed<scalar_t>(
-            a, Rs, rescaler, _2q, ql, qh, kl, kh);
+            a, scales, rescaler, prime_len_int);
       }));
 }
 
@@ -319,23 +279,21 @@ __global__ void switch_key_switch_later_part_extend(
     const TensorAcc32Restrict<scalar_t, 2> state_acc,
     const TensorAcc32Restrict<scalar_t, 2> l_enter_acc,
     const int64_t l_enter_start_offset,
-    const TensorAcc32Restrict<scalar_t, 1> _2q_acc,
-    const TensorAcc32Restrict<scalar_t, 1> Rs_acc,  // Rs_prepack
-    const TensorAcc32Restrict<scalar_t, 1> ql_acc,  // *mont_prepack
-    const TensorAcc32Restrict<scalar_t, 1> qh_acc,
-    const TensorAcc32Restrict<scalar_t, 1> kl_acc,
-    const TensorAcc32Restrict<scalar_t, 1> kh_acc) {
+    const int sp_prime_len) {
   // Indexing
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
 
-  // Inputs.
-  const scalar_t _2q = _2q_acc[i];
-  const scalar_t Rs = Rs_acc[i];
-  const scalar_t ql = ql_acc[i];
-  const scalar_t qh = qh_acc[i];
-  const scalar_t kl = kl_acc[i];
-  const scalar_t kh = kh_acc[i];
+  // Montgomery constants.
+  const int prime_offset = -gridDim.x - sp_prime_len + i;
+  const scalar_t* const_mem_2q =
+      get_const_ptr_gright<scalar_t>(0, prime_offset);
+  const scalar_t _2q = const_mem_2q[-_2Q_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t Rs = const_mem_2q[-RS_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t ql = const_mem_2q[-QL_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t qh = const_mem_2q[-QH_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t kl = const_mem_2q[-KL_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t kh = const_mem_2q[-KH_CONST_IDX * CONST_MEM_REGION_LEN];
 
   // mont enter
   const scalar_t state_0 = state_acc[0][j];
@@ -359,12 +317,7 @@ void switch_key_switch_later_part_extend_cuda_typed(
     const torch::Tensor state,
     const torch::Tensor l_enter,
     const int64_t l_enter_start_offset,
-    const torch::Tensor _2q,
-    const torch::Tensor Rs,
-    const torch::Tensor ql,
-    const torch::Tensor qh,
-    const torch::Tensor kl,
-    const torch::Tensor kh) {
+    const int sp_prime_len) {
   auto device_id = state.device().index();
   cudaSetDevice(device_id);
   auto stream = at::cuda::getCurrentCUDAStream(device_id);
@@ -377,24 +330,10 @@ void switch_key_switch_later_part_extend_cuda_typed(
   auto out_acc = makeAcc32Restrict(out, scalar_t, 2);
   const auto state_acc = makeAcc32Restrict(state, scalar_t, 2);
   const auto l_enter_acc = makeAcc32Restrict(l_enter, scalar_t, 2);
-  const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
-  const auto Rs_acc = makeAcc32Restrict(Rs, scalar_t, 1);
-  const auto ql_acc = makeAcc32Restrict(ql, scalar_t, 1);
-  const auto qh_acc = makeAcc32Restrict(qh, scalar_t, 1);
-  const auto kl_acc = makeAcc32Restrict(kl, scalar_t, 1);
-  const auto kh_acc = makeAcc32Restrict(kh, scalar_t, 1);
 
   switch_key_switch_later_part_extend<scalar_t>
-      <<<dim_grid, dim_block, 0, stream>>>(out_acc,
-                                           state_acc,
-                                           l_enter_acc,
-                                           l_enter_start_offset,
-                                           _2q_acc,
-                                           Rs_acc,
-                                           ql_acc,
-                                           qh_acc,
-                                           kl_acc,
-                                           kh_acc);
+      <<<dim_grid, dim_block, 0, stream>>>(
+          out_acc, state_acc, l_enter_acc, l_enter_start_offset, sp_prime_len);
 }
 
 torch::Tensor switch_key_switch_later_part_extend_cuda(
@@ -402,18 +341,14 @@ torch::Tensor switch_key_switch_later_part_extend_cuda(
     const torch::Tensor state,
     const torch::Tensor l_enter,
     const int64_t l_enter_start_offset,
-    const torch::Tensor _2q,
-    const torch::Tensor Rs,
-    const torch::Tensor ql,
-    const torch::Tensor qh,
-    const torch::Tensor kl,
-    const torch::Tensor kh) {
+    const int64_t sp_prime_len) {
+  const int prime_len_int = static_cast<int>(sp_prime_len);
   torch::Tensor out = torch::empty({rns_len, state.size(1)}, state.options());
 
   AT_DISPATCH_INTEGRAL_TYPES(
       state.scalar_type(), "switch_key_switch_later_part_extend_cuda", [&] {
         switch_key_switch_later_part_extend_cuda_typed<scalar_t>(
-            out, state, l_enter, l_enter_start_offset, _2q, Rs, ql, qh, kl, kh);
+            out, state, l_enter, l_enter_start_offset, prime_len_int);
       });
 
   return out;
@@ -498,30 +433,29 @@ torch::Tensor codec_rotate_make_unsigned_reduce_2q_cuda(
 template <typename scalar_t>
 __global__ void mont_chain_backward_cuda_kernel(
     TensorAcc32Restrict<scalar_t, 2> p_acc,
-    const int prime_row_offset,
-    const TensorAcc32Restrict<scalar_t, 1> _2q_acc,
     const scalar_t** PiRi_ptr,
-    const TensorAcc32Restrict<scalar_t, 1> ql_acc,
-    const TensorAcc32Restrict<scalar_t, 1> qh_acc,
-    const TensorAcc32Restrict<scalar_t, 1> kl_acc,
-    const TensorAcc32Restrict<scalar_t, 1> kh_acc) {
+    const int ord_prime_len,  // ordinal prime length
+    const int sp_prime_len    // special prime length
+) {
   // const int i = blockIdx.x; // i is useless here because only need 1d kernel
   // launch
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
-  const int num_primes = p_acc.size(0);
 
-  for (int row = num_primes - 2; row >= 0; --row) {
+  for (int row = sp_prime_len - 2; row >= 0; --row) {
     scalar_t x = p_acc[row][j];
-    const scalar_t _2q = _2q_acc[row + prime_row_offset];
-    const scalar_t ql = ql_acc[row + prime_row_offset];
-    const scalar_t qh = qh_acc[row + prime_row_offset];
-    const scalar_t kl = kl_acc[row + prime_row_offset];
-    const scalar_t kh = kh_acc[row + prime_row_offset];
+    // Montgomery constants.
+    const int prime_offset = -sp_prime_len + row;
+    const scalar_t* const_mem_2q =
+        get_const_ptr_gright<scalar_t>(0, prime_offset);
+    const scalar_t _2q = const_mem_2q[-_2Q_CONST_IDX * CONST_MEM_REGION_LEN];
+    const scalar_t ql = const_mem_2q[-QL_CONST_IDX * CONST_MEM_REGION_LEN];
+    const scalar_t qh = const_mem_2q[-QH_CONST_IDX * CONST_MEM_REGION_LEN];
+    const scalar_t kl = const_mem_2q[-KL_CONST_IDX * CONST_MEM_REGION_LEN];
+    const scalar_t kh = const_mem_2q[-KH_CONST_IDX * CONST_MEM_REGION_LEN];
 
     // Loop over all rows below
-    for (int k = num_primes - 1; k > row; --k) {
-      const scalar_t PiRi =
-          PiRi_ptr[num_primes - k - 1][row + prime_row_offset];
+    for (int k = sp_prime_len - 1; k > row; --k) {
+      const scalar_t PiRi = PiRi_ptr[sp_prime_len - k - 1][row + ord_prime_len];
       const scalar_t after_sub =
           mont_sub_scalar_cuda_kernel(x, p_acc[k][j], _2q);  // mont sub
       const scalar_t after_mult = mont_mult_scalar_cuda_kernel(
@@ -542,25 +476,25 @@ __global__ void create_switcher_d_divide_by_p_cuda_kernel(
     const TensorAcc32Restrict<scalar_t, 2>
         p_acc,  // d[-self.ckksCfg.num_special_primes:], assume p_acc is already
                 // processed with create_switcher_p_self_divide_iter_cuda_kernel
-    const TensorAcc32Restrict<scalar_t, 1> _2q_acc,
-    const TensorAcc32Restrict<scalar_t, 1> Rs_acc,
     const scalar_t** PiRi_ptr,
-    const TensorAcc32Restrict<scalar_t, 1> ql_acc,
-    const TensorAcc32Restrict<scalar_t, 1> qh_acc,
-    const TensorAcc32Restrict<scalar_t, 1> kl_acc,
-    const TensorAcc32Restrict<scalar_t, 1> kh_acc) {
+    const int sp_prime_len) {
   // Where am I?
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
 
   // Inputs.
   scalar_t x = c_acc[i][j];
-  const scalar_t _2q = _2q_acc[i];
-  const scalar_t Rs = Rs_acc[i];
-  const scalar_t ql = ql_acc[i];
-  const scalar_t qh = qh_acc[i];
-  const scalar_t kl = kl_acc[i];
-  const scalar_t kh = kh_acc[i];
+
+  // Montgomery constants.
+  const int prime_offset = -gridDim.x - sp_prime_len + i;
+  const scalar_t* const_mem_2q =
+      get_const_ptr_gright<scalar_t>(0, prime_offset);
+  const scalar_t _2q = const_mem_2q[-_2Q_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t Rs = const_mem_2q[-RS_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t ql = const_mem_2q[-QL_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t qh = const_mem_2q[-QH_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t kl = const_mem_2q[-KL_CONST_IDX * CONST_MEM_REGION_LEN];
+  const scalar_t kh = const_mem_2q[-KH_CONST_IDX * CONST_MEM_REGION_LEN];
 
   // mont_enter
   x = mont_mult_scalar_cuda_kernel(x, Rs, ql, qh, kl, kh);
@@ -589,13 +523,7 @@ void create_switcher_divide_by_p_cuda_typed(
     torch::Tensor out,
     const torch::Tensor c,
     const torch::Tensor p,
-    const torch::Tensor _2q,
-    const torch::Tensor Rs,
-    const std::vector<torch::Tensor> PiRi,
-    const torch::Tensor ql,
-    const torch::Tensor qh,
-    const torch::Tensor kl,
-    const torch::Tensor kh) {
+    const std::vector<torch::Tensor> PiRi) {
   auto device_id = c.device().index();
   cudaSetDevice(device_id);
   auto stream = at::cuda::getCurrentCUDAStream(device_id);
@@ -609,8 +537,6 @@ void create_switcher_divide_by_p_cuda_typed(
   auto out_acc = makeAcc32Restrict(out, scalar_t, 2);
   const auto c_acc = makeAcc32Restrict(c, scalar_t, 2);
   const auto p_acc = makeAcc32Restrict(p, scalar_t, 2);
-  const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
-  const auto Rs_acc = makeAcc32Restrict(Rs, scalar_t, 1);
 
   // need to create pointer for PiRi
   std::vector<scalar_t*> PiRi_ptr_h(PiRi.size());
@@ -624,12 +550,6 @@ void create_switcher_divide_by_p_cuda_typed(
                   cudaMemcpyHostToDevice,
                   stream);
 
-  // const auto PiRi_acc = makeAcc32Restrict(PiRi, scalar_t, 1);
-  const auto ql_acc = makeAcc32Restrict(ql, scalar_t, 1);
-  const auto qh_acc = makeAcc32Restrict(qh, scalar_t, 1);
-  const auto kl_acc = makeAcc32Restrict(kl, scalar_t, 1);
-  const auto kh_acc = makeAcc32Restrict(kh, scalar_t, 1);
-
   // This is actually done in successive order.
   // Rescale from the most outer prime channel.
   // Start from the special len and drop channels one by one.
@@ -638,46 +558,26 @@ void create_switcher_divide_by_p_cuda_typed(
   mont_chain_backward_cuda_kernel<scalar_t>
       <<<dim_grid_p_back, dim_block, 0, stream>>>(
           p_acc,
-          c.size(0),  // others are for both c and p
-          _2q_acc,
           (const scalar_t**)PiRi_ptr_d,
-          ql_acc,
-          qh_acc,
-          kl_acc,
-          kh_acc);
+          c.size(0),  // others are for both c and p
+          p.size(0));
 
   // run the main kernel
   create_switcher_d_divide_by_p_cuda_kernel<scalar_t>
       <<<dim_grid_divide_p, dim_block, 0, stream>>>(
-          out_acc,
-          c_acc,
-          p_acc,
-          _2q_acc,
-          Rs_acc,
-          (const scalar_t**)PiRi_ptr_d,
-          ql_acc,
-          qh_acc,
-          kl_acc,
-          kh_acc);
+          out_acc, c_acc, p_acc, (const scalar_t**)PiRi_ptr_d, p.size(0));
 }
 
 torch::Tensor create_switcher_divide_by_p_cuda(
     const torch::Tensor c,  // d[: -self.ckksCfg.num_special_primes]
     const torch::Tensor p,  // d[-self.ckksCfg.num_special_primes:]
-    const torch::Tensor _2q,
-    const torch::Tensor Rs,
-    const std::vector<torch::Tensor> PiRi,
-    const torch::Tensor ql,
-    const torch::Tensor qh,
-    const torch::Tensor kl,
-    const torch::Tensor kh) {
+    const std::vector<torch::Tensor> PiRi) {
   // Create output tensor.
   torch::Tensor out = torch::empty_like(c);
 
   AT_DISPATCH_INTEGRAL_TYPES(
       c.scalar_type(), "create_switcher_divide_by_p_cuda", [&] {
-        create_switcher_divide_by_p_cuda_typed<scalar_t>(
-            out, c, p, _2q, Rs, PiRi, ql, qh, kl, kh);
+        create_switcher_divide_by_p_cuda_typed<scalar_t>(out, c, p, PiRi);
       });
 
   return out;

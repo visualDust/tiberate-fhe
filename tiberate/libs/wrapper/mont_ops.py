@@ -5,34 +5,34 @@
 import torch
 
 
-def make_signed(a: list[torch.Tensor], _2q: list[torch.Tensor]) -> None:
+def make_signed(a: list[torch.Tensor], sp_prime_len: int) -> None:
     """
     Python wrapper for the 'tiberate_mont_ops::make_signed' custom operator.
 
     Args:
     a: list[torch.Tensor] (modified in-place)
-    _2q: list[torch.Tensor]
+    sp_prime_len: int
     Returns:
         None
     """
-    torch.ops.tiberate_mont_ops.make_signed(a, _2q)
+    torch.ops.tiberate_mont_ops.make_signed(a, sp_prime_len)
 
 
-def make_unsigned(a: list[torch.Tensor], _2q: list[torch.Tensor]) -> None:
+def make_unsigned(a: list[torch.Tensor], sp_prime_len: int) -> None:
     """
     Python wrapper for the 'tiberate_mont_ops::make_unsigned' custom operator.
 
     Args:
     a: list[torch.Tensor] (modified in-place)
-    _2q: list[torch.Tensor]
+    sp_prime_len: int
     Returns:
         None
     """
-    torch.ops.tiberate_mont_ops.make_unsigned(a, _2q)
+    torch.ops.tiberate_mont_ops.make_unsigned(a, sp_prime_len)
 
 
 def mont_add(
-    a: list[torch.Tensor], b: list[torch.Tensor], _2q: list[torch.Tensor]
+    a: list[torch.Tensor], b: list[torch.Tensor], sp_prime_len: int
 ) -> list[torch.Tensor]:
     """
     Python wrapper for the 'tiberate_mont_ops::mont_add' custom operator.
@@ -40,33 +40,18 @@ def mont_add(
     Args:
     a: list[torch.Tensor]
     b: list[torch.Tensor]
-    _2q: list[torch.Tensor]
+    sp_prime_len: int
     Returns:
         list[torch.Tensor]
     """
-    return torch.ops.tiberate_mont_ops.mont_add(a, b, _2q)
+    return torch.ops.tiberate_mont_ops.mont_add(a, b, sp_prime_len)
 
 
-def mont_add_many_3d(
-    input: list[torch.Tensor], _2q: list[torch.Tensor]
-) -> list[torch.Tensor]:
-    """
-    Python wrapper for the 'tiberate_mont_ops::mont_add_many_3d' custom operator.
-
-    Args:
-    input: list[torch.Tensor]
-    _2q: list[torch.Tensor]
-    Returns:
-        list[torch.Tensor]
-    """
-    return torch.ops.tiberate_mont_ops.mont_add_many_3d(input, _2q)
-
-
-def mont_add_reduce_2q(
+def mont_add_legacy(
     a: list[torch.Tensor], b: list[torch.Tensor], _2q: list[torch.Tensor]
 ) -> list[torch.Tensor]:
     """
-    Python wrapper for the 'tiberate_mont_ops::mont_add_reduce_2q' custom operator.
+    Python wrapper for the 'tiberate_mont_ops::mont_add_legacy' custom operator.
 
     Args:
     a: list[torch.Tensor]
@@ -75,7 +60,38 @@ def mont_add_reduce_2q(
     Returns:
         list[torch.Tensor]
     """
-    return torch.ops.tiberate_mont_ops.mont_add_reduce_2q(a, b, _2q)
+    return torch.ops.tiberate_mont_ops.mont_add_legacy(a, b, _2q)
+
+
+def mont_add_many_3d(
+    input: list[torch.Tensor], sp_prime_len: int
+) -> list[torch.Tensor]:
+    """
+    Python wrapper for the 'tiberate_mont_ops::mont_add_many_3d' custom operator.
+
+    Args:
+    input: list[torch.Tensor]
+    sp_prime_len: int
+    Returns:
+        list[torch.Tensor]
+    """
+    return torch.ops.tiberate_mont_ops.mont_add_many_3d(input, sp_prime_len)
+
+
+def mont_add_reduce_2q(
+    a: list[torch.Tensor], b: list[torch.Tensor], sp_prime_len: int
+) -> list[torch.Tensor]:
+    """
+    Python wrapper for the 'tiberate_mont_ops::mont_add_reduce_2q' custom operator.
+
+    Args:
+    a: list[torch.Tensor]
+    b: list[torch.Tensor]
+    sp_prime_len: int
+    Returns:
+        list[torch.Tensor]
+    """
+    return torch.ops.tiberate_mont_ops.mont_add_reduce_2q(a, b, sp_prime_len)
 
 
 def mont_enter(
@@ -128,34 +144,6 @@ def mont_enter_Rs_scale(a: list[torch.Tensor], sp_prime_len: int) -> None:
     torch.ops.tiberate_mont_ops.mont_enter_Rs_scale(a, sp_prime_len)
 
 
-def mont_enter_reduce_2q(
-    a: list[torch.Tensor],
-    Rs: list[torch.Tensor],
-    _2q: list[torch.Tensor],
-    ql: list[torch.Tensor],
-    qh: list[torch.Tensor],
-    kl: list[torch.Tensor],
-    kh: list[torch.Tensor],
-) -> list[torch.Tensor]:
-    """
-    Python wrapper for the 'tiberate_mont_ops::mont_enter_reduce_2q' custom operator.
-
-    Args:
-    a: list[torch.Tensor]
-    Rs: list[torch.Tensor]
-    _2q: list[torch.Tensor]
-    ql: list[torch.Tensor]
-    qh: list[torch.Tensor]
-    kl: list[torch.Tensor]
-    kh: list[torch.Tensor]
-    Returns:
-        list[torch.Tensor]
-    """
-    return torch.ops.tiberate_mont_ops.mont_enter_reduce_2q(
-        a, Rs, _2q, ql, qh, kl, kh
-    )
-
-
 def mont_enter_scalar(
     a: list[torch.Tensor], b: list[torch.Tensor], sp_prime_len: int
 ) -> None:
@@ -170,6 +158,24 @@ def mont_enter_scalar(
         None
     """
     torch.ops.tiberate_mont_ops.mont_enter_scalar(a, b, sp_prime_len)
+
+
+def mont_enter_scalar_reduce_2q(
+    a: list[torch.Tensor], b: list[torch.Tensor], sp_prime_len: int
+) -> list[torch.Tensor]:
+    """
+    Python wrapper for the 'tiberate_mont_ops::mont_enter_scalar_reduce_2q' custom operator.
+
+    Args:
+    a: list[torch.Tensor]
+    b: list[torch.Tensor]
+    sp_prime_len: int
+    Returns:
+        list[torch.Tensor]
+    """
+    return torch.ops.tiberate_mont_ops.mont_enter_scalar_reduce_2q(
+        a, b, sp_prime_len
+    )
 
 
 def mont_mult(
@@ -202,22 +208,24 @@ def mont_reduce(a: list[torch.Tensor], sp_prime_len: int) -> None:
 
 
 def mont_reduce_add_many_3d(
-    input: list[torch.Tensor], _2q: list[torch.Tensor]
+    input: list[torch.Tensor], sp_prime_len: int
 ) -> list[torch.Tensor]:
     """
     Python wrapper for the 'tiberate_mont_ops::mont_reduce_add_many_3d' custom operator.
 
     Args:
     input: list[torch.Tensor]
-    _2q: list[torch.Tensor]
+    sp_prime_len: int
     Returns:
         list[torch.Tensor]
     """
-    return torch.ops.tiberate_mont_ops.mont_reduce_add_many_3d(input, _2q)
+    return torch.ops.tiberate_mont_ops.mont_reduce_add_many_3d(
+        input, sp_prime_len
+    )
 
 
 def mont_sub(
-    a: list[torch.Tensor], b: list[torch.Tensor], _2q: list[torch.Tensor]
+    a: list[torch.Tensor], b: list[torch.Tensor], sp_prime_len: int
 ) -> list[torch.Tensor]:
     """
     Python wrapper for the 'tiberate_mont_ops::mont_sub' custom operator.
@@ -225,15 +233,15 @@ def mont_sub(
     Args:
     a: list[torch.Tensor]
     b: list[torch.Tensor]
-    _2q: list[torch.Tensor]
+    sp_prime_len: int
     Returns:
         list[torch.Tensor]
     """
-    return torch.ops.tiberate_mont_ops.mont_sub(a, b, _2q)
+    return torch.ops.tiberate_mont_ops.mont_sub(a, b, sp_prime_len)
 
 
 def mont_sub_reduce_2q(
-    a: list[torch.Tensor], b: list[torch.Tensor], _2q: list[torch.Tensor]
+    a: list[torch.Tensor], b: list[torch.Tensor], sp_prime_len: int
 ) -> list[torch.Tensor]:
     """
     Python wrapper for the 'tiberate_mont_ops::mont_sub_reduce_2q' custom operator.
@@ -241,24 +249,24 @@ def mont_sub_reduce_2q(
     Args:
     a: list[torch.Tensor]
     b: list[torch.Tensor]
-    _2q: list[torch.Tensor]
+    sp_prime_len: int
     Returns:
         list[torch.Tensor]
     """
-    return torch.ops.tiberate_mont_ops.mont_sub_reduce_2q(a, b, _2q)
+    return torch.ops.tiberate_mont_ops.mont_sub_reduce_2q(a, b, sp_prime_len)
 
 
-def reduce_2q(a: list[torch.Tensor], _2q: list[torch.Tensor]) -> None:
+def reduce_2q(a: list[torch.Tensor], sp_prime_len: int) -> None:
     """
     Python wrapper for the 'tiberate_mont_ops::reduce_2q' custom operator.
 
     Args:
     a: list[torch.Tensor] (modified in-place)
-    _2q: list[torch.Tensor]
+    sp_prime_len: int
     Returns:
         None
     """
-    torch.ops.tiberate_mont_ops.reduce_2q(a, _2q)
+    torch.ops.tiberate_mont_ops.reduce_2q(a, sp_prime_len)
 
 
 def tile_unsigned(

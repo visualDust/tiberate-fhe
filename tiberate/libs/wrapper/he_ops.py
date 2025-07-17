@@ -24,15 +24,7 @@ def codec_rotate_make_unsigned_reduce_2q(
 
 
 def create_switcher_divide_by_p(
-    c: list[torch.Tensor],
-    p: list[torch.Tensor],
-    _2q: list[torch.Tensor],
-    Rs: list[torch.Tensor],
-    PiRi: list[list[torch.Tensor]],
-    ql: list[torch.Tensor],
-    qh: list[torch.Tensor],
-    kl: list[torch.Tensor],
-    kh: list[torch.Tensor],
+    c: list[torch.Tensor], p: list[torch.Tensor], PiRi: list[list[torch.Tensor]]
 ) -> list[torch.Tensor]:
     """
     Python wrapper for the 'tiberate_he_ops::create_switcher_divide_by_p' custom operator.
@@ -40,19 +32,11 @@ def create_switcher_divide_by_p(
     Args:
     c: list[torch.Tensor]
     p: list[torch.Tensor]
-    _2q: list[torch.Tensor]
-    Rs: list[torch.Tensor]
     PiRi: list[list[torch.Tensor]]
-    ql: list[torch.Tensor]
-    qh: list[torch.Tensor]
-    kl: list[torch.Tensor]
-    kh: list[torch.Tensor]
     Returns:
         list[torch.Tensor]
     """
-    return torch.ops.tiberate_he_ops.create_switcher_divide_by_p(
-        c, p, _2q, Rs, PiRi, ql, qh, kl, kh
-    )
+    return torch.ops.tiberate_he_ops.create_switcher_divide_by_p(c, p, PiRi)
 
 
 def mont_mult_sum_many_3d(
@@ -84,14 +68,7 @@ def mont_mult_sum_many_3d(
 
 
 def pc_add_fused(
-    ct_data: list[torch.Tensor],
-    pt_data: list[torch.Tensor],
-    Rs: list[torch.Tensor],
-    ql: list[torch.Tensor],
-    qh: list[torch.Tensor],
-    kl: list[torch.Tensor],
-    kh: list[torch.Tensor],
-    _2q: list[torch.Tensor],
+    ct_data: list[torch.Tensor], pt_data: list[torch.Tensor], sp_prime_len: int
 ) -> list[torch.Tensor]:
     """
     Python wrapper for the 'tiberate_he_ops::pc_add_fused' custom operator.
@@ -99,79 +76,58 @@ def pc_add_fused(
     Args:
     ct_data: list[torch.Tensor]
     pt_data: list[torch.Tensor]
-    Rs: list[torch.Tensor]
-    ql: list[torch.Tensor]
-    qh: list[torch.Tensor]
-    kl: list[torch.Tensor]
-    kh: list[torch.Tensor]
-    _2q: list[torch.Tensor]
+    sp_prime_len: int
     Returns:
         list[torch.Tensor]
     """
     return torch.ops.tiberate_he_ops.pc_add_fused(
-        ct_data, pt_data, Rs, ql, qh, kl, kh, _2q
+        ct_data, pt_data, sp_prime_len
     )
 
 
 def rescale_exact_rounding_fused(
     a: list[torch.Tensor],
-    Rs: list[torch.Tensor],
+    scales: list[torch.Tensor],
     rescaler: list[torch.Tensor],
     round_at: int,
-    _2q: list[torch.Tensor],
-    ql: list[torch.Tensor],
-    qh: list[torch.Tensor],
-    kl: list[torch.Tensor],
-    kh: list[torch.Tensor],
+    sp_prime_len: int,
 ) -> None:
     """
     Python wrapper for the 'tiberate_he_ops::rescale_exact_rounding_fused' custom operator.
 
     Args:
     a: list[torch.Tensor]
-    Rs: list[torch.Tensor]
+    scales: list[torch.Tensor]
     rescaler: list[torch.Tensor]
     round_at: int
-    _2q: list[torch.Tensor]
-    ql: list[torch.Tensor]
-    qh: list[torch.Tensor]
-    kl: list[torch.Tensor]
-    kh: list[torch.Tensor]
+    sp_prime_len: int
     Returns:
         None
     """
     torch.ops.tiberate_he_ops.rescale_exact_rounding_fused(
-        a, Rs, rescaler, round_at, _2q, ql, qh, kl, kh
+        a, scales, rescaler, round_at, sp_prime_len
     )
 
 
 def rescale_non_exact_rounding_fused(
     a: list[torch.Tensor],
-    Rs: list[torch.Tensor],
+    scales: list[torch.Tensor],
     rescaler: list[torch.Tensor],
-    _2q: list[torch.Tensor],
-    ql: list[torch.Tensor],
-    qh: list[torch.Tensor],
-    kl: list[torch.Tensor],
-    kh: list[torch.Tensor],
+    sp_prime_len: int,
 ) -> None:
     """
     Python wrapper for the 'tiberate_he_ops::rescale_non_exact_rounding_fused' custom operator.
 
     Args:
     a: list[torch.Tensor]
-    Rs: list[torch.Tensor]
+    scales: list[torch.Tensor]
     rescaler: list[torch.Tensor]
-    _2q: list[torch.Tensor]
-    ql: list[torch.Tensor]
-    qh: list[torch.Tensor]
-    kl: list[torch.Tensor]
-    kh: list[torch.Tensor]
+    sp_prime_len: int
     Returns:
         None
     """
     torch.ops.tiberate_he_ops.rescale_non_exact_rounding_fused(
-        a, Rs, rescaler, _2q, ql, qh, kl, kh
+        a, scales, rescaler, sp_prime_len
     )
 
 
@@ -180,12 +136,7 @@ def switch_key_switch_later_part_extend(
     state: torch.Tensor,
     l_enter: torch.Tensor,
     l_enter_start_offset: int,
-    _2q: torch.Tensor,
-    Rs: torch.Tensor,
-    ql: torch.Tensor,
-    qh: torch.Tensor,
-    kl: torch.Tensor,
-    kh: torch.Tensor,
+    sp_prime_len: int,
 ) -> torch.Tensor:
     """
     Python wrapper for the 'tiberate_he_ops::switch_key_switch_later_part_extend' custom operator.
@@ -195,15 +146,10 @@ def switch_key_switch_later_part_extend(
     state: torch.Tensor
     l_enter: torch.Tensor
     l_enter_start_offset: int
-    _2q: torch.Tensor
-    Rs: torch.Tensor
-    ql: torch.Tensor
-    qh: torch.Tensor
-    kl: torch.Tensor
-    kh: torch.Tensor
+    sp_prime_len: int
     Returns:
         torch.Tensor
     """
     return torch.ops.tiberate_he_ops.switch_key_switch_later_part_extend(
-        rns_len, state, l_enter, l_enter_start_offset, _2q, Rs, ql, qh, kl, kh
+        rns_len, state, l_enter, l_enter_start_offset, sp_prime_len
     )

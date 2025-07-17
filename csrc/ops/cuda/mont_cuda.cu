@@ -400,9 +400,8 @@ void mont_reduce_cuda(torch::Tensor a, const int64_t sp_prime_len) {
 //------------------------------------------------------------------
 
 template <typename scalar_t>
-__global__ void reduce_2q_cuda_kernel(
-    TensorAcc32Restrict<scalar_t, 2> a_acc,
-    const TensorAcc32Restrict<scalar_t, 1> _2q_acc) {
+__global__ void reduce_2q_cuda_kernel(TensorAcc32Restrict<scalar_t, 2> a_acc,
+                                      const int sp_prime_len) {
   // This kernel reduces each element a_acc[i][j] modulo q = _2q_acc[i] / 2,
   // assuming that a < 2q. It's a fast, branchless way to compute a % q under
   // certain assumptions.
@@ -413,13 +412,17 @@ __global__ void reduce_2q_cuda_kernel(
 
   // Inputs.
   const scalar_t a = a_acc[i][j];
-  const scalar_t _2q = _2q_acc[i];
+  // Montgomery constants.
+  const int prime_offset = -gridDim.x - sp_prime_len + i;
+  const scalar_t* const_mem_2q =
+      get_const_ptr_gright<scalar_t>(0, prime_offset);
+  const scalar_t _2q = const_mem_2q[-_2Q_CONST_IDX * CONST_MEM_REGION_LEN];
   // Reduce. bound 2q → q
   a_acc[i][j] = reduce_2q_scalar_cuda_kernel(a, _2q);
 }
 
 template <typename scalar_t>
-void reduce_2q_cuda_typed(torch::Tensor a, const torch::Tensor _2q) {
+void reduce_2q_cuda_typed(torch::Tensor a, const int sp_prime_len) {
   auto device_id = a.device().index();
   cudaSetDevice(device_id);
   auto stream = at::cuda::getCurrentCUDAStream(device_id);
@@ -431,20 +434,86 @@ void reduce_2q_cuda_typed(torch::Tensor a, const torch::Tensor _2q) {
   dim3 dim_grid(C, N / BLOCK_SIZE);
 
   auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
-  const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
 
   reduce_2q_cuda_kernel<scalar_t>
-      <<<dim_grid, dim_block, 0, stream>>>(a_acc, _2q_acc);
+      <<<dim_grid, dim_block, 0, stream>>>(a_acc, sp_prime_len);
 }
 
-void reduce_2q_cuda(torch::Tensor a, const torch::Tensor _2q) {
+void reduce_2q_cuda(torch::Tensor a, const int64_t sp_prime_len) {
+  const int prime_len_int = static_cast<int>(sp_prime_len);
   AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_reduce_2q_cuda", ([&] {
-                               reduce_2q_cuda_typed<scalar_t>(a, _2q);
+                               reduce_2q_cuda_typed<scalar_t>(a, prime_len_int);
                              }));
 }
 
 //------------------------------------------------------------------
 // mont_add
+//------------------------------------------------------------------
+
+template <typename scalar_t>
+__global__ void mont_add_cuda_kernel(
+    TensorAcc32Restrict<scalar_t, 2> out_acc,
+    const TensorAcc32Restrict<scalar_t, 2> a_acc,
+    const TensorAcc32Restrict<scalar_t, 2> b_acc,
+    const int sp_prime_len) {
+  // Indexing
+  const int i = blockIdx.x;
+  const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
+
+  // Inputs.
+  constexpr scalar_t one = 1;
+  const scalar_t a = a_acc[i][j];
+  const scalar_t b = b_acc[i][j];
+
+  // Montgomery constants.
+  const int prime_offset = -gridDim.x - sp_prime_len + i;
+  const scalar_t* const_mem_2q =
+      get_const_ptr_gright<scalar_t>(0, prime_offset);
+  const scalar_t _2q = const_mem_2q[-_2Q_CONST_IDX * CONST_MEM_REGION_LEN];
+
+  // Add.
+  out_acc[i][j] = mont_add_scalar_cuda_kernel(a, b, _2q);
+}
+
+template <typename scalar_t>
+void mont_add_cuda_typed(const torch::Tensor a,
+                         const torch::Tensor b,
+                         torch::Tensor out,
+                         const int sp_prime_len) {
+  auto device_id = a.device().index();
+  cudaSetDevice(device_id);
+  auto stream = at::cuda::getCurrentCUDAStream(device_id);
+
+  auto C = a.size(0);
+  auto N = a.size(1);
+
+  int dim_block = BLOCK_SIZE;
+  dim3 dim_grid(C, N / BLOCK_SIZE);
+
+  // Run the cuda kernel.
+  auto out_acc = makeAcc32Restrict(out, scalar_t, 2);
+  const auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
+  const auto b_acc = makeAcc32Restrict(b, scalar_t, 2);
+  // const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
+
+  mont_add_cuda_kernel<scalar_t>
+      <<<dim_grid, dim_block, 0, stream>>>(out_acc, a_acc, b_acc, sp_prime_len);
+}
+
+torch::Tensor mont_add_cuda(const torch::Tensor a,
+                            const torch::Tensor b,
+                            const int64_t sp_prime_len) {
+  const int prime_len_int = static_cast<int>(sp_prime_len);
+  torch::Tensor out = torch::empty_like(a);
+  AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_mont_add_cuda", ([&] {
+                               mont_add_cuda_typed<scalar_t>(
+                                   a, b, out, prime_len_int);
+                             }));
+  return out;
+}
+
+//------------------------------------------------------------------
+// mont_add_legacy
 //------------------------------------------------------------------
 
 template <typename scalar_t>
@@ -510,7 +579,7 @@ __global__ void mont_sub_cuda_kernel(
     TensorAcc32Restrict<scalar_t, 2> out_acc,
     const TensorAcc32Restrict<scalar_t, 2> a_acc,
     const TensorAcc32Restrict<scalar_t, 2> b_acc,
-    const TensorAcc32Restrict<scalar_t, 1> _2q_acc) {
+    const int sp_prime_len) {
   // Indexing
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
@@ -519,7 +588,12 @@ __global__ void mont_sub_cuda_kernel(
   constexpr scalar_t one = 1;
   const scalar_t a = a_acc[i][j];
   const scalar_t b = b_acc[i][j];
-  const scalar_t _2q = _2q_acc[i];
+
+  // Montgomery constants.
+  const int prime_offset = -gridDim.x - sp_prime_len + i;
+  const scalar_t* const_mem_2q =
+      get_const_ptr_gright<scalar_t>(0, prime_offset);
+  const scalar_t _2q = const_mem_2q[-_2Q_CONST_IDX * CONST_MEM_REGION_LEN];
 
   // Sub.
   out_acc[i][j] = mont_sub_scalar_cuda_kernel(a, b, _2q);
@@ -529,7 +603,7 @@ template <typename scalar_t>
 void mont_sub_cuda_typed(const torch::Tensor a,
                          const torch::Tensor b,
                          torch::Tensor out,
-                         const torch::Tensor _2q) {
+                         const int sp_prime_len) {
   auto device_id = a.device().index();
   cudaSetDevice(device_id);
   auto stream = at::cuda::getCurrentCUDAStream(device_id);
@@ -544,17 +618,19 @@ void mont_sub_cuda_typed(const torch::Tensor a,
   auto out_acc = makeAcc32Restrict(out, scalar_t, 2);
   const auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
   const auto b_acc = makeAcc32Restrict(b, scalar_t, 2);
-  const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
+
   mont_sub_cuda_kernel<scalar_t>
-      <<<dim_grid, dim_block, 0, stream>>>(out_acc, a_acc, b_acc, _2q_acc);
+      <<<dim_grid, dim_block, 0, stream>>>(out_acc, a_acc, b_acc, sp_prime_len);
 }
 
 torch::Tensor mont_sub_cuda(const torch::Tensor a,
                             const torch::Tensor b,
-                            const torch::Tensor _2q) {
+                            const int64_t sp_prime_len) {
+  const int prime_len_int = static_cast<int>(sp_prime_len);
   torch::Tensor out = torch::empty_like(a);
   AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_mont_sub_cuda", ([&] {
-                               mont_sub_cuda_typed<scalar_t>(a, b, out, _2q);
+                               mont_sub_cuda_typed<scalar_t>(
+                                   a, b, out, prime_len_int);
                              }));
   return out;
 }
@@ -564,9 +640,8 @@ torch::Tensor mont_sub_cuda(const torch::Tensor a,
 //------------------------------------------------------------------
 
 template <typename scalar_t>
-__global__ void make_signed_cuda_kernel(
-    TensorAcc32Restrict<scalar_t, 2> a_acc,
-    const TensorAcc32Restrict<scalar_t, 1> _2q_acc) {
+__global__ void make_signed_cuda_kernel(TensorAcc32Restrict<scalar_t, 2> a_acc,
+                                        const int sp_prime_len) {
   // Indexing
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
@@ -574,14 +649,19 @@ __global__ void make_signed_cuda_kernel(
   // Inputs.
   constexpr scalar_t one = 1;
   const scalar_t a = a_acc[i][j];
-  const scalar_t _2q = _2q_acc[i];
+
+  // Montgomery constants.
+  const int prime_offset = -gridDim.x - sp_prime_len + i;
+  const scalar_t* const_mem_2q =
+      get_const_ptr_gright<scalar_t>(0, prime_offset);
+  const scalar_t _2q = const_mem_2q[-_2Q_CONST_IDX * CONST_MEM_REGION_LEN];
 
   // Make signed.
   a_acc[i][j] = make_signed_scalar_cuda_kernel(a, _2q);
 }
 
 template <typename scalar_t>
-void make_signed_cuda_typed(torch::Tensor a, const torch::Tensor _2q) {
+void make_signed_cuda_typed(torch::Tensor a, const int sp_prime_len) {
   auto device_id = a.device().index();
   cudaSetDevice(device_id);
   auto stream = at::cuda::getCurrentCUDAStream(device_id);
@@ -593,15 +673,16 @@ void make_signed_cuda_typed(torch::Tensor a, const torch::Tensor _2q) {
   dim3 dim_grid(C, N / BLOCK_SIZE);
 
   auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
-  const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
 
   make_signed_cuda_kernel<scalar_t>
-      <<<dim_grid, dim_block, 0, stream>>>(a_acc, _2q_acc);
+      <<<dim_grid, dim_block, 0, stream>>>(a_acc, sp_prime_len);
 }
 
-void make_signed_cuda(torch::Tensor a, const torch::Tensor _2q) {
+void make_signed_cuda(torch::Tensor a, const int64_t sp_prime_len) {
+  const int prime_len_int = static_cast<int>(sp_prime_len);
   AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_make_signed_cuda", ([&] {
-                               make_signed_cuda_typed<scalar_t>(a, _2q);
+                               make_signed_cuda_typed<scalar_t>(a,
+                                                                prime_len_int);
                              }));
 }
 
@@ -610,23 +691,28 @@ void make_signed_cuda(torch::Tensor a, const torch::Tensor _2q) {
 //------------------------------------------------------------------
 
 template <typename scalar_t>
-__global__ void make_unsigned_cuda_kernel(
-    TensorAcc32Restrict<scalar_t, 2> a_acc,
-    const TensorAcc32Restrict<scalar_t, 1> _2q_acc) {
+__global__ void make_unsigned_inplace_cuda_kernel(
+    TensorAcc32Restrict<scalar_t, 2> a_acc, const int sp_prime_len) {
   // Indexing
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
 
   // Inputs.
   constexpr scalar_t one = 1;
-  const scalar_t q = _2q_acc[i] >> one;
+  const scalar_t a = a_acc[i][j];
+
+  // Montgomery constants.
+  const int prime_offset = -gridDim.x - sp_prime_len + i;
+  const scalar_t* const_mem_2q =
+      get_const_ptr_gright<scalar_t>(0, prime_offset);
+  const scalar_t _2q = const_mem_2q[-_2Q_CONST_IDX * CONST_MEM_REGION_LEN];
 
   // Make unsigned.
-  a_acc[i][j] = make_unsigned_scalar_cuda_kernel(a_acc[i][j], q);
+  a_acc[i][j] = make_unsigned_scalar_cuda_kernel(a, _2q);
 }
 
 template <typename scalar_t>
-void make_unsigned_cuda_typed(torch::Tensor a, const torch::Tensor _2q) {
+void make_unsigned_cuda_typed(torch::Tensor a, const int sp_prime_len) {
   auto device_id = a.device().index();
   cudaSetDevice(device_id);
   auto stream = at::cuda::getCurrentCUDAStream(device_id);
@@ -638,15 +724,16 @@ void make_unsigned_cuda_typed(torch::Tensor a, const torch::Tensor _2q) {
   dim3 dim_grid(C, N / BLOCK_SIZE);
 
   auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
-  const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
 
-  make_unsigned_cuda_kernel<scalar_t>
-      <<<dim_grid, dim_block, 0, stream>>>(a_acc, _2q_acc);
+  make_unsigned_inplace_cuda_kernel<scalar_t>
+      <<<dim_grid, dim_block, 0, stream>>>(a_acc, sp_prime_len);
 }
 
-void make_unsigned_cuda(torch::Tensor a, const torch::Tensor _2q) {
+void make_unsigned_cuda(torch::Tensor a, const int64_t sp_prime_len) {
+  const int prime_len_int = static_cast<int>(sp_prime_len);
   AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_make_unsigned_cuda", ([&] {
-                               make_unsigned_cuda_typed<scalar_t>(a, _2q);
+                               make_unsigned_cuda_typed<scalar_t>(
+                                   a, prime_len_int);
                              }));
 }
 
@@ -665,16 +752,16 @@ __global__ void tile_unsigned_cuda_kernel(
 
   // Inputs.
   constexpr scalar_t one = 1;
-  const scalar_t q = _2q_acc[i] >> one;
+  const scalar_t _2q = _2q_acc[i];
   const scalar_t a = a_acc[j];
 
   // Make unsigned.
-  out_acc[i][j] = a + q;
+  out_acc[i][j] = make_unsigned_scalar_cuda_kernel(a, _2q);
 }
 
 template <typename scalar_t>
 void tile_unsigned_cuda_typed(const torch::Tensor a,
-                              torch::Tensor dst,
+                              torch::Tensor out,
                               const torch::Tensor _2q) {
   auto device_id = a.device().index();
   cudaSetDevice(device_id);
@@ -686,7 +773,7 @@ void tile_unsigned_cuda_typed(const torch::Tensor a,
   int dim_block = BLOCK_SIZE;
   dim3 dim_grid(C, N / BLOCK_SIZE);
 
-  auto out_acc = makeAcc32Restrict(dst, scalar_t, 2);
+  auto out_acc = makeAcc32Restrict(out, scalar_t, 2);
   const auto a_acc = makeAcc32Restrict(a, scalar_t, 1);
   const auto _2q_acc = makeAcc32Restrict(_2q, scalar_t, 1);
 
@@ -699,9 +786,9 @@ torch::Tensor tile_unsigned_cuda(const torch::Tensor a,
   a.squeeze_();
   const auto C = _2q.size(0);
   const auto N = a.size(0);
-  auto c = a.new_empty({C, N});
+  auto out = a.new_empty({C, N});
   AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_tile_unsigned_cuda", ([&] {
-                               tile_unsigned_cuda_typed<scalar_t>(a, c, _2q);
+                               tile_unsigned_cuda_typed<scalar_t>(a, out, _2q);
                              }));
-  return c;
+  return out;
 }

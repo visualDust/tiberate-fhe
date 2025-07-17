@@ -673,8 +673,8 @@ class CkksEngine:
         self.nttCtx.intt_radix2_exit(d2_s2, level)
 
         pt = self.nttCtx.mont_add(d0, d1_s, level)
-        pt = self.nttCtx.mont_add(pt, d2_s2, level)
-        self.nttCtx.reduce_2q(pt, level)
+        pt = self.nttCtx.mont_add_reduce_2q(pt, d2_s2, level)
+        # self.nttCtx.reduce_2q(pt, level)
 
         base_at = (
             -self.ckksCfg.num_special_primes - 1
@@ -727,8 +727,8 @@ class CkksEngine:
         sa = self.nttCtx.mont_mult([a], [sk_data], level)
         self.nttCtx.intt_radix2_exit(sa, level)
 
-        pt = self.nttCtx.mont_add([ct0], sa, level)
-        self.nttCtx.reduce_2q(pt, level)
+        pt = self.nttCtx.mont_add_reduce_2q([ct0], sa, level)
+        # self.nttCtx.reduce_2q(pt, level)
 
         base_at = (
             -self.ckksCfg.num_special_primes - 1
@@ -837,7 +837,9 @@ class CkksEngine:
                 pk_data = pk.data[0][device_id][astart:astop]
 
                 _2q = self.nttCtx.parts_pack[device_id][key]["_2q"]
-                update_part = mont_ops.mont_add([pk_data], [shard], _2q)[0]
+                update_part = mont_ops.mont_add_legacy([pk_data], [shard], _2q)[
+                    0
+                ]
                 pk_data.copy_(update_part, non_blocking=True)
 
                 pk.misc["description"] = (
@@ -922,54 +924,54 @@ class CkksEngine:
         return state
 
     # @torch.compile(backend=tiberate_compiler)
-    def extend_old(
-        self, state, device_id, level, part_id, target_device_id=None
-    ):
-        # Note that device_id, level, and part_id is from
-        # where the state has been originally calculated at.
-        # The state can reside in a different GPU than
-        # the original one.
+    # def extend_old(
+    #     self, state, device_id, level, part_id, target_device_id=None
+    # ):
+    #     # Note that device_id, level, and part_id is from
+    #     # where the state has been originally calculated at.
+    #     # The state can reside in a different GPU than
+    #     # the original one.
 
-        if target_device_id is None:
-            target_device_id = device_id
+    #     if target_device_id is None:
+    #         target_device_id = device_id
 
-        rns_len = len(
-            self.rnsPart.destination_arrays_with_special[level][
-                target_device_id
-            ]
-        )
-        alpha = len(state)
+    #     rns_len = len(
+    #         self.rnsPart.destination_arrays_with_special[level][
+    #             target_device_id
+    #         ]
+    #     )
+    #     alpha = len(state)
 
-        # Initialize the output
-        extended = state[0].repeat(rns_len, 1)
-        self.nttCtx.mont_enter([extended], level, target_device_id, -2)
+    #     # Initialize the output
+    #     extended = state[0].repeat(rns_len, 1)
+    #     self.nttCtx.mont_enter([extended], level, target_device_id, -2)
 
-        # Generate the search key to find the L_enter.
-        part = self.rnsPart.p[level][device_id][part_id]
-        key = tuple(part)
+    #     # Generate the search key to find the L_enter.
+    #     part = self.rnsPart.p[level][device_id][part_id]
+    #     key = tuple(part)
 
-        # Extract the L_enter in the target device.
-        L_enter = self.nttCtx.parts_pack[device_id][key]["L_enter"][
-            target_device_id
-        ]
+    #     # Extract the L_enter in the target device.
+    #     L_enter = self.nttCtx.parts_pack[device_id][key]["L_enter"][
+    #         target_device_id
+    #     ]
 
-        # L_enter covers the whole rns range.
-        # Start from the leveled start.
-        start = self.nttCtx.starts[level][target_device_id]
+    #     # L_enter covers the whole rns range.
+    #     # Start from the leveled start.
+    #     start = self.nttCtx.starts[level][target_device_id]
 
-        # Loop to generate.
-        for i in range(alpha - 1):
-            Y = state[i + 1].repeat(rns_len, 1)
+    #     # Loop to generate.
+    #     for i in range(alpha - 1):
+    #         Y = state[i + 1].repeat(rns_len, 1)
 
-            self.nttCtx.mont_enter_scalar(
-                [Y], [L_enter[i][start:]], level, target_device_id, -2
-            )
-            extended = self.nttCtx.mont_add(
-                [Y], [extended], level, target_device_id, -2
-            )[0]
+    #         self.nttCtx.mont_enter_scalar(
+    #             [Y], [L_enter[i][start:]], level, target_device_id, -2
+    #         )
+    #         extended = self.nttCtx.mont_add(
+    #             [Y], [extended], level, target_device_id, -2
+    #         )[0]
 
-        # Returned extended is in the Montgomery format.
-        return extended
+    #     # Returned extended is in the Montgomery format.
+    #     return extended
 
     def extend(self, state, device_id, level, part_id, target_device_id=None):
         # Note that device_id, level, and part_id is from
@@ -1003,12 +1005,7 @@ class CkksEngine:
                 )  # todo)) just pass None cause error
             ),
             start,
-            self.nttCtx._2q_prepack[target_device_id][level][-2][0],
-            self.nttCtx.Rs_prepack[target_device_id][level][-2][0],
-            *[
-                t[0]
-                for t in self.nttCtx.mont_prepack[target_device_id][level][-2]
-            ],
+            self.ckksCfg.num_special_primes if target_device_id == -1 else 0,
         )
 
         # Returned extended is in the Montgomery format.
@@ -1353,19 +1350,13 @@ class CkksEngine:
         out0 = he_ops.create_switcher_divide_by_p(
             c0,
             p0,
-            self.nttCtx._2q_prepack[-2][level][0],
-            self.nttCtx.Rs_prepack[-2][level][0],
             PiRi,
-            *self.nttCtx.mont_prepack[-2][level][0],
         )
 
         out1 = he_ops.create_switcher_divide_by_p(
             c1,
             p1,
-            self.nttCtx._2q_prepack[-2][level][0],
-            self.nttCtx.Rs_prepack[-2][level][0],
             PiRi,
-            *self.nttCtx.mont_prepack[-2][level][0],
         )
 
         # 7. Return
@@ -1593,16 +1584,14 @@ class CkksEngine:
                 rescaling_scales,
                 rescaler0,
                 round_at,
-                self.nttCtx._2q_prepack[-1][next_level][0],
-                *self.nttCtx.mont_prepack[-1][next_level][0],
+                self.ckksCfg.num_special_primes,
             )
             he_ops.rescale_exact_rounding_fused(
                 data1,
                 rescaling_scales,
                 rescaler1,
                 round_at,
-                self.nttCtx._2q_prepack[-1][next_level][0],
-                *self.nttCtx.mont_prepack[-1][next_level][0],
+                self.ckksCfg.num_special_primes,
             )
 
         else:
@@ -1610,15 +1599,13 @@ class CkksEngine:
                 data0,
                 rescaling_scales,
                 rescaler0,
-                self.nttCtx._2q_prepack[-1][next_level][0],
-                *self.nttCtx.mont_prepack[-1][next_level][0],
+                self.ckksCfg.num_special_primes,
             )
             he_ops.rescale_non_exact_rounding_fused(
                 data1,
                 rescaling_scales,
                 rescaler1,
-                self.nttCtx._2q_prepack[-1][next_level][0],
-                *self.nttCtx.mont_prepack[-1][next_level][0],
+                self.ckksCfg.num_special_primes,
             )
 
         return Ciphertext(
@@ -1776,42 +1763,42 @@ class CkksEngine:
         logger.debug(f"Rotation key created for delta {delta}")
         return rotk
 
-    # @strictype # enable when debugging
-    def rotate_single_old(
-        self,
-        ct: Ciphertext,
-        rotk: RotationKey,
-        post_key_switching=True,
-        inplace: bool = True,
-    ) -> Ciphertext:
-        if not inplace:
-            ct = ct.clone()
+    # # @strictype # enable when debugging
+    # def rotate_single_old(
+    #     self,
+    #     ct: Ciphertext,
+    #     rotk: RotationKey,
+    #     post_key_switching=True,
+    #     inplace: bool = True,
+    # ) -> Ciphertext:
+    #     if not inplace:
+    #         ct = ct.clone()
 
-        level = ct.level
+    #     level = ct.level
 
-        rotated_ct_data = [
-            [codec.rotate(d, rotk.delta) for d in ct_data]
-            for ct_data in ct.data
-        ]
+    #     rotated_ct_data = [
+    #         [codec.rotate(d, rotk.delta) for d in ct_data]
+    #         for ct_data in ct.data
+    #     ]
 
-        # Rotated ct may contain negative numbers.
-        mult_type = -2 if ct.has_flag(FLAGS.INCLUDE_SPECIAL) else -1
-        for ct_data in rotated_ct_data:
-            self.nttCtx.make_unsigned(ct_data, level, mult_type)
-            self.nttCtx.reduce_2q(ct_data, level, mult_type)
+    #     # Rotated ct may contain negative numbers.
+    #     mult_type = -2 if ct.has_flag(FLAGS.INCLUDE_SPECIAL) else -1
+    #     for ct_data in rotated_ct_data:
+    #         self.nttCtx.make_unsigned(ct_data, level, mult_type)
+    #         self.nttCtx.reduce_2q(ct_data, level, mult_type)
 
-        rotated_ct = Ciphertext(
-            data=rotated_ct_data,
-            flags=ct._flags,
-            level=level,
-            # following is metadata (not required args)
-            logN=self.ckksCfg.logN,
-            creator_hash=self.hash,
-            misc=ct.misc,
-        )
-        if post_key_switching:
-            rotated_ct = self.switch_key(rotated_ct, rotk)
-        return rotated_ct
+    #     rotated_ct = Ciphertext(
+    #         data=rotated_ct_data,
+    #         flags=ct._flags,
+    #         level=level,
+    #         # following is metadata (not required args)
+    #         logN=self.ckksCfg.logN,
+    #         creator_hash=self.hash,
+    #         misc=ct.misc,
+    #     )
+    #     if post_key_switching:
+    #         rotated_ct = self.switch_key(rotated_ct, rotk)
+    #     return rotated_ct
 
     # @strictype # enable when debugging
     def rotate_single(
@@ -2499,32 +2486,32 @@ class CkksEngine:
     # -------------------------------------------------------------------------------------------
 
     # @strictype # enable when debugging
-    def pc_add_old(
-        self,
-        pt: Plaintext,
-        ct: Ciphertext,
-        inplace: bool = False,
-    ):
-        # process cache
-        if str(self.pc_add) not in pt.cache[ct.level]:
-            m = pt.src * math.sqrt(self.deviations[ct.level + 1])
-            pt_ = self.encode(m, ct.level, scale=pt.scale)
-            pt_ = self.nttCtx.tile_unsigned(pt_, ct.level)
-            self.nttCtx.mont_enter_scale(pt_, ct.level)
-            pt.cache[ct.level][str(self.pc_add)] = pt_
-        pt_ = pt.cache[ct.level][
-            str(self.pc_add)
-        ]  # todo does rewrite to auto trace impact performance?
+    # def pc_add_old(
+    #     self,
+    #     pt: Plaintext,
+    #     ct: Ciphertext,
+    #     inplace: bool = False,
+    # ):
+    #     # process cache
+    #     if str(self.pc_add) not in pt.cache[ct.level]:
+    #         m = pt.src * math.sqrt(self.deviations[ct.level + 1])
+    #         pt_ = self.encode(m, ct.level, scale=pt.scale)
+    #         pt_ = self.nttCtx.tile_unsigned(pt_, ct.level)
+    #         self.nttCtx.mont_enter_scale(pt_, ct.level)
+    #         pt.cache[ct.level][str(self.pc_add)] = pt_
+    #     pt_ = pt.cache[ct.level][
+    #         str(self.pc_add)
+    #     ]  # todo does rewrite to auto trace impact performance?
 
-        # process ct
-        new_ct = ct.clone() if not inplace else ct
+    #     # process ct
+    #     new_ct = ct.clone() if not inplace else ct
 
-        self.nttCtx.mont_enter(new_ct.data[0], ct.level)
-        new_ct.data[0] = self.nttCtx.mont_add(new_ct.data[0], pt_, ct.level)
-        self.nttCtx.mont_reduce(new_ct.data[0], ct.level)
-        self.nttCtx.reduce_2q(new_ct.data[0], ct.level)
+    #     self.nttCtx.mont_enter(new_ct.data[0], ct.level)
+    #     new_ct.data[0] = self.nttCtx.mont_add(new_ct.data[0], pt_, ct.level)
+    #     self.nttCtx.mont_reduce(new_ct.data[0], ct.level)
+    #     self.nttCtx.reduce_2q(new_ct.data[0], ct.level)
 
-        return new_ct
+    #     return new_ct
 
     def pc_add(self, pt: Plaintext, ct: Ciphertext, inplace: bool = False):
         # process cache
@@ -2539,8 +2526,8 @@ class CkksEngine:
             str(self.pc_add)
         ]  # todo does rewrite to auto trace impact performance?
 
-        new_d0 = self.nttCtx.pc_add_fused(
-            ct_data=ct.data[0], pt_data=pt_, lvl=ct.level
+        new_d0 = he_ops.pc_add_fused(
+            ct.data[0], pt_, self.ckksCfg.num_special_primes
         )
         if inplace:
             ct.data[0] = new_d0
@@ -2648,11 +2635,8 @@ class CkksEngine:
 
         new_ct = ct.clone(clone_data=False)
         for i in [0, 1]:
-            new_data_i = mont_ops.mont_enter_reduce_2q(
-                new_ct.data[i],
-                tensorized_scalar,
-                self.nttCtx._2q_prepack[-1][ct.level][0],
-                *self.nttCtx.mont_prepack[-1][ct.level][0],
+            new_data_i = self.nttCtx.mont_enter_scalar_reduce_2q(
+                new_ct.data[i], tensorized_scalar, ct.level
             )
             new_ct.data.append(new_data_i)
 
