@@ -1,26 +1,31 @@
 import os
+import re
+import sys
 
 import torch
 
 torch_op_dirs = ['torchops']
 
 
+def get_current_python_tag():
+    """Return the Python version tag like 'cpython-312' for the current interpreter."""
+    major = sys.version_info.major
+    minor = sys.version_info.minor
+    return f"cpython-{major}{minor}"
+
+
 def load_pytorch_ops(path):
-    # the built libraries are in the libs directory of the package
     lib_dir = os.path.join(os.path.dirname(__file__), path)
-    ext = ".so"
-    # search every file in the lib directory that ends with .so and load it
+    current_tag = get_current_python_tag()
+    version_pattern = re.compile(rf".*\.{current_tag}.*\.so$")
+
     for lib_file in os.listdir(lib_dir):
-        if lib_file.endswith(ext):
-            lib_path = os.path.join(lib_dir, lib_file)
-            if os.path.isfile(lib_path):
-                # logger.debug(f"Loading library {lib_path}")
-                torch.ops.load_library(lib_path)
-            else:
-                raise RuntimeError(
-                    f"Failed to load library from {lib_path}. "
-                    "Please make sure you have built the library correctly."
-                )
+        lib_path = os.path.join(lib_dir, lib_file)
+        if os.path.isfile(lib_path) and version_pattern.match(lib_file):
+            torch.ops.load_library(lib_path)
+        # optional warning or debug logging if needed
+        # else:
+        #     print(f"Skipped non-matching file: {lib_file}")
 
 
 # Load the PyTorch ops
@@ -28,5 +33,5 @@ for lib_dir in torch_op_dirs:
     load_pytorch_ops(lib_dir)
 
 from tiberate.libs.wrapper import (
-    fake_op,  # Register the FakeTensor kernel see https://docs.google.com/document/d/1_W62p8WJOQQUzPsJYa7s701JXt0qf2OfLub2sbkHOaU/edit?tab=t.0  # noqa: F401
+    fake_op,  # supports coexistence of multiple py versions build # noqa: F401
 )

@@ -48,6 +48,12 @@ from .ntt2_ops import (
 )
 
 __all__ = [
+    'chacha20',
+    'discrete_gaussian',
+    'discrete_gaussian_fast',
+    'randint',
+    'randint_fast',
+    'randround',
     'codec_rotate_make_unsigned_reduce_2q',
     'create_switcher_divide_by_p',
     'mont_mult_sum_many_3d',
@@ -80,10 +86,4 @@ __all__ = [
     'mont_sub_reduce_2q',
     'reduce_2q',
     'tile_unsigned',
-    'chacha20',
-    'discrete_gaussian',
-    'discrete_gaussian_fast',
-    'randint',
-    'randint_fast',
-    'randround',
 ]

@@ -2,6 +2,7 @@ import argparse
 import os
 import re
 import subprocess
+import sys
 from textwrap import dedent, indent
 
 import torch
@@ -20,6 +21,11 @@ CPP_TO_PYTHON_TYPE_MAP = {
     "str": "str",
     "()": "None",
 }
+
+
+def get_current_python_tag():
+    """Return the Python ABI tag like 'cpython-312' for the current interpreter."""
+    return f"cpython-{sys.version_info.major}{sys.version_info.minor}"
 
 
 def generate_wrappers_from_dict(schemas: dict[str, list[str]], output_dir: str):
@@ -161,8 +167,14 @@ def genwarpper(args):
     ).strip()
     init_from_list = []
     init_all_list = []
+    current_tag = get_current_python_tag()
+    abi_pattern = re.compile(rf".*\.{current_tag}.*\.so$")
     for lib_file in os.listdir(lib_dir):
-        if lib_file.endswith(".so"):
+        if not lib_file.endswith(".so"):
+            continue
+        if not abi_pattern.search(lib_file) and f".{current_tag}" in lib_file:
+            continue  # skip mismatched ABI tag
+        else:
             lib_path = os.path.join(lib_dir, lib_file)
             if args.verbose:
                 print(f"  -> Analyzing library: {lib_path}")
