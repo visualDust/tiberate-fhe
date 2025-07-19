@@ -9,10 +9,10 @@
 
 template <typename scalar_t>
 __global__ void ntt_radix2_cuda_kernel(
-    torch::PackedTensorAccessor32<scalar_t, 2> a_acc,
-    const torch::PackedTensorAccessor32<int, 2> even_acc,
-    const torch::PackedTensorAccessor32<int, 2> odd_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 3> psi_acc,
+    TensorAcc32Restrict<scalar_t, 2> a_acc,
+    const TensorAcc32Restrict<int, 2> even_acc,
+    const TensorAcc32Restrict<int, 2> odd_acc,
+    const TensorAcc32Restrict<scalar_t, 3> psi_acc,
     const int sp_prime_len,
     const int level) {
   // Where am I?
@@ -67,10 +67,10 @@ void ntt_radix2_cuda_typed(torch::Tensor a,
   int dim_block = BLOCK_SIZE;
   dim3 dim_grid(C, N / BLOCK_SIZE);
 
-  auto a_acc = a.packed_accessor32<scalar_t, 2>();
-  const auto even_acc = even.packed_accessor32<int, 2>();
-  const auto odd_acc = odd.packed_accessor32<int, 2>();
-  const auto psi_acc = psi.packed_accessor32<scalar_t, 3>();
+  auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
+  const auto even_acc = makeAcc32Restrict(even, int, 2);
+  const auto odd_acc = makeAcc32Restrict(odd, int, 2);
+  const auto psi_acc = makeAcc32Restrict(psi, scalar_t, 3);
 
   for (int i = 0; i < logN; ++i) {
     ntt_radix2_cuda_kernel<scalar_t><<<dim_grid, dim_block, 0, stream>>>(
@@ -119,10 +119,10 @@ void enter_ntt_radix2_cuda_typed(torch::Tensor a,
   dim3 dim_grid_ntt(C, N_half / BLOCK_SIZE);
   dim3 dim_grid_enter(C, N / BLOCK_SIZE);
 
-  auto a_acc = a.packed_accessor32<scalar_t, 2>();
-  const auto even_acc = even.packed_accessor32<int, 2>();
-  const auto odd_acc = odd.packed_accessor32<int, 2>();
-  const auto psi_acc = psi.packed_accessor32<scalar_t, 3>();
+  auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
+  const auto even_acc = makeAcc32Restrict(even, int, 2);
+  const auto odd_acc = makeAcc32Restrict(odd, int, 2);
+  const auto psi_acc = makeAcc32Restrict(psi, scalar_t, 3);
 
   // enter.
   mont_enter_Rs_cuda_kernel<scalar_t>

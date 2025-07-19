@@ -33,7 +33,7 @@ def intt_radix2(
     a: list[torch.Tensor],
     even: list[torch.Tensor],
     odd: list[torch.Tensor],
-    psi: list[torch.Tensor],
+    ipsi: list[torch.Tensor],
     sp_prime_len: int,
 ) -> None:
     """
@@ -43,19 +43,19 @@ def intt_radix2(
     a: list[torch.Tensor] (modified in-place)
     even: list[torch.Tensor]
     odd: list[torch.Tensor]
-    psi: list[torch.Tensor]
+    ipsi: list[torch.Tensor]
     sp_prime_len: int
     Returns:
         None
     """
-    torch.ops.tiberate_ntt2_ops.intt_radix2(a, even, odd, psi, sp_prime_len)
+    torch.ops.tiberate_ntt2_ops.intt_radix2(a, even, odd, ipsi, sp_prime_len)
 
 
 def intt_radix2_exit(
     a: list[torch.Tensor],
     even: list[torch.Tensor],
     odd: list[torch.Tensor],
-    psi: list[torch.Tensor],
+    ipsi: list[torch.Tensor],
     sp_prime_len: int,
 ) -> None:
     """
@@ -65,13 +65,13 @@ def intt_radix2_exit(
     a: list[torch.Tensor] (modified in-place)
     even: list[torch.Tensor]
     odd: list[torch.Tensor]
-    psi: list[torch.Tensor]
+    ipsi: list[torch.Tensor]
     sp_prime_len: int
     Returns:
         None
     """
     torch.ops.tiberate_ntt2_ops.intt_radix2_exit(
-        a, even, odd, psi, sp_prime_len
+        a, even, odd, ipsi, sp_prime_len
     )
 
 
@@ -79,7 +79,7 @@ def intt_radix2_exit_reduce(
     a: list[torch.Tensor],
     even: list[torch.Tensor],
     odd: list[torch.Tensor],
-    psi: list[torch.Tensor],
+    ipsi: list[torch.Tensor],
     sp_prime_len: int,
 ) -> None:
     """
@@ -89,13 +89,13 @@ def intt_radix2_exit_reduce(
     a: list[torch.Tensor] (modified in-place)
     even: list[torch.Tensor]
     odd: list[torch.Tensor]
-    psi: list[torch.Tensor]
+    ipsi: list[torch.Tensor]
     sp_prime_len: int
     Returns:
         None
     """
     torch.ops.tiberate_ntt2_ops.intt_radix2_exit_reduce(
-        a, even, odd, psi, sp_prime_len
+        a, even, odd, ipsi, sp_prime_len
     )
 
 
@@ -103,7 +103,7 @@ def intt_radix2_exit_reduce_signed(
     a: list[torch.Tensor],
     even: list[torch.Tensor],
     odd: list[torch.Tensor],
-    psi: list[torch.Tensor],
+    ipsi: list[torch.Tensor],
     sp_prime_len: int,
 ) -> None:
     """
@@ -113,13 +113,13 @@ def intt_radix2_exit_reduce_signed(
     a: list[torch.Tensor] (modified in-place)
     even: list[torch.Tensor]
     odd: list[torch.Tensor]
-    psi: list[torch.Tensor]
+    ipsi: list[torch.Tensor]
     sp_prime_len: int
     Returns:
         None
     """
     torch.ops.tiberate_ntt2_ops.intt_radix2_exit_reduce_signed(
-        a, even, odd, psi, sp_prime_len
+        a, even, odd, ipsi, sp_prime_len
     )
 
 

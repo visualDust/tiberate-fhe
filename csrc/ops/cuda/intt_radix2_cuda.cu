@@ -9,10 +9,10 @@
 
 template <typename scalar_t>
 __global__ void intt_radix2_cuda_kernel(
-    torch::PackedTensorAccessor32<scalar_t, 2> a_acc,
-    const torch::PackedTensorAccessor32<int, 2> even_acc,
-    const torch::PackedTensorAccessor32<int, 2> odd_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 3> ipsi_acc,
+    TensorAcc32Restrict<scalar_t, 2> a_acc,
+    const TensorAcc32Restrict<int, 2> even_acc,
+    const TensorAcc32Restrict<int, 2> odd_acc,
+    const TensorAcc32Restrict<scalar_t, 3> ipsi_acc,
     const int sp_prime_len,
     const int level) {
   // Where am I?
@@ -51,7 +51,7 @@ template <typename scalar_t>
 void intt_radix2_cuda_typed(torch::Tensor a,
                             const torch::Tensor even,
                             const torch::Tensor odd,
-                            const torch::Tensor psi,
+                            const torch::Tensor ipsi,
                             const int sp_prime_len) {
   // Retrieve the device index, then set the corresponding device and stream.
   auto device_id = a.device().index();
@@ -73,16 +73,15 @@ void intt_radix2_cuda_typed(torch::Tensor a,
   dim3 dim_grid_ntt(C, N_half / BLOCK_SIZE);
   dim3 dim_grid_enter(C, N / BLOCK_SIZE);
 
-  // Run the cuda kernel.
-  auto a_acc = a.packed_accessor32<scalar_t, 2>();
-
-  const auto even_acc = even.packed_accessor32<int, 2>();
-  const auto odd_acc = odd.packed_accessor32<int, 2>();
-  const auto psi_acc = psi.packed_accessor32<scalar_t, 3>();
+  // make the packed accessors.
+  auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
+  const auto even_acc = makeAcc32Restrict(even, int, 2);
+  const auto odd_acc = makeAcc32Restrict(odd, int, 2);
+  const auto ipsi_acc = makeAcc32Restrict(ipsi, scalar_t, 3);
 
   for (int i = 0; i < logN; ++i) {
     intt_radix2_cuda_kernel<scalar_t><<<dim_grid_ntt, dim_block, 0, stream>>>(
-        a_acc, even_acc, odd_acc, psi_acc, sp_prime_len, i);
+        a_acc, even_acc, odd_acc, ipsi_acc, sp_prime_len, i);
   }
 
   // Normalize.
@@ -93,13 +92,13 @@ void intt_radix2_cuda_typed(torch::Tensor a,
 void intt_radix2_cuda(torch::Tensor a,
                       const torch::Tensor even,
                       const torch::Tensor odd,
-                      const torch::Tensor psi,
+                      const torch::Tensor ipsi,
                       const int64_t sp_prime_len) {
   const int prime_len_int = static_cast<int>(sp_prime_len);
   // Dispatch to the correct data type.
   AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_intt_cuda", ([&] {
                                intt_radix2_cuda_typed<scalar_t>(
-                                   a, even, odd, psi, prime_len_int);
+                                   a, even, odd, ipsi, prime_len_int);
                              }));
 }
 
@@ -111,7 +110,7 @@ template <typename scalar_t>
 void intt_radix2_exit_cuda_typed(torch::Tensor a,
                                  const torch::Tensor even,
                                  const torch::Tensor odd,
-                                 const torch::Tensor psi,
+                                 const torch::Tensor ipsi,
                                  const int sp_prime_len) {
   // Retrieve the device index, then set the corresponding device and stream.
   auto device_id = a.device().index();
@@ -133,16 +132,15 @@ void intt_radix2_exit_cuda_typed(torch::Tensor a,
   dim3 dim_grid_ntt(C, N_half / BLOCK_SIZE);
   dim3 dim_grid_enter(C, N / BLOCK_SIZE);
 
-  // Run the cuda kernel.
-  auto a_acc = a.packed_accessor32<scalar_t, 2>();
-
-  const auto even_acc = even.packed_accessor32<int, 2>();
-  const auto odd_acc = odd.packed_accessor32<int, 2>();
-  const auto psi_acc = psi.packed_accessor32<scalar_t, 3>();
+  // make the packed accessors.
+  auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
+  const auto even_acc = makeAcc32Restrict(even, int, 2);
+  const auto odd_acc = makeAcc32Restrict(odd, int, 2);
+  const auto ipsi_acc = makeAcc32Restrict(ipsi, scalar_t, 3);
 
   for (int i = 0; i < logN; ++i) {
     intt_radix2_cuda_kernel<scalar_t><<<dim_grid_ntt, dim_block, 0, stream>>>(
-        a_acc, even_acc, odd_acc, psi_acc, sp_prime_len, i);
+        a_acc, even_acc, odd_acc, ipsi_acc, sp_prime_len, i);
   }
 
   // Normalize and Exit
@@ -153,13 +151,13 @@ void intt_radix2_exit_cuda_typed(torch::Tensor a,
 void intt_radix2_exit_cuda(torch::Tensor a,
                            const torch::Tensor even,
                            const torch::Tensor odd,
-                           const torch::Tensor psi,
+                           const torch::Tensor ipsi,
                            const int64_t sp_prime_len) {
   const int prime_len_int = static_cast<int>(sp_prime_len);
   // Dispatch to the correct data type.
   AT_DISPATCH_INTEGRAL_TYPES(a.scalar_type(), "typed_intt_exit_cuda", ([&] {
                                intt_radix2_exit_cuda_typed<scalar_t>(
-                                   a, even, odd, psi, prime_len_int);
+                                   a, even, odd, ipsi, prime_len_int);
                              }));
 }
 
@@ -171,7 +169,7 @@ template <typename scalar_t>
 void intt_radix2_exit_reduce_cuda_typed(torch::Tensor a,
                                         const torch::Tensor even,
                                         const torch::Tensor odd,
-                                        const torch::Tensor psi,
+                                        const torch::Tensor ipsi,
                                         const int sp_prime_len) {
   // Retrieve the device index, then set the corresponding device and stream.
   auto device_id = a.device().index();
@@ -191,16 +189,15 @@ void intt_radix2_exit_reduce_cuda_typed(torch::Tensor a,
   dim3 dim_grid_ntt(C, N_half / BLOCK_SIZE);
   dim3 dim_grid_enter(C, N / BLOCK_SIZE);
 
-  // Run the cuda kernel.
-  auto a_acc = a.packed_accessor32<scalar_t, 2>();
-
-  const auto even_acc = even.packed_accessor32<int, 2>();
-  const auto odd_acc = odd.packed_accessor32<int, 2>();
-  const auto psi_acc = psi.packed_accessor32<scalar_t, 3>();
+  // make the packed accessors.
+  auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
+  const auto even_acc = makeAcc32Restrict(even, int, 2);
+  const auto odd_acc = makeAcc32Restrict(odd, int, 2);
+  const auto ipsi_acc = makeAcc32Restrict(ipsi, scalar_t, 3);
 
   for (int i = 0; i < logN; ++i) {
     intt_radix2_cuda_kernel<scalar_t><<<dim_grid_ntt, dim_block, 0, stream>>>(
-        a_acc, even_acc, odd_acc, psi_acc, sp_prime_len, i);
+        a_acc, even_acc, odd_acc, ipsi_acc, sp_prime_len, i);
   }
 
   // Normalize, Exit and Reduce.
@@ -230,7 +227,7 @@ template <typename scalar_t>
 void intt_radix2_exit_reduce_signed_cuda_typed(torch::Tensor a,
                                                const torch::Tensor even,
                                                const torch::Tensor odd,
-                                               const torch::Tensor psi,
+                                               const torch::Tensor ipsi,
                                                const int sp_prime_len) {
   // Retrieve the device index, then set the corresponding device and stream.
   auto device_id = a.device().index();
@@ -250,16 +247,15 @@ void intt_radix2_exit_reduce_signed_cuda_typed(torch::Tensor a,
   dim3 dim_grid_ntt(C, N_half / BLOCK_SIZE);
   dim3 dim_grid_enter(C, N / BLOCK_SIZE);
 
-  // Run the cuda kernel.
-  auto a_acc = a.packed_accessor32<scalar_t, 2>();
-
-  const auto even_acc = even.packed_accessor32<int, 2>();
-  const auto odd_acc = odd.packed_accessor32<int, 2>();
-  const auto psi_acc = psi.packed_accessor32<scalar_t, 3>();
+  // make the packed accessors.
+  auto a_acc = makeAcc32Restrict(a, scalar_t, 2);
+  const auto even_acc = makeAcc32Restrict(even, int, 2);
+  const auto odd_acc = makeAcc32Restrict(odd, int, 2);
+  const auto ipsi_acc = makeAcc32Restrict(ipsi, scalar_t, 3);
 
   for (int i = 0; i < logN; ++i) {
     intt_radix2_cuda_kernel<scalar_t><<<dim_grid_ntt, dim_block, 0, stream>>>(
-        a_acc, even_acc, odd_acc, psi_acc, sp_prime_len, i);
+        a_acc, even_acc, odd_acc, ipsi_acc, sp_prime_len, i);
   }
 
   // Normalize.
@@ -270,13 +266,13 @@ void intt_radix2_exit_reduce_signed_cuda_typed(torch::Tensor a,
 void intt_radix2_exit_reduce_signed_cuda(torch::Tensor a,
                                          const torch::Tensor even,
                                          const torch::Tensor odd,
-                                         const torch::Tensor psi,
+                                         const torch::Tensor ipsi,
                                          const int64_t sp_prime_len) {
   const int prime_len_int = static_cast<int>(sp_prime_len);
   // Dispatch to the correct data type.
   AT_DISPATCH_INTEGRAL_TYPES(
       a.scalar_type(), "typed_intt_exit_reduce_signed_cuda", ([&] {
         intt_radix2_exit_reduce_signed_cuda_typed<scalar_t>(
-            a, even, odd, psi, prime_len_int);
+            a, even, odd, ipsi, prime_len_int);
       }));
 }

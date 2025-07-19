@@ -10,7 +10,7 @@
 
 template <typename scalar_t>
 __global__ void mont_enter_Rs_cuda_kernel(
-    torch::PackedTensorAccessor32<scalar_t, 2> a_acc, const int sp_prime_len) {
+    TensorAcc32Restrict<scalar_t, 2> a_acc, const int sp_prime_len) {
   // Where am I?
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
@@ -35,7 +35,7 @@ __global__ void mont_enter_Rs_cuda_kernel(
 
 template <typename scalar_t>
 __global__ void mont_enter_Ninv_cuda_kernel(
-    torch::PackedTensorAccessor32<scalar_t, 2> a_acc, const int sp_prime_len) {
+    TensorAcc32Restrict<scalar_t, 2> a_acc, const int sp_prime_len) {
   // Where am I?
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
@@ -64,11 +64,11 @@ __global__ void mont_enter_Ninv_cuda_kernel(
 
 template <typename scalar_t>
 __global__ void mont_reduce_cuda_kernel(
-    torch::PackedTensorAccessor32<scalar_t, 2> a_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> ql_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> qh_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> kl_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> kh_acc) {
+    TensorAcc32Restrict<scalar_t, 2> a_acc,
+    const TensorAcc32Restrict<scalar_t, 1> ql_acc,
+    const TensorAcc32Restrict<scalar_t, 1> qh_acc,
+    const TensorAcc32Restrict<scalar_t, 1> kl_acc,
+    const TensorAcc32Restrict<scalar_t, 1> kh_acc) {
   // Where am I?
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
@@ -89,8 +89,8 @@ __global__ void mont_reduce_cuda_kernel(
 
 template <typename scalar_t>
 __global__ void reduce_2q_cuda_kernel(
-    torch::PackedTensorAccessor32<scalar_t, 2> a_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> _2q_acc) {
+    TensorAcc32Restrict<scalar_t, 2> a_acc,
+    const TensorAcc32Restrict<scalar_t, 1> _2q_acc) {
   // This kernel reduces each element a_acc[i][j] modulo q = _2q_acc[i] / 2,
   // assuming that a < 2q. It's a fast, branchless way to compute a % q under
   // certain assumptions.
@@ -112,8 +112,8 @@ __global__ void reduce_2q_cuda_kernel(
 
 template <typename scalar_t>
 __global__ void make_signed_cuda_kernel(
-    torch::PackedTensorAccessor32<scalar_t, 2> a_acc,
-    const torch::PackedTensorAccessor32<scalar_t, 1> _2q_acc) {
+    TensorAcc32Restrict<scalar_t, 2> a_acc,
+    const TensorAcc32Restrict<scalar_t, 1> _2q_acc) {
   // Where am I?
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
@@ -133,7 +133,7 @@ __global__ void make_signed_cuda_kernel(
 
 template <typename scalar_t>
 __global__ void mont_enter_Ninv_mont_reduce_cuda_kernel(
-    torch::PackedTensorAccessor32<scalar_t, 2> a_acc, const int sp_prime_len) {
+    TensorAcc32Restrict<scalar_t, 2> a_acc, const int sp_prime_len) {
   // Indexing
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
@@ -171,7 +171,7 @@ __global__ void mont_enter_Ninv_mont_reduce_cuda_kernel(
 
 template <typename scalar_t>
 __global__ void mont_enter_Ninv_mont_reduce_reduce_2q_cuda_kernel(
-    torch::PackedTensorAccessor32<scalar_t, 2> a_acc, const int sp_prime_len) {
+    TensorAcc32Restrict<scalar_t, 2> a_acc, const int sp_prime_len) {
   // Indexing
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
@@ -212,7 +212,7 @@ __global__ void mont_enter_Ninv_mont_reduce_reduce_2q_cuda_kernel(
 
 template <typename scalar_t>
 __global__ void mont_enter_Ninv_mont_reduce_reduce_2q_make_signed_cuda_kernel(
-    torch::PackedTensorAccessor32<scalar_t, 2> a_acc, const int sp_prime_len) {
+    TensorAcc32Restrict<scalar_t, 2> a_acc, const int sp_prime_len) {
   // Indexing
   const int i = blockIdx.x;
   const int j = blockIdx.y * BLOCK_SIZE + threadIdx.x;
