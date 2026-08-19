@@ -1,4 +1,8 @@
-# What is this
+# This repository is archived
+
+Tiberate has been superseded by [FHElium](https://github.com/visualDust/fhelium). Please use FHElium for current development, documentation, and releases.
+
+## What is this
 
 This is a variant of [Desilo/liberate-fhe](https://github.com/Desilo/liberate-fhe) with better typing, optimized GPU kernels and some user friendly features. This fork has left fork network and will not return to the original branch.
 
